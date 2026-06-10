@@ -29,6 +29,16 @@ describe('makeRequireAuth', () => {
     expect(next).not.toHaveBeenCalled()
   })
 
+  it('rejects a non-Bearer Authorization header', async () => {
+    const requireAuth = makeRequireAuth({ auth: { getUser: vi.fn() } })
+    const res = mockRes()
+    const next = vi.fn()
+    await requireAuth({ headers: { authorization: 'nope' } }, res, next)
+    expect(res.statusCode).toBe(401)
+    expect(res.body).toEqual({ error: 'missing_token' })
+    expect(next).not.toHaveBeenCalled()
+  })
+
   it('attaches req.user and calls next on a valid token', async () => {
     const user = { id: 'user-1', email: 'a@b.c' }
     const client = { auth: { getUser: vi.fn().mockResolvedValue({ data: { user }, error: null }) } }

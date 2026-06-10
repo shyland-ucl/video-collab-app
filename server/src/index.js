@@ -1,9 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
 import { makeApp } from './app.js'
 
+const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set')
+  process.exit(1)
+}
+
 const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false } }
 )
 

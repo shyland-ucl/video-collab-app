@@ -4,7 +4,8 @@ import { makeRequireAuth } from './middleware/requireAuth.js'
 
 export function makeApp(supabaseClient) {
   const app = express()
-  app.use(cors({ origin: process.env.WEB_ORIGIN?.split(',') ?? true }))
+  const origins = process.env.WEB_ORIGIN?.split(',') ?? ['http://localhost:5173']
+  app.use(cors({ origin: origins }))
   app.use(express.json())
 
   app.get('/health', (_req, res) => res.json({ ok: true }))
