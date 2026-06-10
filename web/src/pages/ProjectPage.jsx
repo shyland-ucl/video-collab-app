@@ -12,6 +12,7 @@ export default function ProjectPage() {
   const [members, setMembers] = useState([])
   const [inviteLink, setInviteLink] = useState(null)
   const [error, setError] = useState(null)
+  const [inviting, setInviting] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -35,29 +36,39 @@ export default function ProjectPage() {
   }, [id])
 
   async function handleInvite() {
+    if (inviting) return
+    setInviting(true)
     setError(null)
-    const { data, error } = await supabase
-      .from('invites')
-      .insert({ project_id: id, created_by: user.id })
-      .select('token')
-      .single()
-    if (error) {
-      setError('Could not create an invite link. Only the project owner can invite.')
-      announce('Could not create invite')
-      return
-    }
-    const url = buildInviteUrl(window.location.origin, data.token)
-    setInviteLink(url)
-    if (navigator.share) {
-      announce('Invite link created. Opening share options.')
-      try {
-        await navigator.share({ title: 'Join my video project', url })
-      } catch {
-        /* user cancelled the share sheet — link stays visible below */
+    try {
+      const { data, error } = await supabase
+        .from('invites')
+        .insert({ project_id: id, created_by: user.id })
+        .select('token')
+        .single()
+      if (error) {
+        setError('Could not create an invite link. Only the project owner can invite.')
+        announce('Could not create invite')
+        return
       }
-    } else {
-      await navigator.clipboard.writeText(url)
-      announce('Invite link created and copied to clipboard')
+      const url = buildInviteUrl(window.location.origin, data.token)
+      setInviteLink(url)
+      if (navigator.share) {
+        announce('Invite link created. Opening share options.')
+        try {
+          await navigator.share({ title: 'Join my video project', url })
+        } catch {
+          /* user cancelled the share sheet — link stays visible below */
+        }
+      } else {
+        try {
+          await navigator.clipboard.writeText(url)
+          announce('Invite link created and copied to clipboard')
+        } catch {
+          announce('Invite link created')
+        }
+      }
+    } finally {
+      setInviting(false)
     }
   }
 
@@ -98,7 +109,8 @@ export default function ProjectPage() {
 
       <button
         onClick={handleInvite}
-        className="min-h-12 w-full rounded bg-blue-700 px-4 py-3 text-lg font-semibold text-white"
+        disabled={inviting}
+        className="min-h-12 w-full rounded bg-blue-700 px-4 py-3 text-lg font-semibold text-white disabled:opacity-50"
       >
         Invite a helper
       </button>
