@@ -6,7 +6,7 @@
   "scripts": {
     "dev:web": "npm run dev -w web",
     "dev:server": "npm run dev -w server",
-    "test": "npm run test -w web --if-present -- --run && npm run test -w server --if-present -- --run",
+    "test": "npm run test -w web --if-present -- --run --passWithNoTests && npm run test -w server --if-present -- --run",
     "build": "npm run build -w web"
   },
   "devDependencies": {

@@ -1,0 +1,20 @@
+{
+  "name": "server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --env-file=.env src/index.js",
+    "start": "node --env-file=.env src/index.js",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.0",
+    "cors": "^2.8.5",
+    "express": "^5.2.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.0",
+    "vitest": "^3.1.0"
+  }
+}
