@@ -22,10 +22,14 @@ create table public.invites (
   role text not null default 'helper' check (role in ('creator', 'helper')),
   created_by uuid not null references auth.users (id) on delete cascade,
   expires_at timestamptz not null default now() + interval '14 days',
-  used_by uuid references auth.users (id),
+  used_by uuid references auth.users (id) on delete set null,
   used_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+create index projects_owner_id_idx on public.projects (owner_id);
+create index project_members_user_id_idx on public.project_members (user_id);
+create index invites_project_id_idx on public.invites (project_id);
 
 -- security definer so policies on project_members can call it without recursing
 create function public.is_project_member(p_project_id uuid)

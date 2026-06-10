@@ -25,7 +25,8 @@ begin
   values (inv.project_id, auth.uid(), inv.role)
   on conflict (project_id, user_id) do nothing;
 
-  update invites set used_by = auth.uid(), used_at = now() where id = inv.id;
+  update invites set used_by = auth.uid(), used_at = now()
+  where id = inv.id and used_by is null;
 
   return inv.project_id;
 end;
