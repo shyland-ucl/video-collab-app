@@ -1,0 +1,42 @@
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
+
+let mockSession
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({ session: mockSession, user: mockSession?.user ?? null }),
+}))
+
+import RequireAuth from './RequireAuth'
+
+function renderAt(path) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/signin" element={<div>sign in page</div>} />
+        <Route path="/secret" element={<RequireAuth><div>secret content</div></RequireAuth>} />
+      </Routes>
+    </MemoryRouter>
+  )
+}
+
+describe('RequireAuth', () => {
+  it('renders nothing while session is loading', () => {
+    mockSession = undefined
+    renderAt('/secret')
+    expect(screen.queryByText('secret content')).not.toBeInTheDocument()
+    expect(screen.queryByText('sign in page')).not.toBeInTheDocument()
+  })
+
+  it('redirects to /signin when signed out', () => {
+    mockSession = null
+    renderAt('/secret')
+    expect(screen.getByText('sign in page')).toBeInTheDocument()
+  })
+
+  it('renders children when signed in', () => {
+    mockSession = { user: { id: 'u1' } }
+    renderAt('/secret')
+    expect(screen.getByText('secret content')).toBeInTheDocument()
+  })
+})
