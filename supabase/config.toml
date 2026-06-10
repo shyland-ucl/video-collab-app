@@ -240,7 +240,7 @@ host = "smtp-relay.brevo.com"
 port = 587
 user = "ae482a001@smtp-brevo.com"
 pass = "env(SMTP_PASS)"
-admin_email = "l.xiao.22@ucl.ac.uk"
+admin_email = "shylandforlizi@gmail.com"
 sender_name = "Video Collab"
 
 # Uncomment to customize email template
