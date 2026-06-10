@@ -3,13 +3,17 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 
-const mockOrder = vi.fn()
-const mockSingle = vi.fn()
+const { mockOrder, mockSingle, mockInsert } = vi.hoisted(() => {
+  const mockOrder = vi.fn()
+  const mockSingle = vi.fn()
+  const mockInsert = vi.fn(() => ({ select: vi.fn(() => ({ single: mockSingle })) }))
+  return { mockOrder, mockSingle, mockInsert }
+})
 vi.mock('../lib/supabaseClient', () => ({
   supabase: {
     from: vi.fn(() => ({
       select: vi.fn(() => ({ order: mockOrder })),
-      insert: vi.fn(() => ({ select: vi.fn(() => ({ single: mockSingle })) })),
+      insert: mockInsert,
     })),
   },
 }))
@@ -58,6 +62,7 @@ describe('ProjectsPage', () => {
     await userEvent.type(screen.getByLabelText('New project name'), 'New film')
     await userEvent.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(announce).toHaveBeenCalledWith('Project New film created'))
+    expect(mockInsert).toHaveBeenCalledWith({ title: 'New film', owner_id: 'u1' })
   })
 
   it('announces failure when create errors', async () => {

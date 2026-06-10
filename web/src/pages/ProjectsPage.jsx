@@ -16,8 +16,13 @@ export default function ProjectsPage() {
       .from('projects')
       .select('id, title, status, created_at, owner_id')
       .order('created_at', { ascending: false })
-    if (error) setError(error.message)
-    else setProjects(data)
+    if (error) {
+      setError(error.message)
+      setProjects([])
+    } else {
+      setError(null)
+      setProjects(data)
+    }
   }
 
   useEffect(() => {
@@ -26,6 +31,7 @@ export default function ProjectsPage() {
 
   async function handleCreate(e) {
     e.preventDefault()
+    setError(null)
     setCreating(true)
     const { data, error } = await supabase
       .from('projects')
