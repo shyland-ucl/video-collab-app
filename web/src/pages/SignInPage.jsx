@@ -1,15 +1,24 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, Navigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { announce } from '../utils/announcer'
+import { safeNext } from '../lib/safeNext'
 
 export default function SignInPage() {
   const { session } = useAuth()
   const [params] = useSearchParams()
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState('idle') // idle | sending | sent | error
-  const next = params.get('next') || '/'
+  const next = safeNext(params.get('next'))
+  const confirmRef = useRef(null)
+
+  // Fix 3: capture focus on the confirmation paragraph when the form swaps out
+  useEffect(() => {
+    if (status === 'sent') {
+      confirmRef.current?.focus()
+    }
+  }, [status])
 
   if (session) return <Navigate to={next} replace />
 
@@ -23,18 +32,22 @@ export default function SignInPage() {
     })
     if (error) {
       setStatus('error')
-      announce(`Sign-in failed: ${error.message}`)
+      // Fix 4: use friendly copy matching visible text; button keeps focus so
+      // announce() is the single announcement channel here
+      announce('Something went wrong sending the link. Check the address and try again.')
     } else {
       setStatus('sent')
-      announce('Check your email for the sign-in link')
+      // Fix 3: focus on confirmRef speaks the text — no announce() needed here
     }
   }
 
   return (
-    <main className="mx-auto max-w-lg p-4">
+    <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
       <h1 className="mb-4 text-2xl font-bold">Sign in</h1>
       {status === 'sent' ? (
-        <p role="status" className="text-lg">
+        // Fix 3: tabIndex={-1} + ref so useEffect can focus it; no role="status"
+        // (focus makes the screen reader speak it — a live-region role would double-read)
+        <p ref={confirmRef} tabIndex={-1} className="text-lg">
           Check your email — we sent a sign-in link to {email}. Open it on this device.
         </p>
       ) : (
@@ -59,7 +72,8 @@ export default function SignInPage() {
             {status === 'sending' ? 'Sending…' : 'Email me a sign-in link'}
           </button>
           {status === 'error' && (
-            <p role="alert" className="mt-3 text-red-700">
+            // Fix 4: no role="alert" — announce() is the channel when button keeps focus
+            <p className="mt-3 text-red-700">
               Something went wrong sending the link. Check the address and try again.
             </p>
           )}

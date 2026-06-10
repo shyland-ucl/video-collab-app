@@ -4,7 +4,7 @@ import RequireAuth from './components/RequireAuth'
 import SignInPage from './pages/SignInPage'
 
 function Placeholder({ name }) {
-  return <main className="p-4">{name}</main>
+  return <main id="main" tabIndex={-1} className="p-4">{name}</main>
 }
 
 export default function App() {
@@ -22,7 +22,8 @@ export default function App() {
         <Route path="/projects/:id" element={<RequireAuth><Placeholder name="project" /></RequireAuth>} />
         <Route path="/join/:token" element={<Placeholder name="join" />} />
       </Routes>
-      <div id="sr-announcer" aria-live="polite" className="sr-only" />
+      <div id="sr-announcer" role="status" aria-live="polite" aria-atomic="true" className="sr-only" />
+      <div id="sr-announcer-assertive" role="alert" aria-live="assertive" aria-atomic="true" className="sr-only" />
     </AuthProvider>
   )
 }

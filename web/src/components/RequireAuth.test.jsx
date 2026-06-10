@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 
 let mockSession
 vi.mock('../contexts/AuthContext', () => ({
@@ -18,6 +18,10 @@ function renderAt(path) {
       </Routes>
     </MemoryRouter>
   )
+}
+
+function SearchProbe() {
+  return <div>search:{useLocation().search}</div>
 }
 
 describe('RequireAuth', () => {
@@ -38,5 +42,18 @@ describe('RequireAuth', () => {
     mockSession = { user: { id: 'u1' } }
     renderAt('/secret')
     expect(screen.getByText('secret content')).toBeInTheDocument()
+  })
+
+  it('carries ?next= with encoded path+search when redirecting', () => {
+    mockSession = null
+    render(
+      <MemoryRouter initialEntries={['/secret?tab=2']}>
+        <Routes>
+          <Route path="/signin" element={<SearchProbe />} />
+          <Route path="/secret" element={<RequireAuth><div>secret content</div></RequireAuth>} />
+        </Routes>
+      </MemoryRouter>
+    )
+    expect(screen.getByText(/search:/)).toHaveTextContent('next=%2Fsecret%3Ftab%3D2')
   })
 })
