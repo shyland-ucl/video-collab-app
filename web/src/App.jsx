@@ -3,10 +3,8 @@ import { AuthProvider } from './contexts/AuthContext'
 import RequireAuth from './components/RequireAuth'
 import SignInPage from './pages/SignInPage'
 import ProjectsPage from './pages/ProjectsPage'
-
-function Placeholder({ name }) {
-  return <main id="main" tabIndex={-1} className="p-4">{name}</main>
-}
+import ProjectPage from './pages/ProjectPage'
+import JoinPage from './pages/JoinPage'
 
 export default function App() {
   return (
@@ -20,8 +18,8 @@ export default function App() {
       <Routes>
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/" element={<RequireAuth><ProjectsPage /></RequireAuth>} />
-        <Route path="/projects/:id" element={<RequireAuth><Placeholder name="project" /></RequireAuth>} />
-        <Route path="/join/:token" element={<Placeholder name="join" />} />
+        <Route path="/projects/:id" element={<RequireAuth><ProjectPage /></RequireAuth>} />
+        <Route path="/join/:token" element={<JoinPage />} />
       </Routes>
       <div id="sr-announcer" role="status" aria-live="polite" aria-atomic="true" className="sr-only" />
       <div id="sr-announcer-assertive" role="alert" aria-live="assertive" aria-atomic="true" className="sr-only" />
