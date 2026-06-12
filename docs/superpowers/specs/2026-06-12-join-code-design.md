@@ -138,6 +138,10 @@ insert a hand-picked code by writing to the table directly.
 | `expired_code` | "This code has expired. Ask for a new one." |
 | `too_many_attempts` | "Too many tries. Please wait 15 minutes." |
 | anything else (incl. transport errors) | "Could not join the project. Please try again." |
+| fewer than 4 digits typed (client-side, no RPC call) | "Enter all 4 digits of the code." |
+
+Failure announcements are assertive and speak the same message that is shown
+inline; the success announcement ("Joined project") stays polite.
 
 Host-side `create_invite` failure: "Could not create a code. Only the project
 owner can invite." (mirrors today's message).
