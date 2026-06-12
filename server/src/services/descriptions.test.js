@@ -44,6 +44,11 @@ describe('parseLevels', () => {
   it('rejects non-JSON', () => {
     expect(() => parseLevels('I cannot describe this image.')).toThrow()
   })
+
+  it('strips a closing fence even when prose follows it', () => {
+    const levels = parseLevels('```json\n' + GOOD_JSON + '\n```\nHere is your description.')
+    expect(levels.level_1).toMatch(/hallway/)
+  })
 })
 
 describe('describeKeyframe', () => {

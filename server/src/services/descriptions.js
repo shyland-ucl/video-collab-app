@@ -25,7 +25,7 @@ export function parseLevels(responseText) {
   const cleaned = responseText
     .trim()
     .replace(/^```(?:json)?\s*/i, '')
-    .replace(/```\s*$/, '')
+    .replace(/```[\s\S]*$/, '')
   const parsed = JSON.parse(cleaned)
   for (const key of ['level_1', 'level_2', 'level_3']) {
     if (typeof parsed[key] !== 'string' || !parsed[key].trim()) {
