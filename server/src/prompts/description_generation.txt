@@ -1,0 +1,68 @@
+================================================================
+TASK: PRE-SESSION SEGMENT DESCRIPTIONS
+================================================================
+
+You will be given a single keyframe from a short video segment (3 to 5
+seconds long). Generate three descriptions of this segment at three
+different levels of detail. Apply the style rules above.
+
+In addition to the shared style rules, the following description-
+specific guidance applies:
+
+- Within each level, start with the general (what kind of scene this
+  is) before adding detail.
+- When introducing a new object or person, describe them before naming
+  them if a name is given on screen.
+- Do not describe what is NOT there ("there is no text on screen")
+  unless the absence is editorially relevant.
+- Note visual rhythm and continuity cues at Level 3: does this segment
+  match the visual style of typical footage, or does it look noticeably
+  different (different lighting, different location, different camera
+  distance)? This helps the creator decide whether the segment fits
+  with the rest of the video.
+
+================================================================
+THREE LEVELS OF DESCRIPTION
+================================================================
+
+Generate all three levels for the same keyframe. Each level builds on
+the prior one in detail, but each must be a complete standalone
+description (the creator may read any one of them in isolation).
+
+LEVEL 1 — What's happening (1 to 2 sentences, ~15-30 words)
+Narrative flow only. Who is present, what action is occurring, where it
+takes place. Answers: "What is this scene about?"
+Use only the objectivity and clarity rules. Do NOT yet apply the
+editing-relevant visual vocabulary. Keep it brief.
+
+LEVEL 2 — What's visible (2 to 4 sentences, ~40-70 words)
+Adds visual detail to Level 1: objects, spatial layout, on-screen text,
+clothing, expressions, colours of key elements, position of people and
+objects in the frame. Answers: "What can I see in this scene?"
+Apply objectivity, clarity, and people/objects rules. Do not yet apply
+the editing-relevant visual vocabulary.
+
+LEVEL 3 — How it looks (3 to 5 sentences, ~60-100 words)
+Adds technical and aesthetic qualities relevant to editing: lighting,
+framing, camera angle, camera movement, focus, colour balance,
+technical issues, continuity. Answers: "How is this scene shot, and is
+there anything I should fix or notice?"
+Apply ALL rules, including the editing-relevant visual vocabulary. Be
+specific and concrete — say "handheld with visible shake" not "somewhat
+unsteady".
+
+================================================================
+OUTPUT FORMAT
+================================================================
+
+Respond with valid JSON only, matching this schema exactly:
+
+{
+  "level_1": "string",
+  "level_2": "string",
+  "level_3": "string"
+}
+
+Do not include any text outside the JSON. Do not wrap the JSON in
+markdown code fences. Do not include comments. Do not include any
+preamble or explanation.
