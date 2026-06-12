@@ -26,12 +26,17 @@ export function joinProjectChannel(supabase, {
     .on('broadcast', { event: 'activity' }, ({ payload }) => onActivity?.(payload))
 
   let subscribedOnce = false
+  let hadError = false
   channel.subscribe(async (status, err) => {
     if (status === 'SUBSCRIBED') {
       await channel.track({ userId, role })
-      if (subscribedOnce) onReconnect?.()
+      // Fire onReconnect on any re-subscribe AND on a first subscribe that
+      // follows an error — the caller's sync-down alarm must clear either way.
+      if (subscribedOnce || hadError) onReconnect?.()
       subscribedOnce = true
+      hadError = false
     } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+      hadError = true
       // the editor must be able to TELL the user sync is down
       onError?.({ status, err })
     }

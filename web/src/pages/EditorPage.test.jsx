@@ -62,12 +62,14 @@ vi.mock('../lib/supabaseClient', () => ({
   },
 }))
 
-vi.mock('../lib/editor/stateStore', () => ({
+// Keep the real rootSegmentId and SCENE_COLORS — the page's merge logic
+// depends on real split-id stripping and the real colour palette.
+vi.mock('../lib/editor/stateStore', async (importOriginal) => ({
+  ...(await importOriginal()),
   loadLatestState: mockLoadLatestState,
   saveState: mockSaveState,
   saveWithRebase: mockSaveWithRebase,
   buildInitialState: mockBuildInitialState,
-  rootSegmentId: (id) => id,
 }))
 
 vi.mock('../lib/editor/projectChannel', () => ({
@@ -141,6 +143,26 @@ const STATE_V1 = {
 }
 
 const STATE_V2 = { ...STATE_V1, clips: [STATE_V1.clips[1]] }
+
+const STATE_V3 = { ...STATE_V1, clips: [{ ...STATE_V1.clips[0], name: 'Scene renamed' }] }
+
+// Fixtures for the ready-segment merge tests (Fix 2).
+const G_SEGMENTS = [
+  { id: 'g1', video_id: 'v1', idx: 1, start_seconds: 0, end_seconds: 6, descriptions: [] },
+  { id: 'g2', video_id: 'v1', idx: 2, start_seconds: 6, end_seconds: 12, descriptions: [] },
+]
+
+const G_STATE = {
+  clips: [
+    {
+      id: 'g1', sourceId: 'v1', name: 'Scene 1', startTime: 0, endTime: 6,
+      trimStart: 0, trimEnd: 0, color: '#E74C3C', muted: false,
+    },
+  ],
+  captions: [],
+  textOverlays: [],
+  colour: {},
+}
 
 const SUMMARY = {
   actionText: 'deleted scene 1',
@@ -336,6 +358,157 @@ describe('EditorPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/not found, or you are not a member/i)
     expect(screen.getByRole('link', { name: 'Back to project' })).toBeInTheDocument()
     expect(mockJoinProjectChannel).not.toHaveBeenCalled()
+  })
+
+  it('does not regress to an older version when a newer remote insert lands mid-save', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    let resolveSave
+    mockSaveWithRebase.mockReturnValue(new Promise((resolve) => { resolveSave = resolve }))
+
+    let savePromise
+    act(() => {
+      savePromise = captured.creator.applyAndSave(() => STATE_V2)
+    })
+
+    // While the save is in flight, a newer remote version arrives.
+    act(() => {
+      channelOpts().onStateInsert({ version: 3, state: STATE_V3, updated_by: 'u2' })
+    })
+    await waitFor(() => expect(captured.creator.version).toBe(3))
+
+    // The save resolves with an OLDER version — it must not be applied.
+    await act(async () => {
+      resolveSave({ ok: true, version: 2, state: STATE_V2 })
+      await savePromise
+    })
+
+    expect(captured.creator.version).toBe(3)
+    expect(captured.creator.state).toEqual(STATE_V3)
+  })
+
+  it('does not revert a failed save over a newer remote state that landed mid-save', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    let resolveSave
+    mockSaveWithRebase.mockReturnValue(new Promise((resolve) => { resolveSave = resolve }))
+
+    let savePromise
+    act(() => {
+      savePromise = captured.creator.applyAndSave(() => STATE_V2)
+    })
+    act(() => {
+      channelOpts().onStateInsert({ version: 3, state: STATE_V3, updated_by: 'u2' })
+    })
+
+    await act(async () => {
+      resolveSave({ ok: false })
+      await savePromise
+    })
+
+    expect(announce).toHaveBeenCalledWith("That change didn't save — try again", { assertive: true })
+    expect(captured.creator.version).toBe(3)
+    expect(captured.creator.state).toEqual(STATE_V3)
+  })
+
+  it('reverts the optimistic state when a save fails and nothing newer arrived', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    mockSaveWithRebase.mockResolvedValue({ ok: false })
+
+    await act(async () => {
+      await captured.creator.applyAndSave(() => STATE_V2)
+    })
+
+    expect(announce).toHaveBeenCalledWith("That change didn't save — try again", { assertive: true })
+    expect(captured.creator.version).toBe(1)
+    expect(captured.creator.state).toEqual(STATE_V1)
+  })
+
+  it('does not save an empty v1 when there are no segments and shows the no-scenes message', async () => {
+    mockVideosOrder.mockResolvedValue({ data: [], error: null })
+    mockLoadLatestState.mockResolvedValue(null)
+
+    renderPage()
+
+    expect(await screen.findByText('creator device')).toBeInTheDocument()
+    expect(mockSaveState).not.toHaveBeenCalled()
+    expect(mockBuildInitialState).not.toHaveBeenCalled()
+    const status = screen.getByText(/no scenes yet — upload a video and wait for it to finish processing/i)
+    expect(status).toHaveAttribute('role', 'status')
+    expect(captured.creator.state.clips).toEqual([])
+  })
+
+  it('appends newly ready segments missing from an existing state and saves one new version', async () => {
+    mockSegmentsOrder.mockResolvedValue({ data: G_SEGMENTS, error: null })
+    mockLoadLatestState.mockResolvedValue({ version: 1, state: G_STATE })
+    mockSaveState.mockResolvedValue({ ok: true, version: 2 })
+
+    renderPage()
+
+    expect(await screen.findByText('creator device')).toBeInTheDocument()
+    expect(mockSaveState).toHaveBeenCalledTimes(1)
+    expect(mockSaveState).toHaveBeenCalledWith(expect.anything(), 'p1', 'u1', expect.anything(), 1)
+    const savedState = mockSaveState.mock.calls[0][3]
+    expect(savedState.clips.map((c) => c.id)).toEqual(['g1', 'g2'])
+    expect(savedState.clips[1]).toEqual({
+      id: 'g2', sourceId: 'v1', name: 'Scene 2', startTime: 6, endTime: 12,
+      trimStart: 0, trimEnd: 0, color: '#3498DB', muted: false,
+    })
+    await waitFor(() => expect(captured.creator.version).toBe(2))
+    expect(captured.creator.state.clips).toHaveLength(2)
+  })
+
+  it('treats split-derived clips as covering their root segment (no duplicate append)', async () => {
+    mockSegmentsOrder.mockResolvedValue({ data: [G_SEGMENTS[0]], error: null })
+    mockLoadLatestState.mockResolvedValue({
+      version: 2,
+      state: { ...G_STATE, clips: [{ ...G_STATE.clips[0], id: 'g1-split-123-a' }] },
+    })
+
+    renderPage()
+
+    expect(await screen.findByText('creator device')).toBeInTheDocument()
+    expect(mockSaveState).not.toHaveBeenCalled()
+    expect(captured.creator.state.clips.map((c) => c.id)).toEqual(['g1-split-123-a'])
+  })
+
+  it('keeps the previous signed URL when a refresh fails', async () => {
+    // Capture the page's long intervals (URL refresh, ready poll) without
+    // faking ALL timers — RTL's waitFor relies on real ones.
+    const realSetInterval = globalThis.setInterval
+    const longIntervals = []
+    const spy = vi.spyOn(globalThis, 'setInterval').mockImplementation((cb, ms, ...args) => {
+      if (ms >= 60000) {
+        longIntervals.push({ cb, ms })
+        return 0
+      }
+      return realSetInterval(cb, ms, ...args)
+    })
+    try {
+      renderPage()
+      expect(await screen.findByText('creator device')).toBeInTheDocument()
+      expect(captured.creator.sources[0].src).toBe('https://signed/original')
+
+      const refresh = longIntervals.find((i) => i.ms === 50 * 60 * 1000) // URL_REFRESH_MS
+      expect(refresh).toBeTruthy()
+
+      mockSignedUrls.mockResolvedValue({ data: null, error: { message: 'boom' } })
+      await act(async () => {
+        await refresh.cb()
+      })
+
+      expect(mockSignedUrls).toHaveBeenCalledTimes(2)
+      expect(captured.creator.sources[0].src).toBe('https://signed/original')
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('shows the load error and announces it assertively when the state load throws', async () => {

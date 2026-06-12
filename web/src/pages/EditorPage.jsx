@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { announce } from '../utils/announcer'
-import { buildInitialState, loadLatestState, saveState, saveWithRebase } from '../lib/editor/stateStore'
+import { SCENE_COLORS, buildInitialState, loadLatestState, rootSegmentId, saveState, saveWithRebase } from '../lib/editor/stateStore'
 import { joinProjectChannel } from '../lib/editor/projectChannel'
 import { createTask, listTasks, setTaskStatus } from '../lib/editor/tasksApi'
 import { summarizeEditStateChange } from '../lib/editor/projectOverview'
@@ -21,6 +21,7 @@ const MEMBER_ERROR_TEXT = 'Project not found, or you are not a member of it.'
 const SYNC_DOWN_TEXT =
   "Live sync is unavailable — your edits still save, but you won't see your collaborator's changes until it reconnects"
 const NEW_SCENES_TEXT = 'New scenes are available — reload the editor to include them.'
+const NO_SCENES_TEXT = 'No scenes yet — upload a video and wait for it to finish processing.'
 const CONFLICT_TEXT = "Your change conflicted with your helper's — the timeline was updated"
 const SAVE_FAILED_TEXT = "That change didn't save — try again"
 
@@ -30,6 +31,37 @@ function roleLabel(role) {
   if (role === 'helper') return 'Your helper'
   if (role === 'creator') return 'The creator'
   return 'Your collaborator'
+}
+
+// Videos that finish processing after v1 was bootstrapped must still reach the
+// timeline: append any ready segment whose root id no clip covers (split-derived
+// clips keep their root segment id under the '-split-…' suffix). Returns the
+// merged state, or null when nothing is missing.
+function mergeNewSegments(state, videos, segments) {
+  const clips = state?.clips ?? []
+  const present = new Set(clips.map((clip) => rootSegmentId(clip.id)))
+  const orderIndex = new Map(videos.map((v, i) => [v.id, i]))
+  const missing = segments
+    .filter((seg) => !present.has(seg.id))
+    .sort((a, b) => (orderIndex.get(a.video_id) - orderIndex.get(b.video_id)) || (a.idx - b.idx))
+  if (missing.length === 0) return null
+  return {
+    ...state,
+    clips: [
+      ...clips,
+      ...missing.map((seg, i) => ({
+        id: seg.id,
+        sourceId: seg.video_id,
+        name: `Scene ${clips.length + i + 1}`,
+        startTime: Number(seg.start_seconds),
+        endTime: Number(seg.end_seconds),
+        trimStart: 0,
+        trimEnd: 0,
+        color: SCENE_COLORS[(clips.length + i) % SCENE_COLORS.length],
+        muted: false,
+      })),
+    ],
+  }
 }
 
 export default function EditorPage() {
@@ -47,6 +79,7 @@ export default function EditorPage() {
   const [syncDown, setSyncDown] = useState(false)
   const [toast, setToast] = useState(null)
   const [newScenes, setNewScenes] = useState(false)
+  const [noScenes, setNoScenes] = useState(false)
 
   // Refs mirror the bits the realtime callbacks and applyAndSave need to read
   // without re-subscribing the channel on every render.
@@ -84,19 +117,28 @@ export default function EditorPage() {
       return
     }
     const paths = videos.map((v) => v.storage_path)
-    const { data: signed } = await supabase.storage.from('videos').createSignedUrls(paths, URL_TTL_SECONDS)
+    let signed = null
+    try {
+      const result = await supabase.storage.from('videos').createSignedUrls(paths, URL_TTL_SECONDS)
+      signed = result.data
+    } catch {
+      return // transient refresh failure — keep the previous sources entirely
+    }
     const urlByPath = {}
     for (const item of signed ?? []) {
       if (!item.error) urlByPath[item.path] = item.signedUrl
     }
-    setSources(
-      videos.map((v) => ({
+    // A failed refresh (whole call or per path) keeps the previous src —
+    // a still-live old URL beats a dead player.
+    setSources((prev) => {
+      const prevById = new Map(prev.map((s) => [s.id, s]))
+      return videos.map((v) => ({
         id: v.id,
         name: v.original_name,
-        src: urlByPath[v.storage_path] ?? null,
+        src: urlByPath[v.storage_path] ?? prevById.get(v.id)?.src ?? null,
         duration: Number(v.duration_seconds),
       }))
-    )
+    })
   }, [])
 
   useEffect(() => {
@@ -173,16 +215,33 @@ export default function EditorPage() {
       try {
         let latest = await loadLatestState(supabase, projectId)
         if (!latest) {
-          const built = buildInitialState(videos, segments)
-          const saved = await saveState(supabase, projectId, userId, built, 0)
-          // A conflict here means the other member bootstrapped first — take theirs.
-          latest = saved.ok ? { version: saved.version, state: built } : await loadLatestState(supabase, projectId)
+          if (segments.length === 0) {
+            // Nothing to edit yet — do NOT persist an empty v1; render the
+            // editor with a local empty state and a no-scenes message instead.
+            latest = { version: 0, state: { clips: [], captions: [], textOverlays: [], colour: {} } }
+          } else {
+            const built = buildInitialState(videos, segments)
+            const saved = await saveState(supabase, projectId, userId, built, 0)
+            // A conflict here means the other member bootstrapped first — take theirs.
+            latest = saved.ok ? { version: saved.version, state: built } : await loadLatestState(supabase, projectId)
+          }
+        } else if (segments.length > 0) {
+          // Segments that became ready after the state was created must still
+          // reach the timeline — append them as new scenes in ONE new version.
+          const merged = mergeNewSegments(latest.state, videos, segments)
+          if (merged) {
+            const saved = await saveState(supabase, projectId, userId, merged, latest.version)
+            if (saved.ok) latest = { version: saved.version, state: merged }
+            // On conflict/failure keep the loaded state: the realtime insert
+            // delivers the winner and the merge re-runs on the next load.
+          }
         }
         if (cancelled) return
         if (!latest) {
           fail()
           return
         }
+        if (segments.length === 0 && (latest.state?.clips?.length ?? 0) === 0) setNoScenes(true)
         applySnapshot(latest)
 
         const taskRows = await listTasks(supabase, projectId)
@@ -299,30 +358,36 @@ export default function EditorPage() {
 
   const applyAndSave = useCallback(
     async (opFn, announceText) => {
-      const current = snapshotRef.current
-      if (!current) return
-      const next = opFn(current.state)
+      // A newer remote insert can land while the save is in flight — every
+      // applySnapshot below is gated so an older result never overwrites it.
+      const before = snapshotRef.current
+      if (!before) return
+      const next = opFn(before.state)
       // Optimistic local apply.
-      applySnapshot({ version: current.version, state: next })
-      const result = await saveWithRebase(supabase, projectId, userId, opFn, next, current.version)
+      const optimistic = { version: before.version, state: next }
+      applySnapshot(optimistic)
+      const result = await saveWithRebase(supabase, projectId, userId, opFn, next, before.version)
       if (result.ok) {
         // The saved state may differ from the optimistic one after a rebase.
-        applySnapshot({ version: result.version, state: result.state })
+        if (result.version > (snapshotRef.current?.version ?? 0)) {
+          applySnapshot({ version: result.version, state: result.state })
+        }
         if (announceText) announce(announceText)
         return
       }
       if (result.conflict) {
         try {
           const latest = await loadLatestState(supabase, projectId)
-          if (latest) applySnapshot(latest)
+          if (latest && latest.version > (snapshotRef.current?.version ?? 0)) applySnapshot(latest)
         } catch {
-          // Keep the optimistic state; realtime will deliver the winner.
+          // Keep the current state; realtime will deliver the winner.
         }
         announce(CONFLICT_TEXT, { assertive: true })
         return
       }
-      // Plain failure — revert the optimistic apply.
-      applySnapshot(current)
+      // Plain failure — revert the optimistic apply, but only if it is still
+      // what's showing; a newer remote state that landed meanwhile stays.
+      if (snapshotRef.current === optimistic) applySnapshot(before)
       announce(SAVE_FAILED_TEXT, { assertive: true })
     },
     [projectId, userId, applySnapshot]
@@ -393,6 +458,11 @@ export default function EditorPage() {
       {newScenes && (
         <p role="status" className="mb-3 rounded border border-gray-300 p-3 text-lg">
           {NEW_SCENES_TEXT}
+        </p>
+      )}
+      {noScenes && (
+        <p role="status" className="mb-3 rounded border border-gray-300 p-3 text-lg">
+          {NO_SCENES_TEXT}
         </p>
       )}
       {toast && (

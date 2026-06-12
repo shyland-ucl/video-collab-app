@@ -90,6 +90,45 @@ describe('joinProjectChannel', () => {
     expect(onActivity).toHaveBeenCalledWith({ action: 'Seeked', detail: '0:45' })
   })
 
+  it('fires onReconnect once when a failed first connect later succeeds', async () => {
+    const channel = fakeChannel()
+    // Don't auto-fire SUBSCRIBED — drive the status callback by hand.
+    channel.subscribe = vi.fn((cb) => { channel.statusCb = cb; return channel })
+    const onError = vi.fn()
+    const onReconnect = vi.fn()
+    joinProjectChannel(fakeSupabase(channel), {
+      projectId: 'p1', userId: 'u1', role: 'creator',
+      onStateInsert: vi.fn(), onTaskChange: vi.fn(), onPresence: vi.fn(),
+      onPlayhead: vi.fn(), onTransport: vi.fn(), onActivity: vi.fn(),
+      onError, onReconnect,
+    })
+
+    channel.statusCb('CHANNEL_ERROR', new Error('down'))
+    await channel.statusCb('SUBSCRIBED')
+
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect(onReconnect).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not fire onReconnect on a clean first subscribe', async () => {
+    const channel = fakeChannel()
+    channel.subscribe = vi.fn((cb) => { channel.statusCb = cb; return channel })
+    const onReconnect = vi.fn()
+    joinProjectChannel(fakeSupabase(channel), {
+      projectId: 'p1', userId: 'u1', role: 'creator',
+      onStateInsert: vi.fn(), onTaskChange: vi.fn(), onPresence: vi.fn(),
+      onPlayhead: vi.fn(), onTransport: vi.fn(), onActivity: vi.fn(),
+      onReconnect,
+    })
+
+    await channel.statusCb('SUBSCRIBED')
+    expect(onReconnect).not.toHaveBeenCalled()
+
+    // ...but a later re-subscribe (drop + recover) does fire it.
+    await channel.statusCb('SUBSCRIBED')
+    expect(onReconnect).toHaveBeenCalledTimes(1)
+  })
+
   it('calls onError with status and err on CHANNEL_ERROR and does not call track', () => {
     const errorChannel = {
       ...fakeChannel(),
