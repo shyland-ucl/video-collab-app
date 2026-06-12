@@ -3,7 +3,7 @@ export const PLAYHEAD_THROTTLE_MS = 2000
 export function joinProjectChannel(supabase, {
   projectId, userId, role,
   onStateInsert, onTaskChange, onPresence, onPlayhead, onTransport, onActivity,
-  onReconnect,
+  onReconnect, onError,
 }) {
   const channel = supabase.channel(`project:${projectId}`, {
     config: { presence: { key: userId } },
@@ -15,18 +15,25 @@ export function joinProjectChannel(supabase, {
       (payload) => onStateInsert?.(payload.new))
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${projectId}` },
-      (payload) => onTaskChange?.({ eventType: payload.eventType, task: payload.new ?? payload.old }))
+      // realtime-js leaves payload.new as {} (not null) on DELETE
+      (payload) => onTaskChange?.({
+        eventType: payload.eventType,
+        task: payload.eventType === 'DELETE' ? payload.old : payload.new,
+      }))
     .on('presence', { event: 'sync' }, () => onPresence?.(channel.presenceState()))
     .on('broadcast', { event: 'playhead' }, ({ payload }) => onPlayhead?.(payload))
     .on('broadcast', { event: 'transport' }, ({ payload }) => onTransport?.(payload))
     .on('broadcast', { event: 'activity' }, ({ payload }) => onActivity?.(payload))
 
   let subscribedOnce = false
-  channel.subscribe(async (status) => {
+  channel.subscribe(async (status, err) => {
     if (status === 'SUBSCRIBED') {
       await channel.track({ userId, role })
       if (subscribedOnce) onReconnect?.()
       subscribedOnce = true
+    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+      // the editor must be able to TELL the user sync is down
+      onError?.({ status, err })
     }
   })
 

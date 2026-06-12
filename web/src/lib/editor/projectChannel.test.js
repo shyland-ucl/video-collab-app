@@ -48,6 +48,10 @@ describe('joinProjectChannel', () => {
     taskSub.cb({ eventType: 'UPDATE', new: { id: 't1', status: 'done' } })
     expect(onTaskChange).toHaveBeenCalledWith({ eventType: 'UPDATE', task: { id: 't1', status: 'done' } })
 
+    // realtime-js leaves payload.new as {} (not null) on DELETE
+    taskSub.cb({ eventType: 'DELETE', new: {}, old: { id: 't9' } })
+    expect(onTaskChange).toHaveBeenCalledWith({ eventType: 'DELETE', task: { id: 't9' } })
+
     expect(channel.track).toHaveBeenCalledWith({ userId: 'u1', role: 'creator' })
     expect(typeof handle.leave).toBe('function')
   })
@@ -84,5 +88,24 @@ describe('joinProjectChannel', () => {
     expect(onPlayhead).toHaveBeenCalledWith({ time: 9 })
     expect(onTransport).toHaveBeenCalledWith({ action: 'seek', time: 4 })
     expect(onActivity).toHaveBeenCalledWith({ action: 'Seeked', detail: '0:45' })
+  })
+
+  it('calls onError with status and err on CHANNEL_ERROR and does not call track', () => {
+    const errorChannel = {
+      ...fakeChannel(),
+      subscribe: vi.fn((cb) => { cb('CHANNEL_ERROR', new Error('down')); return errorChannel }),
+      track: vi.fn(async () => {}),
+    }
+    // fakeChannel's on() returns channel; wire it up for the error channel
+    errorChannel.on = vi.fn(() => errorChannel)
+    const onError = vi.fn()
+    joinProjectChannel(fakeSupabase(errorChannel), {
+      projectId: 'p1', userId: 'u1', role: 'creator',
+      onStateInsert: vi.fn(), onTaskChange: vi.fn(), onPresence: vi.fn(),
+      onPlayhead: vi.fn(), onTransport: vi.fn(), onActivity: vi.fn(),
+      onError,
+    })
+    expect(onError).toHaveBeenCalledWith({ status: 'CHANNEL_ERROR', err: expect.any(Error) })
+    expect(errorChannel.track).not.toHaveBeenCalled()
   })
 })
