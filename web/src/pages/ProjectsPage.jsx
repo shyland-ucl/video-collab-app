@@ -63,15 +63,20 @@ export default function ProjectsPage() {
   async function handleJoin(e) {
     e.preventDefault()
     if (joining) return
+    if (joinCode.length !== 4) {
+      setJoinError('Enter all 4 digits of the code.')
+      announce('Enter all 4 digits of the code.', { assertive: true })
+      return
+    }
     setJoining(true)
     setJoinError(null)
     const { data, error } = await supabase.rpc('redeem_code', { p_code: joinCode })
     setJoining(false)
     if (error || !data?.ok) {
-      setJoinError(
+      const message =
         JOIN_ERRORS[data?.reason] ?? 'Could not join the project. Please try again.'
-      )
-      announce('Could not join the project')
+      setJoinError(message)
+      announce(message, { assertive: true })
       return
     }
     setJoinCode('')

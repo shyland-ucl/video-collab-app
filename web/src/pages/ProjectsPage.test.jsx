@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
@@ -112,7 +112,7 @@ describe('ProjectsPage — join with a code', () => {
     renderPage()
     await typeCodeAndJoin('0000')
     expect(await screen.findByText(message)).toBeInTheDocument()
-    expect(announce).toHaveBeenCalledWith('Could not join the project')
+    expect(announce).toHaveBeenCalledWith(message, { assertive: true })
   })
 
   it('shows a generic message on transport error', async () => {
@@ -122,6 +122,19 @@ describe('ProjectsPage — join with a code', () => {
     expect(
       await screen.findByText('Could not join the project. Please try again.')
     ).toBeInTheDocument()
+    expect(announce).toHaveBeenCalledWith(
+      'Could not join the project. Please try again.',
+      { assertive: true }
+    )
+  })
+
+  it('rejects an incomplete code without calling the backend', async () => {
+    renderPage()
+    await screen.findByText(/No projects yet/)
+    await userEvent.type(screen.getByLabelText('Join with a code'), '12')
+    fireEvent.submit(screen.getByLabelText('Join with a code').closest('form'))
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(await screen.findByText('Enter all 4 digits of the code.')).toBeInTheDocument()
   })
 
   it('disables the Join button while redemption is in flight', async () => {
