@@ -96,10 +96,26 @@ describe('VideoPage', () => {
     expect(screen.queryByText('Someone stirs a pot.')).not.toBeInTheDocument()
   })
 
-  it('renders keyframes with the scene label as alt text', async () => {
+  it('uses the level-1 description as keyframe alt text', async () => {
     renderPage()
-    const img = await screen.findByAltText(/keyframe for scene 1/i)
+    const img = await screen.findByAltText('Someone stirs a pot.')
     expect(img).toHaveAttribute('src', 'https://signed/kf1')
+  })
+
+  it('falls back to a label-based alt when level-1 description is missing', async () => {
+    mockSegmentsOrder.mockResolvedValue({
+      data: [{ ...SEGMENTS[0], descriptions: [] }],
+      error: null,
+    })
+    renderPage()
+    expect(await screen.findByAltText(/keyframe for scene 1/i)).toBeInTheDocument()
+  })
+
+  it('tells the user when the video is not ready yet', async () => {
+    mockVideoSingle.mockResolvedValue({ data: { ...VIDEO, status: 'processing' }, error: null })
+    mockSegmentsOrder.mockResolvedValue({ data: [], error: null })
+    renderPage()
+    expect(await screen.findByText(/still being prepared/i)).toBeInTheDocument()
   })
 
   it('shows an error when the video is not accessible', async () => {

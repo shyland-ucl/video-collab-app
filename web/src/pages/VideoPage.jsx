@@ -58,7 +58,7 @@ export default function VideoPage() {
 
   if (error) {
     return (
-      <main id="main" className="mx-auto max-w-lg p-4">
+      <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
         <p role="alert">{error}</p>
         <Link to={`/projects/${projectId}`} className="underline">Back to project</Link>
       </main>
@@ -66,18 +66,24 @@ export default function VideoPage() {
   }
   if (!video) {
     return (
-      <main id="main" className="p-4">
+      <main id="main" tabIndex={-1} className="p-4">
         <p role="status">Loading…</p>
       </main>
     )
   }
 
   return (
-    <main id="main" className="mx-auto max-w-lg p-4">
+    <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
       <Link to={`/projects/${projectId}`} className="mb-4 inline-block underline">
         ← Back to project
       </Link>
       <h1 className="mb-4 text-2xl font-bold">{video.original_name}</h1>
+
+      {video.status !== 'ready' && (
+        <p role="status" className="mb-4 rounded border border-gray-300 p-3 text-lg">
+          This video is still being prepared — scenes and descriptions will appear here when it's ready.
+        </p>
+      )}
 
       {urls[video.storage_path] && (
         <video
@@ -118,7 +124,7 @@ export default function VideoPage() {
                 {urls[seg.keyframe_path] && (
                   <img
                     src={urls[seg.keyframe_path]}
-                    alt={`Keyframe for ${seg.label}`}
+                    alt={seg.descriptions?.find((d) => d.level === 1)?.text ?? `Keyframe for ${seg.label}`}
                     className="mb-2 w-full rounded"
                   />
                 )}
