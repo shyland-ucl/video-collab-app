@@ -432,13 +432,20 @@ async function runTests() {
     });
     assert(!insErr, '14a: member inserts videos row', `video=${videoId}`, insErr?.message);
 
+    const evilId = crypto.randomUUID();
     const { error: outErr } = await outsiderClient.from('videos').insert({
+      id: evilId,
       project_id: projectId,
       uploaded_by: outsiderId,
       original_name: 'evil.mp4',
-      storage_path: `${projectId}/${crypto.randomUUID()}/original.mp4`,
+      storage_path: `${projectId}/${evilId}/original.mp4`,
     });
-    assert(outErr !== null, '14b: outsider videos insert blocked (RLS)', `code=${outErr?.code}`, 'expected RLS error but insert succeeded');
+    assert(
+      outErr !== null && outErr?.code === '42501',
+      '14b: outsider videos insert blocked by RLS (42501)',
+      `code=${outErr?.code}`,
+      outErr ? `blocked but wrong code=${outErr.code} (${outErr.message})` : 'expected RLS error but insert succeeded'
+    );
 
     const { data: helperRead, error: hrErr } = await helperClient
       .from('videos').select('id, status').eq('id', videoId);
@@ -451,6 +458,15 @@ async function runTests() {
     const { data: updated } = await creatorClient
       .from('videos').update({ status: 'ready' }).eq('id', videoId).select();
     assert(updated?.length === 0, '14e: client cannot update videos.status (no policy)', '0 rows updated', `unexpectedly updated ${updated?.length} row(s)`);
+
+    const { data: statusCheck } = await adminClient
+      .from('videos').select('status').eq('id', videoId).single();
+    assert(
+      statusCheck?.status === 'uploading',
+      '14e2: videos.status unchanged after blocked client update',
+      `status=${statusCheck?.status}`,
+      `status is ${statusCheck?.status}, expected 'uploading'`
+    );
 
     const { data: segRow, error: segErr } = await adminClient.from('segments').insert({
       video_id: videoId,
