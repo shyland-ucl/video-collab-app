@@ -378,9 +378,21 @@ async function runTests() {
     });
     assert(
       signInErr !== null,
-      '13b: no usable account exists for the rogue email',
+      '13b: rogue email cannot sign in after blocked signup',
       `error=${signInErr?.message}`,
       'expected sign-in to fail but it succeeded'
+    );
+
+    // 13c: prove the blocked signup really created no auth.users row
+    const { data: userList, error: listErr } = await adminClient.auth.admin.listUsers({
+      page: 1,
+      perPage: 200,
+    });
+    assert(
+      !listErr && !userList.users.some((u) => u.email?.toLowerCase() === rogueEmail),
+      '13c: no auth.users row exists for the rogue email',
+      'rogue user absent from admin user list',
+      listErr?.message ?? 'rogue user FOUND in admin user list'
     );
   }
 }
