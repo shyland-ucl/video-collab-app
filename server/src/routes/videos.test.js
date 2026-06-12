@@ -5,7 +5,11 @@ import { makeApp } from '../app.js'
 const user = { id: 'user-1', email: 'a@b.c' }
 
 function makeFakeSupabase({ video, member, segment, keyframe } = {}) {
+  const claims = []
+  const releases = []
   return {
+    claims,
+    releases,
     auth: {
       getUser: vi.fn(async (token) =>
         token === 'good'
@@ -24,6 +28,24 @@ function makeFakeSupabase({ video, member, segment, keyframe } = {}) {
           eq: () => ({
             maybeSingle: async () => ({ data: member ?? null, error: null }),
           }),
+        }),
+      }),
+      // .update().eq() is awaited directly by the misconfig release (thenable),
+      // and chained .neq().select() by the atomic claim
+      update: (patch) => ({
+        eq: (col, val) => ({
+          neq: () => ({
+            select: async () => {
+              claims.push({ table, patch, col, val })
+              return video && video.status === 'processing'
+                ? { data: [], error: null }
+                : { data: [{ id: val }], error: null }
+            },
+          }),
+          then: (resolve) => {
+            releases.push({ table, patch })
+            resolve({ error: null })
+          },
         }),
       }),
     }),
@@ -73,10 +95,11 @@ describe('POST /api/videos/:id/process', () => {
     expect(processSpy).not.toHaveBeenCalled()
   })
 
-  it('409s when already processing', async () => {
+  it('409s when already processing (atomic claim returns no rows)', async () => {
     const res = await request(appWith(makeFakeSupabase({ video: { ...VIDEO, status: 'processing' }, member: MEMBER })))
       .post('/api/videos/vid-1/process').set('Authorization', 'Bearer good')
     expect(res.status).toBe(409)
+    expect(processSpy).not.toHaveBeenCalled()
   })
 
   it('202s and kicks off processing for a member', async () => {
@@ -86,10 +109,38 @@ describe('POST /api/videos/:id/process', () => {
     expect(res.body).toEqual({ ok: true })
     expect(processSpy).toHaveBeenCalledWith(expect.objectContaining({ videoId: 'vid-1' }))
   })
+
+  it('202s for a failed video (retry claims it again)', async () => {
+    const res = await request(appWith(makeFakeSupabase({ video: { ...VIDEO, status: 'failed' }, member: MEMBER })))
+      .post('/api/videos/vid-1/process').set('Authorization', 'Bearer good')
+    expect(res.status).toBe(202)
+    expect(processSpy).toHaveBeenCalled()
+  })
+
+  it('500s and marks the video failed when the model cannot be constructed', async () => {
+    const supabase = makeFakeSupabase({ video: VIDEO, member: MEMBER })
+    const spy = vi.fn(async () => {})
+    const app = makeApp(supabase, {
+      process: spy,
+      getModel: () => { throw new Error('GEMINI_API_KEY is not set') },
+      vqa: vi.fn(),
+    })
+    const res = await request(app).post('/api/videos/vid-1/process').set('Authorization', 'Bearer good')
+    expect(res.status).toBe(500)
+    expect(spy).not.toHaveBeenCalled()
+    expect(supabase.releases.some((r) => r.patch.status === 'failed')).toBe(true)
+  })
 })
 
 describe('POST /api/segments/:id/vqa', () => {
   const SEGMENT = { id: 'seg-row-1', video_id: 'vid-1', keyframe_path: 'proj-1/vid-1/keyframes/seg_001_kf.jpg' }
+
+  it('404s on an unknown segment', async () => {
+    const res = await request(appWith(makeFakeSupabase({ video: VIDEO, member: MEMBER, keyframe: true })))
+      .post('/api/segments/seg-row-1/vqa').set('Authorization', 'Bearer good')
+      .send({ question: 'Where is the mug?' })
+    expect(res.status).toBe(404)
+  })
 
   it('400s on a missing question', async () => {
     const res = await request(appWith(makeFakeSupabase({ video: VIDEO, member: MEMBER, segment: SEGMENT, keyframe: true })))
