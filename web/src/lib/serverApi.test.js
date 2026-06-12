@@ -10,6 +10,7 @@ import { serverPost } from './serverApi'
 beforeEach(() => {
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
+  vi.stubEnv('VITE_SERVER_URL', 'http://localhost:3001')
   mockGetSession.mockResolvedValue({ data: { session: { access_token: 'tok-1' } } })
 })
 

@@ -13,6 +13,18 @@ const STATUS_LABELS = {
   failed: 'Failed',
 }
 
+// Fix 4 — friendly error copy for known codes
+const ERROR_LABELS = {
+  server_not_configured: 'The server is not reachable right now. Please try again later.',
+  already_processing: 'This video is already being processed.',
+  not_signed_in: 'You are signed out. Sign in again to continue.',
+}
+
+function friendlyError(err) {
+  const msg = String(err?.message ?? err)
+  return ERROR_LABELS[msg] ?? msg
+}
+
 const POLL_MS = 4000
 
 export default function VideosSection({ projectId }) {
@@ -20,6 +32,8 @@ export default function VideosSection({ projectId }) {
   const [videos, setVideos] = useState(null) // null = loading
   const [progress, setProgress] = useState(null) // null | 0-100
   const [error, setError] = useState(null)
+  // Fix 8 — separate state for transient poll failures
+  const [listError, setListError] = useState(null)
   const prevStatuses = useRef({})
 
   const loadVideos = useCallback(async () => {
@@ -29,9 +43,10 @@ export default function VideosSection({ projectId }) {
       .eq('project_id', projectId)
       .order('created_at', { ascending: false })
     if (loadErr) {
-      setError(loadErr.message)
+      setListError(loadErr.message)
       return
     }
+    setListError(null)
     for (const v of data) {
       const prev = prevStatuses.current[v.id]
       if (prev && prev !== v.status) {
@@ -58,6 +73,14 @@ export default function VideosSection({ projectId }) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
+
+    // Fix 6 — client-side 50 MB guard before inserting anything
+    if (file.size > 50 * 1024 * 1024) {
+      setError('This video is larger than 50 MB. Please record or trim a shorter clip.')
+      announce('File too large', { assertive: true })
+      return
+    }
+
     setError(null)
 
     const videoId = crypto.randomUUID()
@@ -71,7 +94,7 @@ export default function VideosSection({ projectId }) {
       storage_path: storagePath,
     })
     if (insertErr) {
-      setError(insertErr.message)
+      setError(friendlyError(insertErr))
       announce('Upload could not start', { assertive: true })
       return
     }
@@ -79,19 +102,30 @@ export default function VideosSection({ projectId }) {
     announce('Upload started')
     setProgress(0)
     loadVideos()
+    // Fix 5 — split tus upload catch from processing-start catch
     try {
       await uploadVideo({
         supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
         accessToken: session.access_token,
         objectName: storagePath,
         file,
-        onProgress: setProgress,
+        // Fix 3 — throttle progress announcements to deciles
+        onProgress: (p) => setProgress(Math.floor(p / 10) * 10),
       })
+    } catch (err) {
+      setError(friendlyError(err))
+      announce('Upload failed', { assertive: true })
+      setProgress(null)
+      loadVideos()
+      return
+    }
+
+    try {
       await serverPost(`/api/videos/${videoId}/process`)
       announce('Upload complete. Processing started.')
     } catch (err) {
-      setError(String(err?.message ?? err))
-      announce('Upload failed', { assertive: true })
+      setError(friendlyError(err))
+      announce('Processing could not start', { assertive: true })
     } finally {
       setProgress(null)
       loadVideos()
@@ -105,7 +139,7 @@ export default function VideosSection({ projectId }) {
       announce(`Processing restarted for ${video.original_name}`)
       loadVideos()
     } catch (err) {
-      setError(String(err?.message ?? err))
+      setError(friendlyError(err))
     }
   }
 
@@ -137,6 +171,12 @@ export default function VideosSection({ projectId }) {
           {error}
         </p>
       )}
+      {/* Fix 8 — separate alert for transient poll failures */}
+      {listError && (
+        <p role="alert" className="mb-3 text-red-700">
+          {listError}
+        </p>
+      )}
 
       {videos === null ? (
         <p role="status">Loading videos…</p>
@@ -154,16 +194,17 @@ export default function VideosSection({ projectId }) {
               {v.status === 'ready' && (
                 <Link
                   to={`/projects/${projectId}/videos/${v.id}`}
-                  aria-label={`Open ${v.original_name}`}
+                  aria-label={`View scenes and descriptions for ${v.original_name}`}
                   className="mt-1 inline-block min-h-12 underline"
                 >
                   View scenes and descriptions
                 </Link>
               )}
-              {v.status === 'failed' && (
+              {/* Fix 2 — stuck-uploading rows (no in-flight upload) also get Retry */}
+              {(v.status === 'failed' || (v.status === 'uploading' && progress === null)) && (
                 <button
                   onClick={() => handleRetry(v)}
-                  aria-label={`Retry ${v.original_name}`}
+                  aria-label={`Retry processing ${v.original_name}`}
                   className="mt-1 min-h-12 rounded border border-gray-400 px-3"
                 >
                   Retry processing

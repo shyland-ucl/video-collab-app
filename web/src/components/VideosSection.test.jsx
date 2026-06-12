@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -64,7 +64,7 @@ describe('VideosSection', () => {
     expect(await screen.findByText('kitchen.mp4')).toBeInTheDocument()
     expect(screen.getByText(/ready/i)).toBeInTheDocument()
     expect(screen.getByText(/processing/i)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /open kitchen\.mp4/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /view scenes and descriptions for kitchen\.mp4/i })).toHaveAttribute(
       'href', '/projects/proj-1/videos/v1'
     )
   })
@@ -107,7 +107,74 @@ describe('VideosSection', () => {
       error: null,
     })
     renderSection()
-    await userEvent.click(await screen.findByRole('button', { name: /retry broken\.mp4/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /retry processing broken\.mp4/i }))
     expect(mockServerPost).toHaveBeenCalledWith('/api/videos/v9/process')
+  })
+
+  // Fix 2: stuck-uploading row gets a Retry button
+  it('offers retry for a stuck uploading row when no upload is in flight', async () => {
+    mockOrder.mockResolvedValue({
+      data: [{ id: 'v7', original_name: 'stuck.mp4', status: 'uploading', error: null, created_at: '2026-06-12' }],
+      error: null,
+    })
+    renderSection()
+    await userEvent.click(await screen.findByRole('button', { name: /retry processing stuck\.mp4/i }))
+    expect(mockServerPost).toHaveBeenCalledWith('/api/videos/v7/process')
+  })
+
+  // Fix 5: processing-start failure announced separately from upload failure
+  it('announces processing-start failure separately when upload succeeded', async () => {
+    mockServerPost.mockRejectedValue(new Error('already_processing'))
+    renderSection()
+    const input = await screen.findByLabelText(/upload a video/i)
+    await userEvent.upload(input, new File(['v'], 'late.mp4', { type: 'video/mp4' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/already being processed/i)
+    expect(mockAnnounce).toHaveBeenCalledWith('Processing could not start', { assertive: true })
+    expect(mockUpload).toHaveBeenCalled()
+  })
+
+  // Fix 6: client-side 50 MB guard
+  it('rejects files over 50 MB before inserting anything', async () => {
+    renderSection()
+    const input = await screen.findByLabelText(/upload a video/i)
+    const big = new File(['x'], 'big.mp4', { type: 'video/mp4' })
+    Object.defineProperty(big, 'size', { value: 51 * 1024 * 1024 })
+    await userEvent.upload(input, big)
+    expect(await screen.findByRole('alert')).toHaveTextContent(/larger than 50 MB/i)
+    expect(mockInsert).not.toHaveBeenCalled()
+    expect(mockUpload).not.toHaveBeenCalled()
+  })
+
+  // Fix 9: announce exactly once on ready transition
+  it('announces exactly once when a video transitions to ready', async () => {
+    vi.useFakeTimers()
+    try {
+      const processing = { id: 'v1', original_name: 'kitchen.mp4', status: 'processing', error: null, created_at: '2026-06-12' }
+      mockOrder
+        .mockResolvedValueOnce({ data: [processing], error: null })
+        .mockResolvedValue({ data: [{ ...processing, status: 'ready' }], error: null })
+      renderSection()
+      await act(async () => {}) // initial load resolves
+      expect(screen.getByText(/processing/i)).toBeInTheDocument()
+      expect(mockAnnounce).not.toHaveBeenCalled() // first sight is silent
+      await act(async () => { await vi.advanceTimersByTimeAsync(4000) }) // poll sees ready
+      expect(mockAnnounce).toHaveBeenCalledTimes(1)
+      expect(mockAnnounce).toHaveBeenCalledWith('kitchen.mp4 is ready')
+      await act(async () => { await vi.advanceTimersByTimeAsync(4000) }) // no re-announce
+      expect(mockAnnounce).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Fix 10: insert-failure path
+  it('announces when the videos row cannot be created', async () => {
+    mockInsert.mockResolvedValue({ error: { message: 'row violates row-level security' } })
+    renderSection()
+    const input = await screen.findByLabelText(/upload a video/i)
+    await userEvent.upload(input, new File(['v'], 'no.mp4', { type: 'video/mp4' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/row-level security/i)
+    expect(mockAnnounce).toHaveBeenCalledWith('Upload could not start', { assertive: true })
+    expect(mockUpload).not.toHaveBeenCalled()
   })
 })
