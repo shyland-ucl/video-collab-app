@@ -1,8 +1,9 @@
 import express from 'express'
 import cors from 'cors'
 import { makeRequireAuth } from './middleware/requireAuth.js'
+import { makeVideoRoutes } from './routes/videos.js'
 
-export function makeApp(supabaseClient) {
+export function makeApp(supabaseClient, videoDeps = {}) {
   const app = express()
   const origins = process.env.WEB_ORIGIN?.split(',') ?? ['http://localhost:5173']
   app.use(cors({ origin: origins }))
@@ -14,6 +15,8 @@ export function makeApp(supabaseClient) {
   app.get('/api/me', requireAuth, (req, res) => {
     res.json({ id: req.user.id, email: req.user.email })
   })
+
+  app.use(makeVideoRoutes(supabaseClient, videoDeps))
 
   return app
 }

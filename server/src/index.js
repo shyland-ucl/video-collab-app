@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { makeApp } from './app.js'
+import { recoverInterrupted } from './services/processVideo.js'
 
 const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -14,6 +15,7 @@ const supabaseAdmin = createClient(
 )
 
 const port = process.env.PORT || 3001
+await recoverInterrupted(supabaseAdmin)
 makeApp(supabaseAdmin).listen(port, () => {
   console.log(`server listening on :${port}`)
 })
