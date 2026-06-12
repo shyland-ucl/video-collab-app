@@ -108,6 +108,10 @@ Success announcements stay polite, matching app convention.
 - Removing the Brevo SMTP configuration (left in place, unused).
 - Admin UI for the allowlist (dashboard table editor is the tool).
 - Roles/permissions beyond what already exists.
+- Re-gating email changes: the allowlist gate is INSERT-only. An existing
+  allowed user can change their own account email via the confirmed
+  email-change flow (`double_confirm_changes` + SMTP round-trip); that does
+  not let a non-listed person create an account.
 
 ## Testing
 
