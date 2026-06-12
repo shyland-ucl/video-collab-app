@@ -399,9 +399,12 @@ describe('buildInitialState', () => {
 })
 
 describe('rootSegmentId', () => {
-  it('strips split suffixes back to the original segment id', () => {
-    expect(rootSegmentId('g1a-a-b')).toBe('g1a')
-    expect(rootSegmentId('g1a')).toBe('g1a')
+  it('strips real split suffixes back to the original segment id', () => {
+    expect(rootSegmentId('g1-split-1765584000000-a')).toBe('g1')
+    expect(rootSegmentId('g1-split-1765584000000-a-split-1765584000001-b')).toBe('g1')
+    expect(rootSegmentId('g1')).toBe('g1')
+    // canonical uuids never match the suffix pattern
+    expect(rootSegmentId('5aaf7f08-f887-40ae-b4aa-c8a5ba96e302')).toBe('5aaf7f08-f887-40ae-b4aa-c8a5ba96e302')
   })
 })
 
@@ -513,19 +516,25 @@ export function buildInitialState(videos, segments) {
   }
 }
 
-// Split clips get '-a'/'-b' suffixes; descriptions live on the root segment.
+// splitClip keeps the original id on the first piece and appends
+// '-split-<timestamp>-<base36seq>' to the second (Task 3 characterization);
+// descriptions live on the root segment id.
 export function rootSegmentId(clipId) {
-  return clipId.replace(/(-[ab])+$/, '')
+  return clipId.replace(/(-split-\d+-[0-9a-z]+)+$/, '')
 }
 
 export async function loadLatestState(supabase, projectId) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('project_state')
     .select('version, state')
     .eq('project_id', projectId)
     .order('version', { ascending: false })
     .limit(1)
     .maybeSingle()
+  // "no state yet" (null data) and "query failed" must never be conflated:
+  // treating a network/RLS failure as an empty project would bootstrap v1
+  // over real history
+  if (error) throw new Error(`state_load_failed: ${error.message}`)
   return data ?? null
 }
 
@@ -550,10 +559,14 @@ export async function saveWithRebase(supabase, projectId, userId, applyOp, local
 
   const latest = await loadLatestState(supabase, projectId)
   if (!latest) return { ok: false, error: 'state_vanished' }
+  // NOTE: if the remote state deleted the op's target, applyOp is a safe
+  // no-op (applyOperation returns state unchanged) — the save still succeeds;
+  // last-writer-wins at dyad scale.
   const rebased = applyOp(latest.state)
   const second = await saveState(supabase, projectId, userId, rebased, latest.version)
   if (second.ok) return { ...second, state: rebased }
-  return { ok: false, conflict: true, latest }
+  if (!second.conflict) return second // network/RLS failure ≠ conflict
+  return { ok: false, conflict: true } // caller must refetch; don't hand out stale 'latest'
 }
 ```
 
@@ -746,7 +759,7 @@ export const PLAYHEAD_THROTTLE_MS = 2000
 export function joinProjectChannel(supabase, {
   projectId, userId, role,
   onStateInsert, onTaskChange, onPresence, onPlayhead, onTransport, onActivity,
-  onReconnect,
+  onReconnect, onError,
 }) {
   const channel = supabase.channel(`project:${projectId}`, {
     config: { presence: { key: userId } },
@@ -758,18 +771,30 @@ export function joinProjectChannel(supabase, {
       (payload) => onStateInsert?.(payload.new))
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${projectId}` },
-      (payload) => onTaskChange?.({ eventType: payload.eventType, task: payload.new ?? payload.old }))
+      // realtime-js leaves payload.new as {} (not null) on DELETE
+      (payload) => onTaskChange?.({
+        eventType: payload.eventType,
+        task: payload.eventType === 'DELETE' ? payload.old : payload.new,
+      }))
     .on('presence', { event: 'sync' }, () => onPresence?.(channel.presenceState()))
     .on('broadcast', { event: 'playhead' }, ({ payload }) => onPlayhead?.(payload))
     .on('broadcast', { event: 'transport' }, ({ payload }) => onTransport?.(payload))
     .on('broadcast', { event: 'activity' }, ({ payload }) => onActivity?.(payload))
 
   let subscribedOnce = false
-  channel.subscribe(async (status) => {
+  let hadError = false
+  channel.subscribe(async (status, err) => {
     if (status === 'SUBSCRIBED') {
       await channel.track({ userId, role })
-      if (subscribedOnce) onReconnect?.()
+      // fire on any recovery — including a first-connect that initially errored,
+      // otherwise a "sync is down" banner could stick forever
+      if (subscribedOnce || hadError) onReconnect?.()
       subscribedOnce = true
+      hadError = false
+    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+      // the editor must be able to TELL the user sync is down
+      hadError = true
+      onError?.({ status, err })
     }
   })
 
@@ -813,7 +838,9 @@ export function joinProjectChannel(supabase, {
 ```js
 // success: { op, target_clip_id, params, summary }
 //   op ∈ ['delete', 'split', 'move_earlier', 'move_later', 'add_caption', 'trim_start', 'trim_end']
-//   params: { caption_text } for add_caption; { direction: 'tighten' | 'loosen' } for trims; {} otherwise
+//   params: { caption_text } for add_caption; {} otherwise
+//   (trims always tighten by the editor's 0.5s step — characterization finding from Task 3;
+//    "loosen" is not an applyOperation capability, undo covers it)
 // fallback: { clarification: string }
 ```
 
@@ -829,7 +856,7 @@ Allowed operations:
 - split: cut a scene into two at its midpoint
 - move_earlier / move_later: swap a scene with its neighbour
 - add_caption: attach caption text to a scene (params.caption_text required)
-- trim_start / trim_end: nudge a scene's start or end (params.direction: "tighten" removes a little, "loosen" restores)
+- trim_start / trim_end: trim half a second off a scene's start or end
 
 Rules:
 - Respond ONLY with valid JSON. No markdown, no explanation outside the JSON.
@@ -873,7 +900,10 @@ describe('validateProposal', () => {
     expect(validateProposal({ op: 'explode', target_clip_id: 'g1', params: {}, summary: 'x' }, ids).ok).toBe(false)
     expect(validateProposal({ op: 'delete', target_clip_id: 'nope', params: {}, summary: 'x' }, ids).ok).toBe(false)
     expect(validateProposal({ op: 'add_caption', target_clip_id: 'g1', params: {}, summary: 'x' }, ids).ok).toBe(false)
-    expect(validateProposal({ op: 'trim_start', target_clip_id: 'g1', params: { direction: 'sideways' }, summary: 'x' }, ids).ok).toBe(false)
+  })
+
+  it('accepts trims without params', () => {
+    expect(validateProposal({ op: 'trim_start', target_clip_id: 'g1', params: {}, summary: 'x' }, ids).ok).toBe(true)
   })
   it('accepts a clarification', () => {
     expect(validateProposal({ clarification: 'Which scene?' }, ids).ok).toBe(true)
@@ -929,9 +959,6 @@ export function validateProposal(proposal, validIds) {
   const params = proposal.params ?? {}
   if (proposal.op === 'add_caption' && !(typeof params.caption_text === 'string' && params.caption_text.trim())) {
     return { ok: false, reason: 'missing_caption_text' }
-  }
-  if ((proposal.op === 'trim_start' || proposal.op === 'trim_end') && !['tighten', 'loosen'].includes(params.direction)) {
-    return { ok: false, reason: 'bad_trim_direction' }
   }
   return { ok: true, kind: 'proposal' }
 }
@@ -1089,10 +1116,12 @@ export function makeAiEditRoutes(supabase, deps = {}) {
 And `server/src/services/aiEditData.js` (small, tested inside aiEdit.test.js or its own block):
 
 ```js
-// Split clips carry '-a'/'-b' suffixes; descriptions live on the root segment id.
+// splitClip keeps the original id on the first piece and appends
+// '-split-<timestamp>-<base36seq>' to the second; descriptions live on the
+// root segment id. Keep this regex in sync with web stateStore.rootSegmentId.
 export function rootSegmentIds(clips) {
   const map = {}
-  for (const c of clips) map[c.id] = c.id.replace(/(-[ab])+$/, '')
+  for (const c of clips) map[c.id] = c.id.replace(/(-split-\d+-[0-9a-z]+)+$/, '')
   return map
 }
 
@@ -1178,7 +1207,7 @@ EditorPage responsibilities (one file, ~250 lines; devices stay dumb):
 3. Load latest `project_state`; if none, `buildInitialState(...)` and save version 1.
 4. `joinProjectChannel(...)`: on state insert (version > current, not own echo) → set state, `summarizeEditStateChange(prev, next, actorLabel)` → `announce` + toast; on task change → update tasks list + announce ("Helper marked your task done" / "Creator sent you a task"); on presence → announce join/leave; `onReconnect` → refetch latest state + tasks.
 5. Provide `applyAndSave(opFn, announceText)` to devices: optimistic apply → `saveWithRebase` → on final conflict announce "Your change conflicted — the timeline was updated" and resync.
-6. Track ready-video count every 60s; if it grew, show "New scenes are available — reload the editor to include them." (`role=status` + announce).
+6. Track ready-video count every 60s; if it grew, show "New scenes are available — reload the editor to include them." (`role=status` + announce). **On load, merge:** any ready segment whose root id is absent from `state.clips` is appended as a new scene (one new saved version) — otherwise the reload instruction would do nothing and videos finishing after v1 could never enter the timeline. Never bootstrap v1 with zero clips (a direct URL visit before any video is ready must not permanently empty the project).
 7. Render `<CreatorDevice …/>` or `<HelperDevice …/>` (Task 9/10 — this task renders placeholder stubs `web/src/components/editor/CreatorDevice.jsx` / `HelperDevice.jsx` that just print the role, replaced later).
 
 - [ ] **Step 1: Write the failing test** — `web/src/pages/EditorPage.test.jsx`. Mock `../lib/supabaseClient`, `../lib/editor/stateStore`, `../lib/editor/projectChannel`, `../lib/editor/tasksApi`, `../contexts/AuthContext`, `../utils/announcer`, and both device components (stubs that render `creator device` / `helper device` and expose received props via a captured variable). Tests:
@@ -1254,31 +1283,21 @@ Keep IDENTICAL: keyboard map (arrows/space/escape), earcons, TTS read-out + Stop
 
 1. **VQA**: "Ask about this scene" button in ExplorationMode → `TaskRequestModal` variant (`mode="vqa"`) → `serverPost(`/api/segments/${rootSegmentId(clip.id)}/vqa`, { question })` → speak + announce the `answer`. Disable (with explanation) for split clips whose root id no longer matches a real segment? No — `rootSegmentId` maps splits back to the real segment; always enabled.
 2. **Ask AI**: button → `TaskRequestModal` (`mode="ai"`) → `serverPost(`/api/projects/${projectId}/ai-edit`, { request, clips: state.clips.map(c => ({ id: c.id, name: c.name, duration_seconds: (c.endTime - c.trimEnd) - (c.startTime + c.trimStart) })) })` → if `clarification`: speak it, keep modal open; else open `ConfirmAiEditDialog`.
-3. **ConfirmAiEditDialog.jsx** (new): speaks/​renders `proposal.summary` with Confirm/Cancel buttons (`role="alertdialog"`, focus-trapped via `useRootInert`); on Confirm maps the proposal to an op and applies:
+3. **ConfirmAiEditDialog.jsx** (new): `role="alertdialog"`, focus-trapped via `useRootInert`, Confirm/Cancel buttons. **HARD REQUIREMENT (1c-6 review):** the sentence the dialog SPEAKS and renders as its primary content must be deterministically composed client-side from the validated `op` + the clip's name looked up from `target_clip_id` (e.g. "Delete Scene 3?" / "Add the caption 'hello' to Scene 2?") — Gemini's free-text `summary` is supplementary color only (rendered secondary, never the sole description). The summary cannot be trusted to describe the operation: for a blind user a mismatch is unrecoverable. On Confirm, maps the proposal to an op and applies:
 
 ```js
-import { applyOperation, addCaption, splitClip, moveClip, deleteClip, trimClipStart, trimClipEnd } from '../../lib/editor/sceneEditOps'
+import { applyOperation } from '../../lib/editor/sceneEditOps'
 
+// Task 3's characterization proved applyOperation natively accepts every op in
+// the AI contract ('delete', 'split', 'move_earlier', 'move_later',
+// 'add_caption', 'trim_start', 'trim_end') with options { captionText,
+// currentTime } — split falls back to the clip midpoint when currentTime is
+// absent, and unknown ops are a safe no-op.
 export function proposalToOpFn(proposal) {
   const { op, target_clip_id: id, params = {} } = proposal
-  switch (op) {
-    case 'delete': return (state) => deleteClip(state, id)
-    case 'split': return (state) => {
-      const clip = state.clips.find((c) => c.id === id)
-      if (!clip) return state
-      const mid = clip.startTime + clip.trimStart + (((clip.endTime - clip.trimEnd) - (clip.startTime + clip.trimStart)) / 2)
-      return splitClip(state, id, mid)
-    }
-    case 'move_earlier': return (state) => moveClip(state, id, 'earlier')
-    case 'move_later': return (state) => moveClip(state, id, 'later')
-    case 'add_caption': return (state) => addCaption(state, id, params.caption_text)
-    case 'trim_start': return (state) => trimClipStart(state, id, params.direction)
-    case 'trim_end': return (state) => trimClipEnd(state, id, params.direction)
-    default: return (state) => state
-  }
+  return (state) => applyOperation(state, id, op, { captionText: params.caption_text })
 }
 ```
-(Adjust `moveClip`/trim direction argument values to the characterization findings of Task 3 — the test file documents them.)
 
 - [ ] **Step 1: Write the failing CreatorDevice test** — mock `../../lib/serverApi`, announcer, ttsService, speech hook; render with the Task 8 prop contract and assert: (a) scene navigation announces the next scene's name + description; (b) Edit-Myself delete calls `applyAndSave` with an opFn that removes the clip (call the captured opFn on a fixture state and assert); (c) Ask-Helper submits → `onCreateTask` called with text + current scene label; (d) Ask-AI happy path → serverPost called with clips payload → confirm dialog appears with the summary → Confirm → `applyAndSave` called; (e) Ask-AI clarification keeps the modal open and announces the clarification; (f) VQA answer is announced. Write these tests fully in the implementation (follow the VideosSection.test.jsx mock style).
 

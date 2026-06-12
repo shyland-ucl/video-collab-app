@@ -92,7 +92,7 @@ Refresh / re-login / reconnect: fetch latest `project_state` + open `tasks`, res
 `POST /api/projects/:id/ai-edit` `{ request: string }` (auth + membership checked, same pattern as 1b routes):
 
 1. Server loads the scene list (clip order, labels, level-1 descriptions) and the request.
-2. Prompts Gemini (new `server/src/prompts/ai_edit.txt`; injected-model pattern → fully testable) with a constrained contract: *answer with exactly one JSON operation* `{ op: delete|split|move_earlier|move_later|caption|trim, target_clip_id, params, summary }` *or* `{ clarification: string }` if the request can't be mapped.
+2. Prompts Gemini (new `server/src/prompts/ai_edit.txt`; injected-model pattern → fully testable) with a constrained contract: *answer with exactly one JSON operation* `{ op: delete|split|move_earlier|move_later|add_caption|trim_start|trim_end, target_clip_id, params, summary }` *or* `{ clarification: string }` if the request can't be mapped. (Trims always tighten by the editor's 0.5s step — the ported `applyOperation` has no loosen capability; undo covers it.)
 3. Server validates: known `op`, `target_clip_id` exists in the provided scene list, params well-formed (e.g. caption text non-empty, trim seconds within clip bounds). Anything invalid → clarification response, never a guess.
 4. Client speaks the `summary` with Confirm/Cancel; on confirm applies the op locally through `sceneEditOps` and persists a new `project_state` version (the server never mutates state).
 
