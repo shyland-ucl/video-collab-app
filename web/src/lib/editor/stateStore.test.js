@@ -27,13 +27,16 @@ describe('buildInitialState', () => {
 })
 
 describe('rootSegmentId', () => {
-  it('strips split suffixes back to the original segment id', () => {
-    expect(rootSegmentId('g1a-a-b')).toBe('g1a')
-    expect(rootSegmentId('g1a')).toBe('g1a')
+  it('strips real split suffixes back to the original segment id', () => {
+    expect(rootSegmentId('g1-split-1765584000000-a')).toBe('g1')
+    expect(rootSegmentId('g1-split-1765584000000-a-split-1765584000001-b')).toBe('g1')
+    expect(rootSegmentId('g1')).toBe('g1')
+    // canonical uuids never match the suffix pattern
+    expect(rootSegmentId('5aaf7f08-f887-40ae-b4aa-c8a5ba96e302')).toBe('5aaf7f08-f887-40ae-b4aa-c8a5ba96e302')
   })
 })
 
-function fakeSupabase({ latestRows = [], insertError = null } = {}) {
+function fakeSupabase({ latestRows = [], insertError = null, loadError = null } = {}) {
   const inserts = []
   return {
     inserts,
@@ -42,7 +45,9 @@ function fakeSupabase({ latestRows = [], insertError = null } = {}) {
         eq: () => ({
           order: () => ({
             limit: () => ({
-              maybeSingle: async () => ({ data: latestRows[0] ?? null, error: null }),
+              maybeSingle: async () => loadError
+                ? { data: null, error: loadError }
+                : { data: latestRows[0] ?? null, error: null },
             }),
           }),
         }),
@@ -58,6 +63,11 @@ function fakeSupabase({ latestRows = [], insertError = null } = {}) {
 describe('loadLatestState / saveState', () => {
   it('returns null when no state exists', async () => {
     expect(await loadLatestState(fakeSupabase(), 'p1')).toBeNull()
+  })
+
+  it('throws state_load_failed when supabase returns an error', async () => {
+    const supabase = fakeSupabase({ loadError: { message: 'boom' } })
+    await expect(loadLatestState(supabase, 'p1')).rejects.toThrow('state_load_failed')
   })
 
   it('saves version expected+1 with updated_by', async () => {
@@ -106,5 +116,77 @@ describe('saveWithRebase', () => {
     expect(result.version).toBe(8)
     expect(applyOp).toHaveBeenCalledWith({ clips: ['remote'] })
     expect(result.state).toMatchObject({ reapplied: true })
+  })
+
+  it('retry fails with non-23505 error → no conflict flag, no latest', async () => {
+    let call = 0
+    const supabase = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({
+                maybeSingle: async () => ({ data: { version: 7, state: { clips: [] } }, error: null }),
+              }),
+            }),
+          }),
+        }),
+        insert: (row) => ({
+          select: () => ({
+            single: async () => {
+              call += 1
+              if (call === 1) return { data: null, error: { code: '23505', message: 'dup' } }
+              return { data: null, error: { code: 'PGRST301', message: 'boom' } }
+            },
+          }),
+        }),
+      }),
+    }
+    const result = await saveWithRebase(supabase, 'p1', 'u1', (s) => s, { clips: [] }, 5)
+    expect(result).toEqual({ ok: false, error: 'boom' })
+    expect(result.conflict).toBeUndefined()
+  })
+
+  it('retry also collides with 23505 → conflict:true with no latest property', async () => {
+    let call = 0
+    const supabase = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({
+                maybeSingle: async () => ({ data: { version: 7, state: { clips: [] } }, error: null }),
+              }),
+            }),
+          }),
+        }),
+        insert: (row) => ({
+          select: () => ({
+            single: async () => {
+              call += 1
+              return { data: null, error: { code: '23505', message: 'dup' } }
+            },
+          }),
+        }),
+      }),
+    }
+    const result = await saveWithRebase(supabase, 'p1', 'u1', (s) => s, { clips: [] }, 5)
+    expect(result).toEqual({ ok: false, conflict: true })
+    expect(result.latest).toBeUndefined()
+  })
+})
+
+describe('buildInitialState — determinism', () => {
+  it('orders clips by video id when created_at is identical', () => {
+    const videos = [
+      { id: 'v-b', created_at: '2026-06-01' },
+      { id: 'v-a', created_at: '2026-06-01' },
+    ]
+    const segments = [
+      { id: 'sb1', video_id: 'v-b', idx: 1, start_seconds: 0, end_seconds: 5 },
+      { id: 'sa1', video_id: 'v-a', idx: 1, start_seconds: 0, end_seconds: 5 },
+    ]
+    const state = buildInitialState(videos, segments)
+    expect(state.clips.map((c) => c.sourceId)).toEqual(['v-a', 'v-b'])
   })
 })

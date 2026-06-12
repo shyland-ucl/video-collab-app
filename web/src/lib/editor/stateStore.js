@@ -1,7 +1,10 @@
 export const SCENE_COLORS = ['#E74C3C', '#3498DB', '#2ECC71', '#9B59B6', '#E67E22', '#16A085', '#D35400', '#2C3E50']
 
 export function buildInitialState(videos, segments) {
-  const videoOrder = [...videos].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+  const videoOrder = [...videos].sort((a, b) => {
+    const t = String(a.created_at) < String(b.created_at) ? -1 : String(a.created_at) > String(b.created_at) ? 1 : 0
+    return t !== 0 ? t : String(a.id).localeCompare(String(b.id))
+  })
   const orderIndex = new Map(videoOrder.map((v, i) => [v.id, i]))
   const ordered = [...segments].sort(
     (a, b) => (orderIndex.get(a.video_id) - orderIndex.get(b.video_id)) || (a.idx - b.idx)
@@ -24,19 +27,22 @@ export function buildInitialState(videos, segments) {
   }
 }
 
-// Split clips get '-a'/'-b' suffixes; descriptions live on the root segment.
+// splitClip keeps the original id on the first piece and appends
+// '-split-<timestamp>-<base36seq>' to the second (see sceneEditOps
+// characterization tests); descriptions live on the root segment id.
 export function rootSegmentId(clipId) {
-  return clipId.replace(/(-[ab])+$/, '')
+  return clipId.replace(/(-split-\d+-[0-9a-z]+)+$/, '')
 }
 
 export async function loadLatestState(supabase, projectId) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('project_state')
     .select('version, state')
     .eq('project_id', projectId)
     .order('version', { ascending: false })
     .limit(1)
     .maybeSingle()
+  if (error) throw new Error(`state_load_failed: ${error.message}`)
   return data ?? null
 }
 
@@ -61,8 +67,12 @@ export async function saveWithRebase(supabase, projectId, userId, applyOp, local
 
   const latest = await loadLatestState(supabase, projectId)
   if (!latest) return { ok: false, error: 'state_vanished' }
+  // NOTE: if the remote state deleted the op's target, applyOp is a safe
+  // no-op (applyOperation returns state unchanged) — the save still succeeds;
+  // last-writer-wins at dyad scale.
   const rebased = applyOp(latest.state)
   const second = await saveState(supabase, projectId, userId, rebased, latest.version)
   if (second.ok) return { ...second, state: rebased }
-  return { ok: false, conflict: true, latest }
+  if (!second.conflict) return second // network/RLS failure ≠ conflict
+  return { ok: false, conflict: true } // caller must refetch; don't hand out stale 'latest'
 }
