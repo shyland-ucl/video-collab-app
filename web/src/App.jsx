@@ -5,6 +5,7 @@ import SignInPage from './pages/SignInPage'
 import ProjectsPage from './pages/ProjectsPage'
 import ProjectPage from './pages/ProjectPage'
 import VideoPage from './pages/VideoPage'
+import EditorPage from './pages/EditorPage'
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/" element={<RequireAuth><ProjectsPage /></RequireAuth>} />
         <Route path="/projects/:id" element={<RequireAuth><ProjectPage /></RequireAuth>} />
         <Route path="/projects/:projectId/videos/:videoId" element={<RequireAuth><VideoPage /></RequireAuth>} />
+        <Route path="/projects/:projectId/edit" element={<RequireAuth><EditorPage /></RequireAuth>} />
       </Routes>
       <div id="sr-announcer" role="status" aria-live="polite" aria-atomic="true" className="sr-only" />
       <div id="sr-announcer-assertive" role="alert" aria-live="assertive" aria-atomic="true" className="sr-only" />

@@ -3,9 +3,10 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
-const { mockProjectSingle, mockMembersEq, mockRpc } = vi.hoisted(() => ({
+const { mockProjectSingle, mockMembersEq, mockReadyVideosLimit, mockRpc } = vi.hoisted(() => ({
   mockProjectSingle: vi.fn(),
   mockMembersEq: vi.fn(),
+  mockReadyVideosLimit: vi.fn(),
   mockRpc: vi.fn(),
 }))
 
@@ -23,6 +24,15 @@ vi.mock('../lib/supabaseClient', () => ({
         return {
           select: vi.fn(() => ({
             eq: mockMembersEq,
+          })),
+        }
+      }
+      if (table === 'videos') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({ limit: mockReadyVideosLimit })),
+            })),
           })),
         }
       }
@@ -64,6 +74,7 @@ const MEMBERS = [
 describe('ProjectPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockReadyVideosLimit.mockResolvedValue({ data: [], error: null })
   })
 
   it('renders project title and members with "(you)" marker after load', async () => {
@@ -87,6 +98,28 @@ describe('ProjectPage', () => {
       await screen.findByText('Project not found, or you are not a member of it.')
     ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to projects' })).toBeInTheDocument()
+  })
+
+  it('shows the Open editor link when the project has a ready video', async () => {
+    mockProjectSingle.mockResolvedValue({ data: PROJECT, error: null })
+    mockMembersEq.mockResolvedValue({ data: MEMBERS, error: null })
+    mockReadyVideosLimit.mockResolvedValue({ data: [{ id: 'v1' }], error: null })
+
+    renderAt()
+
+    const link = await screen.findByRole('link', { name: 'Open editor' })
+    expect(link).toHaveAttribute('href', '/projects/p1/edit')
+  })
+
+  it('hides the Open editor link when no video is ready', async () => {
+    mockProjectSingle.mockResolvedValue({ data: PROJECT, error: null })
+    mockMembersEq.mockResolvedValue({ data: MEMBERS, error: null })
+
+    renderAt()
+    await screen.findByText('My film')
+
+    await waitFor(() => expect(mockReadyVideosLimit).toHaveBeenCalled())
+    expect(screen.queryByRole('link', { name: 'Open editor' })).not.toBeInTheDocument()
   })
 
   it('shows the 4-digit code with expiry note and announces it', async () => {

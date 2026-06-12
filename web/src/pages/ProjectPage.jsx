@@ -11,6 +11,7 @@ export default function ProjectPage() {
   const [project, setProject] = useState(null)
   const [members, setMembers] = useState([])
   const [invite, setInvite] = useState(null) // { code, expires_at }
+  const [hasReadyVideo, setHasReadyVideo] = useState(false)
   const [error, setError] = useState(null)
   const [inviting, setInviting] = useState(false)
 
@@ -31,6 +32,13 @@ export default function ProjectPage() {
         .select('user_id, role, created_at')
         .eq('project_id', id)
       setMembers(mems ?? [])
+      const { data: ready } = await supabase
+        .from('videos')
+        .select('id')
+        .eq('project_id', id)
+        .eq('status', 'ready')
+        .limit(1)
+      setHasReadyVideo((ready?.length ?? 0) > 0)
     }
     load()
   }, [id])
@@ -90,6 +98,15 @@ export default function ProjectPage() {
       </section>
 
       <VideosSection projectId={id} />
+
+      {hasReadyVideo && (
+        <Link
+          to={`/projects/${id}/edit`}
+          className="mb-6 inline-block min-h-12 text-lg underline"
+        >
+          Open editor
+        </Link>
+      )}
 
       <button
         onClick={handleInvite}
