@@ -9,6 +9,7 @@ import { serverPost } from './serverApi'
 
 beforeEach(() => {
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
   mockGetSession.mockResolvedValue({ data: { session: { access_token: 'tok-1' } } })
 })
 
@@ -33,5 +34,10 @@ describe('serverPost', () => {
   it('throws when signed out', async () => {
     mockGetSession.mockResolvedValue({ data: { session: null } })
     await expect(serverPost('/x')).rejects.toThrow('not_signed_in')
+  })
+
+  it('throws server_not_configured when VITE_SERVER_URL is unset', async () => {
+    vi.stubEnv('VITE_SERVER_URL', '')
+    await expect(serverPost('/x')).rejects.toThrow('server_not_configured')
   })
 })

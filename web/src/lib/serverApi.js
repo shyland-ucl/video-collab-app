@@ -1,11 +1,14 @@
 import { supabase } from './supabaseClient'
 
 export async function serverPost(pathname, body) {
+  const base = import.meta.env.VITE_SERVER_URL
+  if (!base) throw new Error('server_not_configured')
+
   const { data } = await supabase.auth.getSession()
   const token = data?.session?.access_token
   if (!token) throw new Error('not_signed_in')
 
-  const res = await fetch(`${import.meta.env.VITE_SERVER_URL}${pathname}`, {
+  const res = await fetch(`${base}${pathname}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -28,9 +28,11 @@ export function uploadVideo({ supabaseUrl, accessToken, objectName, file, onProg
       onSuccess: () => resolve(),
     })
 
-    upload.findPreviousUploads().then((previous) => {
-      if (previous.length > 0) upload.resumeFromPreviousUpload(previous[0])
-      upload.start()
-    })
+    upload.findPreviousUploads()
+      .then((previous) => {
+        if (previous.length > 0) upload.resumeFromPreviousUpload(previous[0])
+        upload.start()
+      })
+      .catch(reject)
   })
 }
