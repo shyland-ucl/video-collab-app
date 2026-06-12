@@ -38,6 +38,10 @@ vi.mock('../contexts/AuthContext', () => ({
 
 vi.mock('../utils/announcer', () => ({ announce: vi.fn() }))
 
+vi.mock('../components/VideosSection', () => ({
+  default: () => <section>videos section stub</section>,
+}))
+
 import ProjectPage from './ProjectPage'
 import { announce } from '../utils/announcer'
 

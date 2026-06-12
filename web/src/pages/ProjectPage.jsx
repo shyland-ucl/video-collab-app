@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { announce } from '../utils/announcer'
+import VideosSection from '../components/VideosSection'
 
 export default function ProjectPage() {
   const { id } = useParams()
@@ -87,6 +88,8 @@ export default function ProjectPage() {
           ))}
         </ul>
       </section>
+
+      <VideosSection projectId={id} />
 
       <button
         onClick={handleInvite}
