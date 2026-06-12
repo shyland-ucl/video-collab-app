@@ -2,6 +2,8 @@
 
 **Date:** 2026-06-12
 **Status:** Approved by user
+**Note:** references to magic-link sign-in below are historical — superseded
+the same day by `2026-06-12-allowlist-password-auth-design.md` (email+password).
 **Replaces:** the invite-link flow (`/join/:token`, `redeem_invite`, `inviteUrl`)
 
 ## Goal
