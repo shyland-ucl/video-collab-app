@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { announce } from '../utils/announcer'
+
+const JOIN_ERRORS = {
+  invalid_code: "That code didn't work. Check the digits and try again.",
+  expired_code: 'This code has expired. Ask for a new one.',
+  too_many_attempts: 'Too many tries. Please wait 15 minutes.',
+}
 
 export default function ProjectsPage() {
   const { user, signOut } = useAuth()
@@ -10,6 +16,11 @@ export default function ProjectsPage() {
   const [title, setTitle] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState(null)
+
+  const navigate = useNavigate()
+  const [joinCode, setJoinCode] = useState('')
+  const [joining, setJoining] = useState(false)
+  const [joinError, setJoinError] = useState(null)
 
   async function loadProjects() {
     const { data, error } = await supabase
@@ -49,6 +60,25 @@ export default function ProjectsPage() {
     loadProjects()
   }
 
+  async function handleJoin(e) {
+    e.preventDefault()
+    if (joining) return
+    setJoining(true)
+    setJoinError(null)
+    const { data, error } = await supabase.rpc('redeem_code', { p_code: joinCode })
+    setJoining(false)
+    if (error || !data?.ok) {
+      setJoinError(
+        JOIN_ERRORS[data?.reason] ?? 'Could not join the project. Please try again.'
+      )
+      announce('Could not join the project')
+      return
+    }
+    setJoinCode('')
+    announce('Joined project')
+    navigate(`/projects/${data.project_id}`)
+  }
+
   return (
     <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
       <div className="mb-4 flex items-center justify-between">
@@ -79,6 +109,33 @@ export default function ProjectsPage() {
             Create
           </button>
         </div>
+      </form>
+
+      <form onSubmit={handleJoin} className="mb-6">
+        <label htmlFor="join-code" className="mb-2 block text-lg">
+          Join with a code
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="join-code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]{4}"
+            maxLength={4}
+            required
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value.replace(/\D/g, ''))}
+            className="block w-full rounded border border-gray-400 p-3 text-lg tracking-widest"
+          />
+          <button
+            type="submit"
+            disabled={joining}
+            className="min-h-12 shrink-0 rounded bg-blue-700 px-4 font-semibold text-white disabled:opacity-50"
+          >
+            Join
+          </button>
+        </div>
+        {joinError && <p className="mt-2 text-red-700">{joinError}</p>}
       </form>
 
       {error && <p className="mb-4 text-red-700">{error}</p>}
