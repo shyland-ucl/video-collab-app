@@ -120,6 +120,14 @@ describe('sceneEditOps (characterization of the probe port)', () => {
     expect(next.clips.map((c) => c.id)).toEqual(['s1', 's2'])
   })
 
+  it('moveClip does not mutate the input state', () => {
+    const state = makeState()
+    moveClip(state, 's2', 'up')
+    expect(state.clips).toHaveLength(2)
+    expect(state.clips[0].id).toBe('s1')
+    expect(state.clips[1].id).toBe('s2')
+  })
+
   // ------------------------------------------------------------------ splitClip
   it('splitClip produces two clips: first keeps original id, second gets -split- suffix', () => {
     const next = splitClip(makeState(), 's1', 2)
@@ -160,6 +168,13 @@ describe('sceneEditOps (characterization of the probe port)', () => {
     // midpoint of 0..5 = 2.5
     expect(first.endTime).toBe(2.5)
     expect(second.startTime).toBe(2.5)
+  })
+
+  it('splitClip does not mutate the input state', () => {
+    const state = makeState()
+    splitClip(state, 's1', 2)
+    expect(state.clips).toHaveLength(2)
+    expect(state.clips[0].id).toBe('s1')
   })
 
   // ------------------------------------------------------------------ addCaption
@@ -295,5 +310,20 @@ describe('sceneEditOps (characterization of the probe port)', () => {
     expect(getClipForScene(next, 's1').muted).toBe(true)
     const next2 = applyOperation(next, 's1', 'toggle_mute')
     expect(getClipForScene(next2, 's1').muted).toBe(false)
+  })
+
+  it('applyOperation "add_sound" lands SOUND_LIBRARY[0] on the clip when no sound option provided', () => {
+    const next = applyOperation(makeState(), 's1', 'add_sound', {})
+    const clip = getClipForScene(next, 's1')
+    expect(clip.sound).toMatchObject({ id: 'sound_effect', name: 'Sample sound' })
+  })
+
+  it('applyOperation "mute_audio" sets clip.muted === true', () => {
+    const next = applyOperation(makeState(), 's1', 'mute_audio')
+    expect(getClipForScene(next, 's1').muted).toBe(true)
+  })
+
+  it('getClipForScene returns null for an unknown scene id', () => {
+    expect(getClipForScene(makeState(), 'unknown-id')).toBe(null)
   })
 })
