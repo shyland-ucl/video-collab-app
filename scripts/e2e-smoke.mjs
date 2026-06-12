@@ -528,6 +528,67 @@ async function runTests() {
       .download(videoStoragePath);
     assert(outDlErr !== null && !outDl, '15d: outsider download blocked', `error=${outDlErr?.message}`, 'expected storage RLS error but download succeeded');
   }
+
+  // -------------------------------------------------------------------------
+  // Step 16 — project_state: member append/read, version collision, outsider blocked
+  // -------------------------------------------------------------------------
+  {
+    const state = { clips: [], captions: [], textOverlays: [], colour: {} };
+    const { error: insErr } = await creatorClient.from('project_state').insert({
+      project_id: projectId, version: 1, state, updated_by: creatorId,
+    });
+    assert(!insErr, '16a: member appends project_state v1', 'version=1', insErr?.message);
+
+    const { error: dupErr } = await helperClient.from('project_state').insert({
+      project_id: projectId, version: 1, state, updated_by: helperId,
+    });
+    assert(dupErr?.code === '23505', '16b: duplicate version rejected (unique collision)', `code=${dupErr?.code}`, dupErr ? `wrong code=${dupErr.code}` : 'expected unique violation');
+
+    const { error: v2Err } = await helperClient.from('project_state').insert({
+      project_id: projectId, version: 2, state: { ...state, captions: [{ id: 'c1', sceneId: 's1', text: 'hi', startTime: 0, endTime: 2 }] }, updated_by: helperId,
+    });
+    assert(!v2Err, '16c: fellow member appends v2', 'version=2', v2Err?.message);
+
+    const { data: latest, error: readErr } = await creatorClient
+      .from('project_state').select('version, state').eq('project_id', projectId)
+      .order('version', { ascending: false }).limit(1).single();
+    assert(!readErr && latest?.version === 2 && latest?.state?.captions?.length === 1,
+      '16d: member reads latest version', `version=${latest?.version}`, readErr?.message ?? JSON.stringify(latest));
+
+    const { data: outsiderRead } = await outsiderClient
+      .from('project_state').select('id').eq('project_id', projectId);
+    assert(outsiderRead?.length === 0, '16e: outsider sees 0 project_state rows', 'RLS hides state', `got ${outsiderRead?.length}`);
+
+    const { error: spoofErr } = await creatorClient.from('project_state').insert({
+      project_id: projectId, version: 3, state, updated_by: helperId,
+    });
+    assert(spoofErr !== null, '16f: cannot append as someone else (updated_by check)', `code=${spoofErr?.code}`, 'expected RLS error');
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 17 — tasks: create, status update, outsider blocked
+  // -------------------------------------------------------------------------
+  {
+    const { data: task, error: tErr } = await creatorClient.from('tasks').insert({
+      project_id: projectId, created_by: creatorId, text: 'Trim the shaky part', segment_label: 'Scene 1',
+    }).select().single();
+    assert(!tErr && task?.status === 'pending', '17a: creator creates task', `id=${task?.id}`, tErr?.message);
+
+    // Small delay so the DB trigger has time to set updated_at != created_at
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    const { data: updated, error: uErr } = await helperClient.from('tasks')
+      .update({ status: 'done' }).eq('id', task.id).select().single();
+    assert(!uErr && updated?.status === 'done' && updated?.updated_at !== updated?.created_at,
+      '17b: helper marks task done (updated_at touched)', `status=${updated?.status}`, uErr?.message ?? JSON.stringify(updated));
+
+    const { data: outsiderTasks } = await outsiderClient.from('tasks').select('id').eq('project_id', projectId);
+    assert(outsiderTasks?.length === 0, '17c: outsider sees 0 tasks', 'RLS hides tasks', `got ${outsiderTasks?.length}`);
+
+    const { error: badStatusErr } = await helperClient.from('tasks')
+      .update({ status: 'nonsense' }).eq('id', task.id);
+    assert(badStatusErr !== null, '17d: invalid status rejected (check constraint)', `code=${badStatusErr?.code}`, 'expected check violation');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -582,7 +643,8 @@ async function cleanup() {
     else console.log('  OK    removed smoke storage object');
   }
 
-  // Step C3: Delete project as creator (cascades invites + project_members)
+  // Step C3: Delete project as creator (cascades invites + project_members + project_state + tasks)
+  // No separate cleanup needed for project_state or tasks — the ON DELETE CASCADE handles both.
   if (projectId && creatorClient) {
     const { error } = await creatorClient
       .from('projects')
