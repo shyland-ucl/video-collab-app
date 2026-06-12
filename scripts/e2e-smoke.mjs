@@ -103,20 +103,26 @@ function makeAnonClient() {
 const ts = Date.now();
 const creatorEmail = `e2e-creator-${ts}@example.com`;
 const helperEmail = `e2e-helper-${ts}@example.com`;
+const outsiderEmail = `e2e-outsider-${ts}@example.com`;
 const password = `Smoke!${crypto.randomBytes(8).toString('hex')}`;
 
 let creatorId = null;
 let helperId = null;
 let creatorClient = null;
 let helperClient = null;
+let outsiderId = null;
+let outsiderClient = null;
 let projectId = null;
 let inviteCode = null;
 let inviteCode2 = null;
+let videoId = null;
+let videoStoragePath = null;
 
 console.log('\n=== video-collab-app backend E2E smoke ===\n');
-console.log(`  Supabase URL : ${SUPABASE_URL}`);
-console.log(`  Creator email: ${creatorEmail}`);
-console.log(`  Helper  email: ${helperEmail}`);
+console.log(`  Supabase URL  : ${SUPABASE_URL}`);
+console.log(`  Creator email : ${creatorEmail}`);
+console.log(`  Helper  email : ${helperEmail}`);
+console.log(`  Outsider email: ${outsiderEmail}`);
 console.log('');
 
 async function runTests() {
@@ -126,8 +132,8 @@ async function runTests() {
   {
     const { error } = await adminClient
       .from('allowed_emails')
-      .insert([{ email: creatorEmail }, { email: helperEmail }]);
-    assert(!error, '0: allowlist throwaway emails', `${creatorEmail}, ${helperEmail}`, error?.message);
+      .insert([{ email: creatorEmail }, { email: helperEmail }, { email: outsiderEmail }]);
+    assert(!error, '0: allowlist throwaway emails', `${creatorEmail}, ${helperEmail}, ${outsiderEmail}`, error?.message);
   }
 
   // -------------------------------------------------------------------------
@@ -149,6 +155,14 @@ async function runTests() {
     });
     assert(!he, '1b: admin create helper', `id=${hu?.user?.id}`, he?.message);
     helperId = hu.user.id;
+
+    const { data: ou, error: oe } = await adminClient.auth.admin.createUser({
+      email: outsiderEmail,
+      password,
+      email_confirm: true,
+    });
+    assert(!oe, '1c: admin create outsider', `id=${ou?.user?.id}`, oe?.message);
+    outsiderId = ou.user.id;
   }
 
   // -------------------------------------------------------------------------
@@ -168,6 +182,13 @@ async function runTests() {
       password,
     });
     assert(!he && hs?.user?.id === helperId, '2b: helper signIn', `uid=${hs?.user?.id}`, he?.message ?? 'uid mismatch');
+
+    outsiderClient = makeAnonClient();
+    const { data: os, error: ose } = await outsiderClient.auth.signInWithPassword({
+      email: outsiderEmail,
+      password,
+    });
+    assert(!ose && os?.user?.id === outsiderId, '2c: outsider signIn', `uid=${os?.user?.id}`, ose?.message ?? 'uid mismatch');
   }
 
   // -------------------------------------------------------------------------
@@ -395,6 +416,102 @@ async function runTests() {
       listErr?.message ?? 'rogue user FOUND in admin user list'
     );
   }
+
+  // -------------------------------------------------------------------------
+  // Step 14 — videos/segments/descriptions: member access, outsider blocked
+  // -------------------------------------------------------------------------
+  {
+    videoId = crypto.randomUUID();
+    videoStoragePath = `${projectId}/${videoId}/original.mp4`;
+    const { error: insErr } = await creatorClient.from('videos').insert({
+      id: videoId,
+      project_id: projectId,
+      uploaded_by: creatorId,
+      original_name: 'smoke.mp4',
+      storage_path: videoStoragePath,
+    });
+    assert(!insErr, '14a: member inserts videos row', `video=${videoId}`, insErr?.message);
+
+    const { error: outErr } = await outsiderClient.from('videos').insert({
+      project_id: projectId,
+      uploaded_by: outsiderId,
+      original_name: 'evil.mp4',
+      storage_path: `${projectId}/${crypto.randomUUID()}/original.mp4`,
+    });
+    assert(outErr !== null, '14b: outsider videos insert blocked (RLS)', `code=${outErr?.code}`, 'expected RLS error but insert succeeded');
+
+    const { data: helperRead, error: hrErr } = await helperClient
+      .from('videos').select('id, status').eq('id', videoId);
+    assert(!hrErr && helperRead?.length === 1, '14c: fellow member reads videos row', `status=${helperRead?.[0]?.status}`, hrErr?.message ?? `rows=${helperRead?.length}`);
+
+    const { data: outsiderRead } = await outsiderClient
+      .from('videos').select('id').eq('id', videoId);
+    assert(outsiderRead?.length === 0, '14d: outsider sees 0 videos rows', 'RLS hides video', `expected 0 rows, got ${outsiderRead?.length}`);
+
+    const { data: updated } = await creatorClient
+      .from('videos').update({ status: 'ready' }).eq('id', videoId).select();
+    assert(updated?.length === 0, '14e: client cannot update videos.status (no policy)', '0 rows updated', `unexpectedly updated ${updated?.length} row(s)`);
+
+    const { data: segRow, error: segErr } = await adminClient.from('segments').insert({
+      video_id: videoId,
+      idx: 1,
+      start_seconds: 0,
+      end_seconds: 5,
+      label: 'Scene 1',
+      storage_path: `${projectId}/${videoId}/segments/seg_001.mp4`,
+      keyframe_path: `${projectId}/${videoId}/keyframes/seg_001_kf.jpg`,
+    }).select().single();
+    assert(!segErr && segRow?.id, '14f: service role inserts segment', `segment=${segRow?.id}`, segErr?.message);
+
+    const { error: descErr } = await adminClient.from('descriptions').insert([
+      { segment_id: segRow.id, level: 1, text: 'smoke level 1', model: 'smoke' },
+      { segment_id: segRow.id, level: 2, text: 'smoke level 2', model: 'smoke' },
+      { segment_id: segRow.id, level: 3, text: 'smoke level 3', model: 'smoke' },
+    ]);
+    assert(!descErr, '14g: service role inserts 3 descriptions', '3 rows', descErr?.message);
+
+    const { data: helperSegs, error: hsErr } = await helperClient
+      .from('segments')
+      .select('id, idx, descriptions ( level, text )')
+      .eq('video_id', videoId);
+    assert(
+      !hsErr && helperSegs?.length === 1 && helperSegs[0].descriptions?.length === 3,
+      '14h: member reads segment with nested descriptions',
+      `descriptions=${helperSegs?.[0]?.descriptions?.length}`,
+      hsErr?.message ?? `unexpected ${JSON.stringify(helperSegs)}`
+    );
+
+    const { data: outsiderSegs } = await outsiderClient
+      .from('segments').select('id').eq('video_id', videoId);
+    assert(outsiderSegs?.length === 0, '14i: outsider sees 0 segments', 'RLS hides segments', `expected 0 rows, got ${outsiderSegs?.length}`);
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 15 — storage bucket 'videos': member upload/download, outsider blocked
+  // -------------------------------------------------------------------------
+  {
+    const bytes = new Blob([new Uint8Array(16)], { type: 'video/mp4' });
+
+    const { error: upErr } = await creatorClient.storage
+      .from('videos')
+      .upload(videoStoragePath, bytes, { contentType: 'video/mp4', upsert: true });
+    assert(!upErr, '15a: member uploads object to own project prefix', videoStoragePath, upErr?.message);
+
+    const { error: outUpErr } = await outsiderClient.storage
+      .from('videos')
+      .upload(`${projectId}/${crypto.randomUUID()}/original.mp4`, bytes, { contentType: 'video/mp4' });
+    assert(outUpErr !== null, '15b: outsider upload blocked (storage RLS)', `error=${outUpErr?.message}`, 'expected storage RLS error but upload succeeded');
+
+    const { data: dl, error: dlErr } = await helperClient.storage
+      .from('videos')
+      .download(videoStoragePath);
+    assert(!dlErr && dl, '15c: fellow member downloads object', `size=${dl?.size}`, dlErr?.message);
+
+    const { data: outDl, error: outDlErr } = await outsiderClient.storage
+      .from('videos')
+      .download(videoStoragePath);
+    assert(outDlErr !== null && !outDl, '15d: outsider download blocked', `error=${outDlErr?.message}`, 'expected storage RLS error but download succeeded');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -409,7 +526,7 @@ async function cleanup() {
     const { error } = await adminClient
       .from('allowed_emails')
       .delete()
-      .in('email', [creatorEmail, helperEmail]);
+      .in('email', [creatorEmail, helperEmail, outsiderEmail]);
     if (error) console.error(`  WARN  cleanup: allowlist removal failed — ${error.message}`);
     else console.log('  OK    removed throwaway emails from allowlist');
   }
@@ -442,6 +559,13 @@ async function cleanup() {
     }
   }
 
+  // Step C2b: remove smoke storage objects (project delete does not clear storage)
+  if (videoStoragePath) {
+    const { error } = await adminClient.storage.from('videos').remove([videoStoragePath]);
+    if (error) console.error(`  WARN  cleanup: storage object removal failed — ${error.message}`);
+    else console.log('  OK    removed smoke storage object');
+  }
+
   // Step C3: Delete project as creator (cascades invites + project_members)
   if (projectId && creatorClient) {
     const { error } = await creatorClient
@@ -467,6 +591,13 @@ async function cleanup() {
     } else {
       console.log(`  OK    deleted creator user ${creatorId}`);
     }
+  }
+
+  // Step C4b: Delete outsider user
+  if (outsiderId) {
+    const { error } = await adminClient.auth.admin.deleteUser(outsiderId);
+    if (error) console.error(`  WARN  cleanup: delete outsider user failed — ${error.message}`);
+    else console.log(`  OK    deleted outsider user ${outsiderId}`);
   }
 
   // Step C5: Confirm no test projects linger
