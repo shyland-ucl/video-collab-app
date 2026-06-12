@@ -19,9 +19,11 @@ export async function processVideo({ supabase, model, videoId, log = () => {} },
 
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), `vca-${videoId}-`))
   try {
-    await supabase.from('videos').update({ status: 'processing', error: null }).eq('id', videoId)
+    const claim = await supabase.from('videos').update({ status: 'processing', error: null }).eq('id', videoId)
+    if (claim.error) throw new Error(`status_update_failed: ${claim.error.message}`)
     // Fresh start on every (re)run: descriptions cascade with their segments.
-    await supabase.from('segments').delete().eq('video_id', videoId)
+    const cleared = await supabase.from('segments').delete().eq('video_id', videoId)
+    if (cleared.error) throw new Error(`segment_clear_failed: ${cleared.error.message}`)
 
     const { data: blob, error: dlErr } = await supabase.storage
       .from('videos').download(video.storage_path)
@@ -30,7 +32,8 @@ export async function processVideo({ supabase, model, videoId, log = () => {} },
     await fs.writeFile(sourceFile, Buffer.from(await blob.arrayBuffer()))
 
     const meta = await getMeta(sourceFile)
-    await supabase.from('videos').update(meta).eq('id', videoId)
+    const metaUpd = await supabase.from('videos').update(meta).eq('id', videoId)
+    if (metaUpd.error) throw new Error(`meta_update_failed: ${metaUpd.error.message}`)
 
     const prefix = `${video.project_id}/${video.id}`
     // round to 2dp: ffprobe durations carry sub-ms rounding that would
@@ -79,13 +82,28 @@ export async function processVideo({ supabase, model, videoId, log = () => {} },
       log(`processed ${plan.id} (${plan.idx}/${plans.length})`)
     }
 
-    await supabase.from('videos').update({ status: 'ready' }).eq('id', videoId)
+    const done = await supabase.from('videos').update({ status: 'ready' }).eq('id', videoId)
+    if (done.error) throw new Error(`status_update_failed: ${done.error.message}`)
   } catch (err) {
-    await supabase.from('videos')
+    const failed = await supabase.from('videos')
       .update({ status: 'failed', error: String(err?.message ?? err) })
       .eq('id', videoId)
+    if (failed.error) log(`could not record failure for ${videoId}: ${failed.error.message}`)
     throw err
   } finally {
     await fs.rm(workDir, { recursive: true, force: true })
   }
+}
+
+// Railway redeploys kill in-flight processing; without this sweep those rows
+// would stay 'processing' forever (blocking the 409-guarded retry). Called
+// once at server boot — safe because the service runs as a single instance.
+export async function recoverInterrupted(supabase, log = console.log) {
+  const { data, error } = await supabase
+    .from('videos')
+    .update({ status: 'failed', error: 'interrupted_by_restart' })
+    .eq('status', 'processing')
+    .select('id')
+  if (error) log(`stale-processing sweep failed: ${error.message}`)
+  else if (data?.length) log(`marked ${data.length} interrupted video(s) failed`)
 }

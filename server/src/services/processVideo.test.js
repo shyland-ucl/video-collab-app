@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { processVideo } from './processVideo.js'
+import { processVideo, recoverInterrupted } from './processVideo.js'
 
 const VIDEO = {
   id: 'vid-1',
@@ -110,5 +110,31 @@ describe('processVideo', () => {
     const last = supabase.updates[supabase.updates.length - 1]
     expect(last.patch.status).toBe('failed')
     expect(last.patch.error).toMatch(/gemini_down/)
+  })
+})
+
+describe('recoverInterrupted', () => {
+  it('marks stale processing rows failed at boot', async () => {
+    const calls = []
+    const supabase = {
+      from: () => ({
+        update: (patch) => ({
+          eq: (col, val) => ({
+            select: async () => {
+              calls.push({ patch, col, val })
+              return { data: [{ id: 'v1' }], error: null }
+            },
+          }),
+        }),
+      }),
+    }
+    await recoverInterrupted(supabase, () => {})
+    expect(calls).toEqual([
+      {
+        patch: { status: 'failed', error: 'interrupted_by_restart' },
+        col: 'status',
+        val: 'processing',
+      },
+    ])
   })
 })
