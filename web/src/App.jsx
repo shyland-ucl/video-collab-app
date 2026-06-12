@@ -4,7 +4,6 @@ import RequireAuth from './components/RequireAuth'
 import SignInPage from './pages/SignInPage'
 import ProjectsPage from './pages/ProjectsPage'
 import ProjectPage from './pages/ProjectPage'
-import JoinPage from './pages/JoinPage'
 
 export default function App() {
   return (
@@ -19,7 +18,6 @@ export default function App() {
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/" element={<RequireAuth><ProjectsPage /></RequireAuth>} />
         <Route path="/projects/:id" element={<RequireAuth><ProjectPage /></RequireAuth>} />
-        <Route path="/join/:token" element={<JoinPage />} />
       </Routes>
       <div id="sr-announcer" role="status" aria-live="polite" aria-atomic="true" className="sr-only" />
       <div id="sr-announcer-assertive" role="alert" aria-live="assertive" aria-atomic="true" className="sr-only" />
