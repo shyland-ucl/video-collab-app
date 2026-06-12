@@ -335,10 +335,12 @@ async function runTests() {
   }
 
   // -------------------------------------------------------------------------
-  // Step 12 — Wrong code returns invalid_code (all codes are used by now)
+  // Step 12 — Wrong code returns invalid_code. The sentinel cannot match the
+  // 4-digit format, so it can never collide with a real active invite on the
+  // shared database.
   // -------------------------------------------------------------------------
   {
-    const { data, error } = await creatorClient.rpc('redeem_code', { p_code: '0042' });
+    const { data, error } = await creatorClient.rpc('redeem_code', { p_code: 'XXXX' });
     assert(
       !error && data?.ok === false && data?.reason === 'invalid_code',
       '12: wrong code returns invalid_code',
