@@ -1,8 +1,8 @@
 /**
  * Backend E2E smoke test for video-collab-app
  *
- * Tests: auth, RLS policies, owner-membership trigger, redeem_invite RPC,
- *        idempotency, invalid-token rejection, and FK SET NULL on user delete.
+ * Tests: auth, RLS policies, owner-membership trigger, create_invite/redeem_code RPCs,
+ *        idempotency, invalid-code rejection, and FK SET NULL on user delete.
  *
  * Run from repo root:
  *   node --env-file=server/.env scripts/e2e-smoke.mjs
@@ -110,7 +110,8 @@ let helperId = null;
 let creatorClient = null;
 let helperClient = null;
 let projectId = null;
-let inviteToken = null;
+let inviteCode = null;
+let inviteCode2 = null;
 
 console.log('\n=== video-collab-app backend E2E smoke ===\n');
 console.log(`  Supabase URL : ${SUPABASE_URL}`);
@@ -222,16 +223,29 @@ async function runTests() {
   }
 
   // -------------------------------------------------------------------------
-  // Step 7 — Creator creates an invite
+  // Step 7 — Creator generates an invite code via RPC; direct insert is blocked
   // -------------------------------------------------------------------------
   {
-    const { data, error } = await creatorClient
+    const { data, error } = await creatorClient.rpc('create_invite', {
+      p_project_id: projectId,
+    });
+    assert(
+      !error && /^[0-9]{4}$/.test(data?.code ?? ''),
+      '7a: creator creates invite code via RPC',
+      `code=${data?.code}, expires=${data?.expires_at}`,
+      error?.message ?? `unexpected data=${JSON.stringify(data)}`
+    );
+    inviteCode = data.code;
+
+    const { error: insertErr } = await creatorClient
       .from('invites')
-      .insert({ project_id: projectId, created_by: creatorId })
-      .select('token')
-      .single();
-    assert(!error && data?.token, '7: creator creates invite', `token=${data?.token}`, error?.message);
-    inviteToken = data.token;
+      .insert({ project_id: projectId, created_by: creatorId, code: '1234' });
+    assert(
+      insertErr !== null,
+      '7b: direct insert into invites is blocked (RLS tightened)',
+      `error code=${insertErr?.code}`,
+      'expected RLS error but insert succeeded'
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -252,11 +266,16 @@ async function runTests() {
   }
 
   // -------------------------------------------------------------------------
-  // Step 9 — Helper redeems invite
+  // Step 9 — Helper redeems the code
   // -------------------------------------------------------------------------
   {
-    const { data, error } = await helperClient.rpc('redeem_invite', { invite_token: inviteToken });
-    assert(!error && data === projectId, '9: helper redeems invite', `returned project_id=${data}`, error?.message ?? `returned ${data}`);
+    const { data, error } = await helperClient.rpc('redeem_code', { p_code: inviteCode });
+    assert(
+      !error && data?.ok === true && data?.project_id === projectId,
+      '9: helper redeems code',
+      `project_id=${data?.project_id}`,
+      error?.message ?? `unexpected data=${JSON.stringify(data)}`
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -277,24 +296,54 @@ async function runTests() {
   }
 
   // -------------------------------------------------------------------------
-  // Step 11 — Idempotency: helper redeems same invite again
+  // Step 11 — A used code cannot be redeemed again; a fresh code is safe for
+  //           an existing member (membership stays at 2)
   // -------------------------------------------------------------------------
   {
-    const { data, error } = await helperClient.rpc('redeem_invite', { invite_token: inviteToken });
-    assert(!error && data === projectId, '11: idempotent redeem (helper calls again)', `returned=${data}`, error?.message ?? `returned ${data}`);
+    const { data: again } = await helperClient.rpc('redeem_code', { p_code: inviteCode });
+    assert(
+      again?.ok === false && again?.reason === 'invalid_code',
+      '11a: used code is rejected as invalid_code',
+      `reason=${again?.reason}`,
+      `unexpected data=${JSON.stringify(again)}`
+    );
+
+    const { data: fresh, error: freshErr } = await creatorClient.rpc('create_invite', {
+      p_project_id: projectId,
+    });
+    assert(!freshErr && fresh?.code, '11b: creator creates second code', `code=${fresh?.code}`, freshErr?.message);
+    inviteCode2 = fresh.code;
+
+    const { data: rejoin } = await helperClient.rpc('redeem_code', { p_code: inviteCode2 });
+    assert(
+      rejoin?.ok === true && rejoin?.project_id === projectId,
+      '11c: existing member redeems fresh code (idempotent membership)',
+      `project_id=${rejoin?.project_id}`,
+      `unexpected data=${JSON.stringify(rejoin)}`
+    );
+
+    const { data: mRows, error: me } = await helperClient
+      .from('project_members')
+      .select('user_id')
+      .eq('project_id', projectId);
+    assert(
+      !me && mRows?.length === 2,
+      '11d: membership still has 2 rows',
+      `rows=${mRows?.length}`,
+      me?.message ?? `rows=${mRows?.length}`
+    );
   }
 
   // -------------------------------------------------------------------------
-  // Step 12 — Invalid token: creator redeems a random UUID
+  // Step 12 — Wrong code returns invalid_code (all codes are used by now)
   // -------------------------------------------------------------------------
   {
-    const fakeToken = crypto.randomUUID();
-    const { error } = await creatorClient.rpc('redeem_invite', { invite_token: fakeToken });
+    const { data, error } = await creatorClient.rpc('redeem_code', { p_code: '0042' });
     assert(
-      error !== null && error.message?.includes('invalid_invite'),
-      '12: invalid token returns invalid_invite error',
-      `error=${error?.message}`,
-      `expected invalid_invite in error, got: ${error?.message ?? '(no error)'}`
+      !error && data?.ok === false && data?.reason === 'invalid_code',
+      '12: wrong code returns invalid_code',
+      `reason=${data?.reason}`,
+      error?.message ?? `unexpected data=${JSON.stringify(data)}`
     );
   }
 }
@@ -317,12 +366,12 @@ async function cleanup() {
   }
 
   // Step C2: Verify invite.used_by is now NULL (FK SET NULL path)
-  if (projectId && inviteToken) {
+  if (projectId && inviteCode) {
     const { data, error } = await adminClient
       .from('invites')
-      .select('used_by, token')
+      .select('used_by, code')
       .eq('project_id', projectId)
-      .eq('token', inviteToken)
+      .eq('code', inviteCode)
       .single();
     if (error) {
       console.error(`  WARN  cleanup: reading invite after helper delete — ${error.message}`);
