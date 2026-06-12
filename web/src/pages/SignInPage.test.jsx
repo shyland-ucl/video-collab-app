@@ -54,7 +54,7 @@ describe('SignInPage', () => {
   })
 
   it('signs in with email and password', async () => {
-    mockSignIn.mockResolvedValue({ data: {}, error: null })
+    mockSignIn.mockResolvedValue({ data: { session: { user: { id: 'u1' } } }, error: null })
     renderAt()
     await fillAndSubmit('a@b.com', 'secret123', 'Sign in')
     expect(mockSignIn).toHaveBeenCalledWith({ email: 'a@b.com', password: 'secret123' })
@@ -73,7 +73,7 @@ describe('SignInPage', () => {
   })
 
   it('switches to create mode, focuses email, announces, and signs up', async () => {
-    mockSignUp.mockResolvedValue({ data: {}, error: null })
+    mockSignUp.mockResolvedValue({ data: { session: { user: { id: 'u1' } } }, error: null })
     renderAt()
     await userEvent.click(
       screen.getByRole('button', { name: 'First time here? Create your password' })
@@ -133,5 +133,42 @@ describe('SignInPage', () => {
     renderAt()
     await fillAndSubmit('a@b.com', 'secret123', 'Sign in')
     expect(screen.getByRole('button', { name: 'Signing in…' })).toBeDisabled()
+  })
+
+  it('navigates away once sign-in succeeds and the session arrives', async () => {
+    mockSignIn.mockImplementation(async () => {
+      mockUseAuth.mockReturnValue({ session: { user: { id: 'u1' } } })
+      return { data: { session: { user: { id: 'u1' } } }, error: null }
+    })
+    renderAt()
+    await fillAndSubmit('a@b.com', 'secret123', 'Sign in')
+    expect(await screen.findByText('Home stub')).toBeInTheDocument()
+  })
+
+  it('treats a success response without a session as a failure', async () => {
+    mockSignIn.mockResolvedValue({ data: { session: null }, error: null })
+    renderAt()
+    await fillAndSubmit('a@b.com', 'secret123', 'Sign in')
+    expect(
+      await screen.findByText('Could not sign you in. Please try again.')
+    ).toBeInTheDocument()
+    expect(announce).toHaveBeenCalledWith('Could not sign you in. Please try again.', {
+      assertive: true,
+    })
+  })
+
+  it('does not map non-allowlist database errors to the allowlist message', async () => {
+    mockSignUp.mockResolvedValue({
+      data: null,
+      error: { code: 'some_other_failure', message: 'Database error: deadlock detected' },
+    })
+    renderAt()
+    await userEvent.click(
+      screen.getByRole('button', { name: 'First time here? Create your password' })
+    )
+    await fillAndSubmit('a@b.com', 'secret123', 'Create password and sign in')
+    expect(
+      await screen.findByText('Could not sign you in. Please try again.')
+    ).toBeInTheDocument()
   })
 })

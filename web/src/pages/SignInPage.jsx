@@ -14,8 +14,13 @@ const NOT_ALLOWED = 'This email is not on the allowed list.'
 const GENERIC = 'Could not sign you in. Please try again.'
 
 // The allowlist trigger rejection reaches the client as a generic DB error
+// (code unexpected_failure, message "Database error saving new user")
 function describeError(error, mode) {
-  if (mode === 'create' && error.message?.includes('Database error')) {
+  if (
+    mode === 'create' &&
+    error.code === 'unexpected_failure' &&
+    error.message?.includes('Database error')
+  ) {
     return NOT_ALLOWED
   }
   return AUTH_ERRORS[error.code] ?? GENERIC
@@ -40,13 +45,13 @@ export default function SignInPage() {
     setBusy(true)
     setError(null)
     const credentials = { email, password }
-    const { error } =
+    const { data, error } =
       mode === 'create'
         ? await supabase.auth.signUp(credentials)
         : await supabase.auth.signInWithPassword(credentials)
     setBusy(false)
-    if (error) {
-      const message = describeError(error, mode)
+    if (error || !data?.session) {
+      const message = error ? describeError(error, mode) : GENERIC
       setError(message)
       announce(message, { assertive: true })
       return
