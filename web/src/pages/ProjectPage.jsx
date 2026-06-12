@@ -40,7 +40,8 @@ export default function ProjectPage() {
     setError(null)
     try {
       const { data, error } = await supabase.rpc('create_invite', { p_project_id: id })
-      if (error) {
+      if (error || !data?.code) {
+        setInvite(null)
         setError('Could not create a code. Only the project owner can invite.')
         announce('Could not create invite code')
         return

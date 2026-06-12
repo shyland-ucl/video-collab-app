@@ -148,4 +148,45 @@ describe('ProjectPage', () => {
       screen.getByText('Could not create a code. Only the project owner can invite.')
     ).toBeInTheDocument()
   })
+
+  it('treats a success response with no code as a failure', async () => {
+    mockProjectSingle.mockResolvedValue({ data: PROJECT, error: null })
+    mockMembersEq.mockResolvedValue({ data: MEMBERS, error: null })
+    mockRpc.mockResolvedValue({ data: null, error: null })
+
+    renderAt()
+    await screen.findByText('My film')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Invite a helper' }))
+
+    await waitFor(() => expect(announce).toHaveBeenCalledWith('Could not create invite code'))
+    expect(
+      screen.getByText('Could not create a code. Only the project owner can invite.')
+    ).toBeInTheDocument()
+  })
+
+  it('clears a previously shown code when a later attempt fails', async () => {
+    mockProjectSingle.mockResolvedValue({ data: PROJECT, error: null })
+    mockMembersEq.mockResolvedValue({ data: MEMBERS, error: null })
+    mockRpc
+      .mockResolvedValueOnce({
+        data: { code: '4827', expires_at: '2026-06-12T12:00:00Z' },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: null, error: { message: 'not_owner' } })
+
+    renderAt()
+    await screen.findByText('My film')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Invite a helper' }))
+    await screen.findByText('4827')
+    await userEvent.click(screen.getByRole('button', { name: 'Invite a helper' }))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Could not create a code. Only the project owner can invite.')
+      ).toBeInTheDocument()
+    )
+    expect(screen.queryByText('4827')).not.toBeInTheDocument()
+  })
 })
