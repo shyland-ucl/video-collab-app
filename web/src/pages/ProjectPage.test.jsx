@@ -3,13 +3,11 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
-// Hoisted mock factories — must declare before any vi.mock calls
-const { mockProjectSingle, mockMembersEq, mockInviteSingle } = vi.hoisted(() => {
-  const mockProjectSingle = vi.fn()
-  const mockMembersEq = vi.fn()
-  const mockInviteSingle = vi.fn()
-  return { mockProjectSingle, mockMembersEq, mockInviteSingle }
-})
+const { mockProjectSingle, mockMembersEq, mockRpc } = vi.hoisted(() => ({
+  mockProjectSingle: vi.fn(),
+  mockMembersEq: vi.fn(),
+  mockRpc: vi.fn(),
+}))
 
 vi.mock('../lib/supabaseClient', () => ({
   supabase: {
@@ -28,15 +26,9 @@ vi.mock('../lib/supabaseClient', () => ({
           })),
         }
       }
-      if (table === 'invites') {
-        return {
-          insert: vi.fn(() => ({
-            select: vi.fn(() => ({ single: mockInviteSingle })),
-          })),
-        }
-      }
       return {}
     }),
+    rpc: mockRpc,
   },
 }))
 
@@ -48,7 +40,6 @@ vi.mock('../utils/announcer', () => ({ announce: vi.fn() }))
 
 import ProjectPage from './ProjectPage'
 import { announce } from '../utils/announcer'
-import { supabase } from '../lib/supabaseClient'
 
 function renderAt(projectId = 'p1') {
   return render(
@@ -94,16 +85,12 @@ describe('ProjectPage', () => {
     expect(screen.getByRole('link', { name: 'Back to projects' })).toBeInTheDocument()
   })
 
-  it('invite success with no navigator.share copies link and announces', async () => {
+  it('shows the 4-digit code with expiry note and announces it', async () => {
     mockProjectSingle.mockResolvedValue({ data: PROJECT, error: null })
     mockMembersEq.mockResolvedValue({ data: MEMBERS, error: null })
-    mockInviteSingle.mockResolvedValue({ data: { token: 'abc123' }, error: null })
-
-    // Ensure navigator.share is undefined so the clipboard branch runs
-    const originalShare = navigator.share
-    delete navigator.share
-    Object.assign(navigator, {
-      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    mockRpc.mockResolvedValue({
+      data: { code: '4827', expires_at: '2026-06-12T12:00:00Z' },
+      error: null,
     })
 
     renderAt()
@@ -111,40 +98,54 @@ describe('ProjectPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Invite a helper' }))
 
-    await waitFor(() =>
-      expect(announce).toHaveBeenCalledWith('Invite link created and copied to clipboard')
-    )
-
-    // invite insert was called with correct args
-    expect(supabase.from).toHaveBeenCalledWith('invites')
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      expect.stringContaining('/join/abc123')
-    )
-
-    // link text is visible on screen — the URL is in its own text node so use a function matcher
+    expect(await screen.findByText('4827')).toBeInTheDocument()
+    expect(screen.getByText('Expires in 15 minutes.')).toBeInTheDocument()
     expect(
-      await screen.findByText((content) => content.includes('/join/abc123'))
+      screen.getByText('Ask your helper to enter this code on their home page.')
     ).toBeInTheDocument()
-
-    // restore
-    if (originalShare !== undefined) {
-      Object.defineProperty(navigator, 'share', { value: originalShare, configurable: true })
-    }
+    expect(mockRpc).toHaveBeenCalledWith('create_invite', { p_project_id: 'p1' })
+    await waitFor(() =>
+      expect(announce).toHaveBeenCalledWith('Invite code created: 4 8 2 7')
+    )
   })
 
-  it('invite insert error announces failure and shows friendly error text', async () => {
+  it('a second press replaces the code with a fresh one', async () => {
     mockProjectSingle.mockResolvedValue({ data: PROJECT, error: null })
     mockMembersEq.mockResolvedValue({ data: MEMBERS, error: null })
-    mockInviteSingle.mockResolvedValue({ data: null, error: { message: 'permission denied' } })
+    mockRpc
+      .mockResolvedValueOnce({
+        data: { code: '4827', expires_at: '2026-06-12T12:00:00Z' },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { code: '9151', expires_at: '2026-06-12T12:20:00Z' },
+        error: null,
+      })
+
+    renderAt()
+    await screen.findByText('My film')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Invite a helper' }))
+    await screen.findByText('4827')
+    await userEvent.click(screen.getByRole('button', { name: 'Invite a helper' }))
+
+    expect(await screen.findByText('9151')).toBeInTheDocument()
+    expect(screen.queryByText('4827')).not.toBeInTheDocument()
+  })
+
+  it('rpc error announces failure and shows friendly error text', async () => {
+    mockProjectSingle.mockResolvedValue({ data: PROJECT, error: null })
+    mockMembersEq.mockResolvedValue({ data: MEMBERS, error: null })
+    mockRpc.mockResolvedValue({ data: null, error: { message: 'not_owner' } })
 
     renderAt()
     await screen.findByText('My film')
 
     await userEvent.click(screen.getByRole('button', { name: 'Invite a helper' }))
 
-    await waitFor(() => expect(announce).toHaveBeenCalledWith('Could not create invite'))
+    await waitFor(() => expect(announce).toHaveBeenCalledWith('Could not create invite code'))
     expect(
-      screen.getByText('Could not create an invite link. Only the project owner can invite.')
+      screen.getByText('Could not create a code. Only the project owner can invite.')
     ).toBeInTheDocument()
   })
 })

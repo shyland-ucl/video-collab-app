@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
-import { buildInviteUrl } from '../lib/inviteUrl'
 import { announce } from '../utils/announcer'
 
 export default function ProjectPage() {
@@ -10,7 +9,7 @@ export default function ProjectPage() {
   const { user } = useAuth()
   const [project, setProject] = useState(null)
   const [members, setMembers] = useState([])
-  const [inviteLink, setInviteLink] = useState(null)
+  const [invite, setInvite] = useState(null) // { code, expires_at }
   const [error, setError] = useState(null)
   const [inviting, setInviting] = useState(false)
 
@@ -40,33 +39,14 @@ export default function ProjectPage() {
     setInviting(true)
     setError(null)
     try {
-      const { data, error } = await supabase
-        .from('invites')
-        .insert({ project_id: id, created_by: user.id })
-        .select('token')
-        .single()
+      const { data, error } = await supabase.rpc('create_invite', { p_project_id: id })
       if (error) {
-        setError('Could not create an invite link. Only the project owner can invite.')
-        announce('Could not create invite')
+        setError('Could not create a code. Only the project owner can invite.')
+        announce('Could not create invite code')
         return
       }
-      const url = buildInviteUrl(window.location.origin, data.token)
-      setInviteLink(url)
-      if (navigator.share) {
-        announce('Invite link created. Opening share options.')
-        try {
-          await navigator.share({ title: 'Join my video project', url })
-        } catch {
-          /* user cancelled the share sheet — link stays visible below */
-        }
-      } else {
-        try {
-          await navigator.clipboard.writeText(url)
-          announce('Invite link created and copied to clipboard')
-        } catch {
-          announce('Invite link created')
-        }
-      }
+      setInvite(data)
+      announce(`Invite code created: ${data.code.split('').join(' ')}`)
     } finally {
       setInviting(false)
     }
@@ -115,10 +95,12 @@ export default function ProjectPage() {
         Invite a helper
       </button>
       {error && <p className="mt-3 text-red-700">{error}</p>}
-      {inviteLink && (
-        <p className="mt-3 break-all rounded border border-gray-300 p-3">
-          Share this link with your helper: {inviteLink}
-        </p>
+      {invite && (
+        <div className="mt-3 rounded border border-gray-300 p-4 text-center">
+          <p className="text-5xl font-bold tracking-[0.4em]">{invite.code}</p>
+          <p className="mt-3 text-lg">Expires in 15 minutes.</p>
+          <p className="text-lg">Ask your helper to enter this code on their home page.</p>
+        </div>
       )}
     </main>
   )
