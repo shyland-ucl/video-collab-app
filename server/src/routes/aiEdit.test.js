@@ -4,20 +4,45 @@ import { makeApp } from '../app.js'
 
 const user = { id: 'user-1', email: 'a@b.c' }
 
-function makeFakeSupabase({ project, member, segments = [] } = {}) {
+function makeFakeSupabase({ project, member, ownedSegments = [], descRows = [] } = {}) {
   return {
     auth: { getUser: vi.fn(async (token) => token === 'good' ? { data: { user }, error: null } : { data: { user: null }, error: { message: 'bad' } }) },
-    from: (table) => ({
-      select: () => ({
-        eq: () => ({
-          single: async () => table === 'projects'
-            ? (project ? { data: project, error: null } : { data: null, error: { message: 'nf' } })
-            : { data: null, error: { message: 'nf' } },
-          eq: () => ({ maybeSingle: async () => ({ data: member ?? null, error: null }) }),
+    from: (table) => {
+      if (table === 'projects') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: async () => project ? { data: project, error: null } : { data: null, error: { message: 'nf' } },
+            }),
+          }),
+        }
+      }
+      if (table === 'project_members') {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({ maybeSingle: async () => ({ data: member ?? null, error: null }) }),
+            }),
+          }),
+        }
+      }
+      if (table === 'segments') {
+        // ownership check: .select().in().eq()
+        return {
+          select: () => ({
+            in: () => ({
+              eq: async () => ({ data: ownedSegments, error: null }),
+            }),
+          }),
+        }
+      }
+      // table === 'descriptions'
+      return {
+        select: () => ({
+          in: async () => ({ data: descRows, error: null }),
         }),
-        in: () => ({ data: segments, error: null }),
-      }),
-    }),
+      }
+    },
   }
 }
 

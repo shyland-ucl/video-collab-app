@@ -17,6 +17,17 @@ describe('buildSceneList', () => {
     expect(list).toMatch(/g1 \| Scene 1 \| 5s \| A person stirs a pot\./)
     expect(list.split('\n')).toHaveLength(2)
   })
+
+  it('sanitizes newlines and pipes in name and description to prevent scene-list forgery', () => {
+    const clips = [{ id: 'x1', name: 'Real\nINJECTED-LINE | Fake', duration_seconds: 2 }]
+    const descs = { x1: 'desc with | pipe\nand newline' }
+    const list = buildSceneList(clips, descs)
+    const lines = list.split('\n')
+    // Must be exactly one line per clip — newline injection must not create extra lines
+    expect(lines).toHaveLength(1)
+    // No raw newlines should be present inside name or description fields
+    expect(lines[0]).not.toMatch(/INJECTED-LINE \| Fake/)
+  })
 })
 
 describe('validateProposal', () => {
@@ -56,5 +67,30 @@ describe('proposeEdit', () => {
     expect(junk.clarification).toBeTruthy()
     const badTarget = await proposeEdit(fakeModel(JSON.stringify({ op: 'delete', target_clip_id: 'zzz', params: {}, summary: 's' })), 'x', CLIPS, DESCRIPTIONS)
     expect(badTarget.clarification).toBeTruthy()
+  })
+
+  it('strips extra top-level keys and junk params — only whitelisted keys returned for delete', async () => {
+    const raw = { op: 'delete', target_clip_id: 'g2', params: { evil: 'x' }, summary: 's', extra_key: 'y' }
+    const model = fakeModel(JSON.stringify(raw))
+    const result = await proposeEdit(model, 'remove scene 2', CLIPS, DESCRIPTIONS)
+    expect(Object.keys(result).sort()).toEqual(['op', 'params', 'summary', 'target_clip_id'])
+    expect(result.params).toEqual({})
+    expect(result).not.toHaveProperty('extra_key')
+  })
+
+  it('includes caption_text in params for add_caption but strips other params', async () => {
+    const raw = { op: 'add_caption', target_clip_id: 'g1', params: { caption_text: 'Hello world', evil: 'x' }, summary: 'add caption' }
+    const model = fakeModel(JSON.stringify(raw))
+    const result = await proposeEdit(model, 'add caption to scene 1', CLIPS, DESCRIPTIONS)
+    expect(Object.keys(result).sort()).toEqual(['op', 'params', 'summary', 'target_clip_id'])
+    expect(result.params).toEqual({ caption_text: 'Hello world' })
+  })
+
+  it('truncates clarification to 500 chars', async () => {
+    const longClarification = 'x'.repeat(600)
+    const raw = { clarification: longClarification }
+    const model = fakeModel(JSON.stringify(raw))
+    const result = await proposeEdit(model, 'do something', CLIPS, DESCRIPTIONS)
+    expect(result.clarification.length).toBeLessThanOrEqual(500)
   })
 })

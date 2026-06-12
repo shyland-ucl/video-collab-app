@@ -25,7 +25,9 @@ export function makeAiEditRoutes(supabase, deps = {}) {
       return res.status(400).json({ error: 'bad_request_body' })
     }
     const cleanClips = clips.map((c) => ({
-      id: String(c?.id ?? ''), name: String(c?.name ?? ''), duration_seconds: Number(c?.duration_seconds) || 0,
+      id: String(c?.id ?? '').slice(0, 200),
+      name: String(c?.name ?? '').slice(0, 200),
+      duration_seconds: Math.min(Math.max(Number(c?.duration_seconds) || 0, 0), 86400),
     })).filter((c) => c.id && c.name)
     if (!cleanClips.length) return res.status(400).json({ error: 'bad_request_body' })
 
@@ -36,7 +38,7 @@ export function makeAiEditRoutes(supabase, deps = {}) {
       return res.status(500).json({ error: 'server_misconfigured' })
     }
 
-    const descriptions = await loadLevel1Descriptions(supabase, rootSegmentIds(cleanClips))
+    const descriptions = await loadLevel1Descriptions(supabase, project.id, rootSegmentIds(cleanClips))
     const proposal = await propose(model, request, cleanClips, descriptions)
     res.json(proposal)
   })

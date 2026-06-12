@@ -18,31 +18,96 @@ describe('rootSegmentIds', () => {
 })
 
 describe('loadLevel1Descriptions', () => {
-  function fakeSupabase(rows) {
+  // Fake that routes by table name and simulates .in() filtering for descriptions.
+  function makeFake({ ownedSegments, descRows }) {
     return {
-      from: () => ({
-        select: () => ({
-          in: async () => ({ data: rows, error: null }),
-        }),
-      }),
+      from: (table) => {
+        if (table === 'segments') {
+          return {
+            select: () => ({
+              in: () => ({
+                eq: async () => ({ data: ownedSegments, error: null }),
+              }),
+            }),
+          }
+        }
+        // table === 'descriptions': simulate the .in('segment_id', [...ownedIds]) filter
+        return {
+          select: () => ({
+            in: (col, ids) => {
+              const idSet = new Set(ids)
+              const filtered = descRows.filter((r) => idSet.has(r.segment_id))
+              return { then: undefined, async [Symbol.for('nodejs.util.inspect.custom')]() {}, ...Object.assign(async () => ({ data: filtered, error: null }), { data: undefined }) }
+            },
+          }),
+        }
+      },
+    }
+  }
+
+  // Simpler approach: make the in() return a promise-like (thenable) for descriptions
+  function makeFake2({ ownedSegments, descRows }) {
+    return {
+      from: (table) => {
+        if (table === 'segments') {
+          return {
+            select: () => ({
+              in: () => ({
+                eq: async () => ({ data: ownedSegments, error: null }),
+              }),
+            }),
+          }
+        }
+        // descriptions: simulate DB-side filtering by segment_id
+        return {
+          select: () => ({
+            in: (col, ids) => {
+              const idSet = new Set(ids)
+              const filtered = (descRows ?? []).filter((r) => idSet.has(r[col]))
+              return Promise.resolve({ data: filtered, error: null })
+            },
+          }),
+        }
+      },
     }
   }
 
   it('returns level-1 text keyed by clip id', async () => {
     const idMap = { 'g1-split-1765584000000-a': 'g1', g2: 'g2' }
-    const rows = [
+    const ownedSegments = [
+      { id: 'g1', videos: { project_id: 'p1' } },
+      { id: 'g2', videos: { project_id: 'p1' } },
+    ]
+    const descRows = [
       { segment_id: 'g1', text: 'A person stirs a pot.', level: 1 },
       { segment_id: 'g1', text: 'Long detailed description.', level: 2 },
       { segment_id: 'g2', text: 'They taste the food.', level: 1 },
     ]
-    const result = await loadLevel1Descriptions(fakeSupabase(rows), idMap)
+    const result = await loadLevel1Descriptions(makeFake2({ ownedSegments, descRows }), 'p1', idMap)
     expect(result['g1-split-1765584000000-a']).toBe('A person stirs a pot.')
     expect(result['g2']).toBe('They taste the food.')
   })
 
   it('handles missing descriptions gracefully', async () => {
     const idMap = { g3: 'g3' }
-    const result = await loadLevel1Descriptions(fakeSupabase([]), idMap)
+    const ownedSegments = [{ id: 'g3', videos: { project_id: 'p1' } }]
+    const result = await loadLevel1Descriptions(makeFake2({ ownedSegments, descRows: [] }), 'p1', idMap)
     expect(result['g3']).toBeUndefined()
+  })
+
+  it('excludes clips whose root segment belongs to a different project', async () => {
+    // idMap has two clips: 'g1' → 'g1' (owned by p1), 'g2' → 'g2' (foreign — NOT in ownedSegments)
+    const idMap = { g1: 'g1', g2: 'g2' }
+    // ownership check only confirms g1 belongs to 'p1'; g2 is absent from the result
+    const ownedSegments = [{ id: 'g1', videos: { project_id: 'p1' } }]
+    const descRows = [
+      { segment_id: 'g1', text: 'Owned description.', level: 1 },
+      { segment_id: 'g2', text: 'Foreign description.', level: 1 },
+    ]
+    // The DB .in('segment_id', ['g1']) would never return g2 — our fake simulates that
+    const result = await loadLevel1Descriptions(makeFake2({ ownedSegments, descRows }), 'p1', idMap)
+    expect(result['g1']).toBe('Owned description.')
+    // g2 must be absent — ownership check filtered it out so DB was never asked for it
+    expect(Object.prototype.hasOwnProperty.call(result, 'g2')).toBe(false)
   })
 })

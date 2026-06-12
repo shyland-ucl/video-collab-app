@@ -8,7 +8,11 @@ export const AI_EDIT_OPS = ['delete', 'split', 'move_earlier', 'move_later', 'ad
 
 export function buildSceneList(clips, descriptionsById) {
   return clips
-    .map((c) => `${c.id} | ${c.name} | ${Math.round(c.duration_seconds)}s | ${descriptionsById[c.id] ?? 'no description'}`)
+    .map((c) => {
+      const safeName = String(c.name).replace(/[\n|]/g, ' ')
+      const safeDesc = String(descriptionsById[c.id] ?? 'no description').replace(/[\n|]/g, ' ')
+      return `${c.id} | ${safeName} | ${Math.round(c.duration_seconds)}s | ${safeDesc}`
+    })
     .join('\n')
 }
 
@@ -48,5 +52,13 @@ export async function proposeEdit(model, request, clips, descriptionsById) {
   if (!verdict.ok) {
     return { clarification: "I couldn't match that to one of the scenes — could you name the scene number?" }
   }
-  return proposal
+  if (verdict.kind === 'clarification') {
+    return { clarification: String(proposal.clarification).slice(0, 500) }
+  }
+  return {
+    op: proposal.op,
+    target_clip_id: proposal.target_clip_id,
+    params: proposal.op === 'add_caption' ? { caption_text: String(proposal.params.caption_text).slice(0, 500) } : {},
+    summary: String(proposal.summary).slice(0, 500),
+  }
 }
