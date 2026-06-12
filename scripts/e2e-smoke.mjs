@@ -2,7 +2,7 @@
  * Backend E2E smoke test for video-collab-app
  *
  * Tests: auth, RLS policies, owner-membership trigger, create_invite/redeem_code RPCs,
- *        idempotency, invalid-code rejection, and FK SET NULL on user delete.
+ *        idempotency, invalid-code rejection, FK SET NULL on user delete, allowlist enforcement.
  *
  * Run from repo root:
  *   node --env-file=server/.env scripts/e2e-smoke.mjs
@@ -120,6 +120,16 @@ console.log(`  Helper  email: ${helperEmail}`);
 console.log('');
 
 async function runTests() {
+  // -------------------------------------------------------------------------
+  // Step 0 — Allowlist the throwaway emails (signup trigger blocks others)
+  // -------------------------------------------------------------------------
+  {
+    const { error } = await adminClient
+      .from('allowed_emails')
+      .insert([{ email: creatorEmail }, { email: helperEmail }]);
+    assert(!error, '0: allowlist throwaway emails', `${creatorEmail}, ${helperEmail}`, error?.message);
+  }
+
   // -------------------------------------------------------------------------
   // Step 1 — Admin creates test users
   // -------------------------------------------------------------------------
@@ -348,6 +358,31 @@ async function runTests() {
       error?.message ?? `unexpected data=${JSON.stringify(data)}`
     );
   }
+
+  // -------------------------------------------------------------------------
+  // Step 13 — A non-listed email cannot create an account (allowlist trigger)
+  // -------------------------------------------------------------------------
+  {
+    const rogueEmail = `e2e-rogue-${ts}@example.com`;
+    const rogue = makeAnonClient();
+    const { error: signUpErr } = await rogue.auth.signUp({ email: rogueEmail, password });
+    assert(
+      signUpErr !== null,
+      '13a: non-listed signup is blocked',
+      `error=${signUpErr?.message}`,
+      'expected signup to fail but it succeeded'
+    );
+    const { error: signInErr } = await rogue.auth.signInWithPassword({
+      email: rogueEmail,
+      password,
+    });
+    assert(
+      signInErr !== null,
+      '13b: no usable account exists for the rogue email',
+      `error=${signInErr?.message}`,
+      'expected sign-in to fail but it succeeded'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +391,16 @@ async function runTests() {
 
 async function cleanup() {
   console.log('\n--- cleanup ---');
+
+  // Step C0: remove throwaway emails from the allowlist
+  {
+    const { error } = await adminClient
+      .from('allowed_emails')
+      .delete()
+      .in('email', [creatorEmail, helperEmail]);
+    if (error) console.error(`  WARN  cleanup: allowlist removal failed — ${error.message}`);
+    else console.log('  OK    removed throwaway emails from allowlist');
+  }
 
   // Step C1: Delete helper user first so invite.used_by FK exercises SET NULL
   if (helperId) {
