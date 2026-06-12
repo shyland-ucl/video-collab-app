@@ -32,4 +32,19 @@ describe('app', () => {
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ id: 'user-1', email: 'a@b.c' })
   })
+
+  it('CORS matches the configured origin despite stray whitespace, zero-width chars, or slashes in WEB_ORIGIN', async () => {
+    const prev = process.env.WEB_ORIGIN
+    process.env.WEB_ORIGIN = ' https://app.example.com/​\n'
+    try {
+      const res = await request(makeApp(fakeSupabase))
+        .options('/health')
+        .set('Origin', 'https://app.example.com')
+        .set('Access-Control-Request-Method', 'GET')
+      expect(res.headers['access-control-allow-origin']).toBe('https://app.example.com')
+    } finally {
+      if (prev === undefined) delete process.env.WEB_ORIGIN
+      else process.env.WEB_ORIGIN = prev
+    }
+  })
 })

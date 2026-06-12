@@ -5,7 +5,16 @@ import { makeVideoRoutes } from './routes/videos.js'
 
 export function makeApp(supabaseClient, videoDeps = {}) {
   const app = express()
-  const origins = process.env.WEB_ORIGIN?.split(',') ?? ['http://localhost:5173']
+  // WEB_ORIGIN is hand-pasted into hosting dashboards: strip whitespace
+  // (space/tab/CR/LF), zero-width characters (U+200B..U+200D, U+FEFF), and
+  // trailing slashes so an invisible paste artifact can't silently break the
+  // exact-match CORS check
+  const junkChars = String.fromCharCode(0x20, 0x09, 0x0d, 0x0a, 0x200b, 0x200c, 0x200d, 0xfeff)
+  const stripJunk = new RegExp('[' + junkChars + ']', 'g')
+  const origins = (process.env.WEB_ORIGIN ?? 'http://localhost:5173')
+    .split(',')
+    .map((o) => o.replace(stripJunk, '').replace(/\/+$/, ''))
+    .filter(Boolean)
   app.use(cors({ origin: origins }))
   app.use(express.json())
 
