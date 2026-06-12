@@ -54,27 +54,34 @@ shows a short 4-digit code and the collaborator types it in on their own device.
 3. Generate a random 4-digit code (`0000`–`9999`); retry on collision with an
    active code (bounded retries, then raise).
 4. Insert the invite row (`role = 'helper'`, 15-minute expiry) and return
-   `(code, expires_at)`.
+   jsonb `{ "code": "4827", "expires_at": "…" }` (jsonb keeps the client call a
+   simple single-value `rpc()` result).
 
 Grant execute to `authenticated` only.
 
 ### New function `redeem_code(p_code text)`
 
-`security definer`, modeled on the existing `redeem_invite`:
+`security definer`, modeled on the existing `redeem_invite`. It returns a jsonb
+status object rather than raising for expected failures — a raised exception
+would roll back the whole function transaction, deleting the failed-attempt row
+that the rate limit depends on. Only `not_authenticated` raises.
 
-1. Reject unauthenticated callers (`not_authenticated`).
+Returns: `{ "ok": true, "project_id": "…" }` on success, or
+`{ "ok": false, "reason": "invalid_code" | "expired_code" | "too_many_attempts" }`.
+
+1. Reject unauthenticated callers (raise `not_authenticated` — nothing to record).
 2. Rate limit: if the caller has 5 or more failed attempts in the last 15 minutes,
-   raise `too_many_attempts`.
+   return reason `too_many_attempts`.
 3. Look up the invite by `code` where `used_at is null`, locking the row.
-   Not found → record a failed attempt, raise `invalid_code`. (An already-used
-   code behaves like an invalid one; the collaborator who used it is already a
-   member and sees the project in their list.)
-4. Expired → record a failed attempt, raise `expired_code`.
+   Not found → record a failed attempt, return reason `invalid_code`. (An
+   already-used code behaves like an invalid one; the collaborator who used it
+   is already a member and sees the project in their list.)
+4. Expired → record a failed attempt, return reason `expired_code`.
 5. Insert into `project_members (project_id, user_id, 'helper')`
    `on conflict do nothing` — safe when the user is already a member, e.g. they
    redeem a fresh code for a project they previously joined.
 6. Mark the invite `used_by = auth.uid(), used_at = now()`.
-7. Return the `project_id`.
+7. Return `ok: true` with the `project_id`.
 
 Grant execute to `authenticated` only; revoke from `anon`/`public`.
 
@@ -125,12 +132,12 @@ insert a hand-picked code by writing to the table directly.
 
 ## Error messages (collaborator side)
 
-| Backend error | Message shown |
+| `reason` returned | Message shown |
 | --- | --- |
 | `invalid_code` | "That code didn't work. Check the digits and try again." |
 | `expired_code` | "This code has expired. Ask for a new one." |
 | `too_many_attempts` | "Too many tries. Please wait 15 minutes." |
-| anything else | "Could not join the project. Please try again." |
+| anything else (incl. transport errors) | "Could not join the project. Please try again." |
 
 Host-side `create_invite` failure: "Could not create a code. Only the project
 owner can invite." (mirrors today's message).
@@ -143,7 +150,7 @@ owner can invite." (mirrors today's message).
   message renders for its backend error; button disabled while pending.
 - **Backend E2E smoke script** (`scripts/`): extend to create a project as user A,
   `create_invite`, then `redeem_code` as user B, and assert membership; verify a
-  wrong code fails and the same code cannot be redeemed by a third user.
+  wrong code fails and a code cannot be redeemed again once used.
 - Removed tests: `JoinPage.test.jsx`, `inviteUrl.test.js`.
 
 ## Out of scope
