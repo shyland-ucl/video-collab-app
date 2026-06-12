@@ -58,7 +58,8 @@ const ANON_KEY = webEnv['VITE_SUPABASE_ANON_KEY'];
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const SERVER_URL = `http://localhost:${process.env.PORT || 3001}`;
+// Override with E2E_SERVER_URL to run against a deployed server (e.g. Railway).
+const SERVER_URL = process.env.E2E_SERVER_URL || `http://localhost:${process.env.PORT || 3001}`;
 
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
   console.error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (server/.env).');
