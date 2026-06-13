@@ -7,6 +7,7 @@ import { SCENE_COLORS, buildInitialState, loadLatestState, rootSegmentId, saveSt
 import { joinProjectChannel } from '../lib/editor/projectChannel'
 import { createTask, listTasks, setTaskStatus } from '../lib/editor/tasksApi'
 import { summarizeEditStateChange } from '../lib/editor/projectOverview'
+import { buildHelperTaskStatusUpdate } from '../lib/editor/taskFeedback'
 import CreatorDevice from '../components/editor/CreatorDevice'
 import HelperDevice from '../components/editor/HelperDevice'
 
@@ -291,9 +292,12 @@ export default function EditorPage() {
             }
           } else if (eventType === 'UPDATE') {
             applyTasks((current) => current.map((t) => (t.id === task.id ? task : t)))
-            if (roleRef.current === 'creator') {
-              const statusLabel = TASK_STATUS_LABELS[task.status]
-              if (statusLabel) announce(`Your helper marked a task ${statusLabel}`)
+            if (roleRef.current === 'creator' && TASK_STATUS_LABELS[task.status]) {
+              // Name the task (text + segment label) so a creator with several
+              // outstanding tasks knows WHICH one resolved — the old terse
+              // "Your helper marked a task needs discussion" dropped the task
+              // identity entirely (probe buildHelperTaskStatusUpdate wording).
+              announce(buildHelperTaskStatusUpdate(task, task.status, 'Your helper').announcement)
             }
           }
         },

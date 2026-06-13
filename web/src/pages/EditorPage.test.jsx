@@ -385,6 +385,52 @@ describe('EditorPage', () => {
     expect(captured.creator.version).toBe(1)
   })
 
+  it('announces a helper task-status UPDATE to the creator naming the task text AND segment (Fix C)', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    act(() => {
+      channelOpts().onTaskChange({
+        eventType: 'UPDATE',
+        task: { id: 't1', text: 'trim the intro', segment_label: 'Scene 3', status: 'done' },
+      })
+    })
+
+    // The announce names the task (text + segment), not the old terse
+    // "Your helper marked a task done".
+    expect(announce).toHaveBeenCalledWith(
+      'Your helper finished the task for Scene 3. Task: trim the intro'
+    )
+    expect(announce).not.toHaveBeenCalledWith(expect.stringMatching(/marked a task/i))
+  })
+
+  it('maps needs_discussion / cant_do to the probe wording on a task UPDATE (Fix C)', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    act(() => {
+      channelOpts().onTaskChange({
+        eventType: 'UPDATE',
+        task: { id: 't2', text: 'brighten this shot', segment_label: 'Scene 1', status: 'needs_discussion' },
+      })
+    })
+    expect(announce).toHaveBeenCalledWith(
+      'Your helper needs discussion the task for Scene 1. Task: brighten this shot'
+    )
+
+    act(() => {
+      channelOpts().onTaskChange({
+        eventType: 'UPDATE',
+        task: { id: 't3', text: 'add music', segment_label: 'Scene 2', status: 'cant_do' },
+      })
+    })
+    expect(announce).toHaveBeenCalledWith(
+      'Your helper cannot complete the task for Scene 2. Task: add music'
+    )
+  })
+
   it('announces presence joins', async () => {
     renderPage()
     await screen.findByText('creator device')

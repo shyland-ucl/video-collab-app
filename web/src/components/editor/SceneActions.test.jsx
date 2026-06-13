@@ -53,6 +53,7 @@ const DESCRIPTIONS = {
 function makeProps(overrides = {}) {
   return {
     clip: CLIP,
+    index: 0,
     projectId: 'p1',
     level: 1,
     onLevelChange: vi.fn(),
@@ -81,9 +82,17 @@ beforeEach(() => {
 describe('SceneActions — play controls', () => {
   it('"Play this scene" calls onPlayScene(clip) (bounded)', async () => {
     const { props } = renderActions()
-    await userEvent.click(screen.getByRole('button', { name: /play scene, stops at the end of this scene/i }))
+    await userEvent.click(screen.getByRole('button', { name: /play scene 1, stops at the end of this scene/i }))
     expect(props.onPlayScene).toHaveBeenCalledWith(CLIP)
     expect(props.onPlayFromHere).not.toHaveBeenCalled()
+  })
+
+  it('the Play-this-scene aria-label includes the scene number (Fix E)', () => {
+    renderActions({ index: 2 })
+    // index 2 → "Play scene 3, …" (scene number restored).
+    expect(
+      screen.getByRole('button', { name: /^play scene 3, stops at the end of this scene$/i })
+    ).toBeInTheDocument()
   })
 
   it('"Play from here" calls onPlayFromHere(clip) (unbounded)', async () => {
@@ -109,7 +118,7 @@ describe('SceneActions — play controls', () => {
 })
 
 describe('SceneActions — edit by myself', () => {
-  it('Delete calls applyAndSave with an opFn that removes the clip BY ID + names the scene', async () => {
+  it('Delete calls applyAndSave with an opFn that removes the clip BY ID', async () => {
     const { props } = renderActions()
     await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
     await userEvent.click(screen.getByRole('button', { name: /delete this clip/i }))
@@ -120,8 +129,50 @@ describe('SceneActions — edit by myself', () => {
     const next = opFn(STATE)
     expect(next.clips.map((c) => c.id)).toEqual(['s2'])
     expect(next.clips.find((c) => c.id === 's1')).toBeUndefined()
-    // Announce text names the scene.
-    expect(announceText).toMatch(/Scene 1/)
+    // No post-save announceText for delete — the creator's confirmation is the
+    // immediate local announce (Fix B); applyAndSave's text would be a SECOND
+    // read for the creator, so it is empty.
+    expect(announceText).toBe('')
+  })
+
+  it('Delete announces exactly ONCE, scene-numbered, with no second post-save read (Fix B)', async () => {
+    renderActions({ index: 0 })
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(screen.getByRole('button', { name: /delete this clip/i }))
+
+    // Exactly one announcement, with the probe wording.
+    expect(mockAnnounce).toHaveBeenCalledTimes(1)
+    expect(mockAnnounce).toHaveBeenCalledWith('Scene 1 removed from the edit.')
+  })
+
+  it('Split immediately announces "Scene N trimmed at this point." (Fix A)', async () => {
+    renderActions({ index: 2 })
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(screen.getByRole('button', { name: /split this clip/i }))
+    expect(mockAnnounce).toHaveBeenCalledWith('Scene 3 trimmed at this point.')
+  })
+
+  it('Move earlier immediately announces "Scene N moved earlier." (Fix A)', async () => {
+    renderActions({ index: 0 })
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(screen.getByRole('button', { name: /move this clip earlier/i }))
+    expect(mockAnnounce).toHaveBeenCalledWith('Scene 1 moved earlier.')
+  })
+
+  it('Move later immediately announces "Scene N moved later." (Fix A)', async () => {
+    renderActions({ index: 1 })
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(screen.getByRole('button', { name: /move this clip later/i }))
+    expect(mockAnnounce).toHaveBeenCalledWith('Scene 2 moved later.')
+  })
+
+  it('Add caption immediately announces "Caption added to scene N." (Fix A)', async () => {
+    renderActions({ index: 0 })
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(screen.getByRole('button', { name: /add a caption to this scene/i }))
+    await userEvent.type(screen.getByRole('textbox', { name: /caption text/i }), 'a caption')
+    await userEvent.click(screen.getByRole('button', { name: /save caption/i }))
+    expect(mockAnnounce).toHaveBeenCalledWith('Caption added to scene 1.')
   })
 
   it('Undo applies a non-rebasable state-replacing op', async () => {
@@ -277,6 +328,25 @@ describe('SceneActions — VQA (Ask AI about scene)', () => {
 
     await screen.findByText('She is stirring soup.')
     expect(mockAnnounce).toHaveBeenCalledWith('She is stirring soup.')
+  })
+
+  it('with audio ON, the VQA answer is announced ONCE and is NOT also spoken via ttsService (Fix D)', async () => {
+    a11yState.audioEnabled = true
+    mockServerPost.mockResolvedValueOnce({ answer: 'She is stirring soup.' })
+    renderActions()
+
+    await userEvent.click(screen.getByRole('button', { name: /ask ai about scene/i }))
+    const panel = screen.getByRole('group', { name: /ask ai about scene/i })
+    await userEvent.type(within(panel).getByRole('textbox'), 'what is she doing?')
+    await userEvent.click(within(panel).getByRole('button', { name: /^ask$/i }))
+
+    await screen.findByText('She is stirring soup.')
+    // Single channel: announce reaches the SR; ttsService is NOT used for the
+    // answer (it would be a second read for an audio-on BLV user).
+    expect(mockAnnounce).toHaveBeenCalledWith('She is stirring soup.')
+    expect(mockAnnounce).toHaveBeenCalledTimes(1)
+    expect(ttsMock.speak).not.toHaveBeenCalled()
+    a11yState.audioEnabled = false
   })
 
   it('VQA uses rootSegmentId for a split clip id', async () => {

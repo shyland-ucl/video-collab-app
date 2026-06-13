@@ -270,7 +270,7 @@ export default function CreatorDevice({
 
   const renderSceneActions = useCallback(
     (args) => {
-      const { scene, currentLevel, onLevelChange, isPlaying: ip, currentTime: ct } = args
+      const { scene, index, currentLevel, onLevelChange, isPlaying: ip, currentTime: ct } = args
       const clip = clipsById.get(scene.id)
       if (!clip) return null
       const isActiveScene =
@@ -278,6 +278,7 @@ export default function CreatorDevice({
       return (
         <SceneActions
           clip={clip}
+          index={index}
           allClips={clips}
           projectId={projectId}
           level={currentLevel}

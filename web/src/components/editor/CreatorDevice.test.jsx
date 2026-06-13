@@ -128,8 +128,8 @@ describe('CreatorDevice — scene list', () => {
     expect(region.getByRole('button', { name: /change to detailed description/i })).toBeInTheDocument()
     expect(region.getByRole('button', { name: /change to technical description/i })).toBeInTheDocument()
 
-    // Per-scene actions are rendered for real (not mocked).
-    expect(region.getByRole('button', { name: /play scene, stops at the end of this scene/i })).toBeInTheDocument()
+    // Per-scene actions are rendered for real (not mocked). Scene 1 → "Play scene 1".
+    expect(region.getByRole('button', { name: /play scene 1, stops at the end of this scene/i })).toBeInTheDocument()
     expect(region.getByRole('button', { name: /play the whole video from here/i })).toBeInTheDocument()
     expect(region.getByRole('button', { name: /ask ai about scene/i })).toBeInTheDocument()
     expect(region.getByRole('button', { name: /edit by myself/i })).toBeInTheDocument()
@@ -176,6 +176,30 @@ describe('CreatorDevice — edit by myself (delete round-trip)', () => {
     expect(applyAndSave).toHaveBeenCalled()
     // The real opFn ran against the tracked state: s1 is gone.
     expect(tracked.state.clips.map((c) => c.id)).toEqual(['s2', 's3'])
+  })
+
+  it('passes the scene index through to SceneActions so the delete announce is scene-numbered (Fix A flow)', async () => {
+    const tracked = { state: STATE }
+    const applyAndSave = trackingApplyAndSave(tracked)
+    await act(async () => { renderDevice({ applyAndSave }) })
+
+    // Open Scene 2 (block index 1) and delete it. SceneBlockList passes index:1
+    // into renderSceneActions, which forwards index={1} to SceneActions; the
+    // immediate announce must read "Scene 2 …".
+    const region = await expandScene(2, 'Scene 2')
+    await userEvent.click(region.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(region.getByRole('button', { name: /delete this clip/i }))
+
+    expect(mockAnnounce).toHaveBeenCalledWith('Scene 2 removed from the edit.')
+  })
+
+  it('the per-scene Play-this-scene label is scene-numbered (index flows through, Fix E)', async () => {
+    await act(async () => { renderDevice() })
+    // Scene 3 (block index 2) → "Play scene 3, …".
+    const region = await expandScene(3, 'Scene 3')
+    expect(
+      region.getByRole('button', { name: /play scene 3, stops at the end of this scene/i })
+    ).toBeInTheDocument()
   })
 
   it('undo round-trip restores the pre-edit clips', async () => {
@@ -482,7 +506,7 @@ describe('CreatorDevice — playback (bounded vs unbounded)', () => {
 
     // Open Scene 2 (EDL offset 6, end 12) and start the bounded play.
     const region = await expandScene(2, 'Scene 2')
-    await userEvent.click(region.getByRole('button', { name: /play scene, stops at the end of this scene/i }))
+    await userEvent.click(region.getByRole('button', { name: /play scene 2, stops at the end of this scene/i }))
 
     // Bounded play seeks to Scene 2's EDL offset and plays.
     expect(engineMock.seekEdl).toHaveBeenCalledWith(6)

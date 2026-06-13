@@ -46,6 +46,9 @@ import ConfirmAiEditDialog, { proposalToOpFn, describeProposal } from './Confirm
  *
  * Props:
  *   clip            the app clip object (camelCase: id, name, startTime, ...)
+ *   index           0-based position of this scene in the timeline (for
+ *                   scene-numbered, synchronous self-edit confirmations — the
+ *                   probe announces "Scene N …" the instant the button is hit)
  *   projectId       project id (for the AI-edit endpoint)
  *   level           current detail level (1..3) — owned by SceneBlockList
  *   onLevelChange   level setter from SceneBlockList
@@ -70,6 +73,7 @@ const VQA_FAILED_TEXT = "The question couldn't be answered — try again"
 
 export default function SceneActions({
   clip,
+  index = 0,
   allClips,
   projectId,
   level = 1,
@@ -155,13 +159,17 @@ export default function SceneActions({
       const { answer } = await serverPost(`/api/segments/${rootSegmentId(clip.id)}/vqa`, { question })
       setVqaPending(false)
       setVqaAnswer(answer)
+      // Speak the answer through a SINGLE channel: announce() reaches the SR
+      // (and is what the VQA-failure path uses). The probe speaks the answer
+      // once via gated TTS with no announce; we keep announce() for ALL users
+      // and DROP the second speakResponse(answer) so an audio-on BLV user
+      // doesn't hear the answer read twice. The visible Answer box stays.
       announce(answer)
-      speakResponse(answer)
     } catch {
       setVqaPending(false)
       announce(VQA_FAILED_TEXT, { assertive: true })
     }
-  }, [clip, speakResponse])
+  }, [clip])
 
   // ---------------------------------------------------------------------------
   // Edit by Myself — every edit routes through applyAndSave(opFn, text).
@@ -186,35 +194,47 @@ export default function SceneActions({
     [clip, applyAndSave]
   )
 
+  // Self-edits announce SYNCHRONOUSLY and scene-numbered the instant the button
+  // is hit (probe EditByMyselfPanel wording) — this is the creator's immediate
+  // confirmation, independent of the network save. applyAndSave's announceText
+  // still drives the cross-device summary the HELPER hears, so:
+  //  - the IMMEDIATE local announce is the creator's confirmation, and it
+  //    survives a save conflict (EditorPage skips the post-save announce then);
+  //  - for delete we pass NO announceText so the creator hears the deletion
+  //    exactly ONCE (EditorPage's remote summary still announces to the helper).
   const handleDelete = useCallback(() => {
     if (!clip) return
-    runEdit('delete', {}, `Deleted clip: ${clip.name}`)
+    runEdit('delete', {}, '')
     setShowEditPanel(false)
-    announce(`Deleted ${clip.name}.`)
-  }, [clip, runEdit])
+    announce(`Scene ${index + 1} removed from the edit.`)
+  }, [clip, index, runEdit])
 
   const handleSplit = useCallback(() => {
     if (!clip) return
     runEdit('split', {}, `Split ${clip.name}`)
-  }, [clip, runEdit])
+    announce(`Scene ${index + 1} trimmed at this point.`)
+  }, [clip, index, runEdit])
 
   const handleMoveEarlier = useCallback(() => {
     if (!clip) return
     runEdit('move_earlier', {}, `Moved ${clip.name} earlier`)
-  }, [clip, runEdit])
+    announce(`Scene ${index + 1} moved earlier.`)
+  }, [clip, index, runEdit])
 
   const handleMoveLater = useCallback(() => {
     if (!clip) return
     runEdit('move_later', {}, `Moved ${clip.name} later`)
-  }, [clip, runEdit])
+    announce(`Scene ${index + 1} moved later.`)
+  }, [clip, index, runEdit])
 
   const handleAddCaption = useCallback(() => {
     const text = captionText.trim()
     if (!text || !clip) return
     runEdit('add_caption', { captionText: text }, `Added caption: "${text}"`)
+    announce(`Caption added to scene ${index + 1}.`)
     setCaptionText('')
     setShowCaptionInput(false)
-  }, [captionText, clip, runEdit])
+  }, [captionText, clip, index, runEdit])
 
   // Undo/redo: state-REPLACING opFns, non-rebasable (probe contract). Undo
   // replaces the timeline with the edit's captured pre-image; redo re-applies
@@ -331,7 +351,7 @@ export default function SceneActions({
         data-scene-play-button="true"
         className="w-full py-3 text-sm font-medium rounded bg-gray-100 hover:bg-gray-200 text-gray-800 transition-colors focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
         style={{ minHeight: '48px' }}
-        aria-label={isActiveScene ? 'Pause this scene' : `Play scene, stops at the end of this scene`}
+        aria-label={isActiveScene ? 'Pause this scene' : `Play scene ${index + 1}, stops at the end of this scene`}
       >
         {isActiveScene ? 'Pause' : 'Play this scene'}
       </button>
