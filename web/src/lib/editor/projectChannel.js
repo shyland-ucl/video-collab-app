@@ -2,7 +2,7 @@ export const PLAYHEAD_THROTTLE_MS = 2000
 
 export function joinProjectChannel(supabase, {
   projectId, userId, role,
-  onStateInsert, onTaskChange, onPresence, onPlayhead, onTransport, onActivity,
+  onStateInsert, onTaskChange, onSuggestionChange, onPresence, onPlayhead, onTransport, onActivity,
   onReconnect, onError,
 }) {
   const channel = supabase.channel(`project:${projectId}`, {
@@ -19,6 +19,12 @@ export function joinProjectChannel(supabase, {
       (payload) => onTaskChange?.({
         eventType: payload.eventType,
         task: payload.eventType === 'DELETE' ? payload.old : payload.new,
+      }))
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'suggestions', filter: `project_id=eq.${projectId}` },
+      (payload) => onSuggestionChange?.({
+        eventType: payload.eventType,
+        suggestion: payload.eventType === 'DELETE' ? payload.old : payload.new,
       }))
     .on('presence', { event: 'sync' }, () => onPresence?.(channel.presenceState()))
     .on('broadcast', { event: 'playhead' }, ({ payload }) => onPlayhead?.(payload))

@@ -33,10 +33,18 @@ describe('joinProjectChannel', () => {
     const channel = fakeChannel()
     const onStateInsert = vi.fn()
     const onTaskChange = vi.fn()
+    const onSuggestionChange = vi.fn()
     const handle = joinProjectChannel(fakeSupabase(channel), {
       projectId: 'p1', userId: 'u1', role: 'creator',
-      onStateInsert, onTaskChange, onPresence: vi.fn(), onPlayhead: vi.fn(), onTransport: vi.fn(), onActivity: vi.fn(),
+      onStateInsert, onTaskChange, onSuggestionChange, onPresence: vi.fn(), onPlayhead: vi.fn(), onTransport: vi.fn(), onActivity: vi.fn(),
     })
+
+    const suggestionSub = channel.handlers.postgres.find((h) => h.filter.table === 'suggestions')
+    expect(suggestionSub.filter).toMatchObject({ event: '*', filter: 'project_id=eq.p1' })
+    suggestionSub.cb({ eventType: 'INSERT', new: { id: 'sug1', text: 'x' } })
+    expect(onSuggestionChange).toHaveBeenCalledWith({ eventType: 'INSERT', suggestion: { id: 'sug1', text: 'x' } })
+    suggestionSub.cb({ eventType: 'DELETE', new: {}, old: { id: 'sug9' } })
+    expect(onSuggestionChange).toHaveBeenCalledWith({ eventType: 'DELETE', suggestion: { id: 'sug9' } })
 
     const stateSub = channel.handlers.postgres.find((h) => h.filter.table === 'project_state')
     expect(stateSub.filter).toMatchObject({ event: 'INSERT', schema: 'public', filter: 'project_id=eq.p1' })

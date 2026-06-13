@@ -6,6 +6,13 @@ import { announce } from '../utils/announcer'
 import { SCENE_COLORS, buildInitialState, loadLatestState, rootSegmentId, saveState, saveWithRebase } from '../lib/editor/stateStore'
 import { joinProjectChannel } from '../lib/editor/projectChannel'
 import { createTask, listTasks, setTaskStatus } from '../lib/editor/tasksApi'
+import {
+  requestSuggestions,
+  listProjectSuggestions,
+  setSuggestionResolution,
+  updateSuggestionOutcome,
+} from '../lib/editor/suggestionsApi'
+import { taskStatusToOutcome } from '../lib/editor/suggestionRouting'
 import { summarizeEditStateChange } from '../lib/editor/projectOverview'
 import { buildHelperTaskStatusUpdate } from '../lib/editor/taskFeedback'
 import CreatorDevice from '../components/editor/CreatorDevice'
@@ -83,6 +90,7 @@ export default function EditorPage() {
   const [sources, setSources] = useState([])
   const [descriptions, setDescriptions] = useState({})
   const [tasks, setTasks] = useState([])
+  const [suggestions, setSuggestions] = useState([])
   const [remote, setRemote] = useState({ playhead: null, transport: null, activity: null })
   const [syncDown, setSyncDown] = useState(false)
   const [toast, setToast] = useState(null)
@@ -93,6 +101,8 @@ export default function EditorPage() {
   // without re-subscribing the channel on every render.
   const snapshotRef = useRef(null)
   const tasksRef = useRef([])
+  const suggestionsRef = useRef([])
+  const lastSuggestionAnnounceRef = useRef(0)
   const roleRef = useRef(null)
   const otherRoleRef = useRef(null)
   const otherOnlineRef = useRef(false)
@@ -110,6 +120,11 @@ export default function EditorPage() {
   const applyTasks = useCallback((updater) => {
     tasksRef.current = typeof updater === 'function' ? updater(tasksRef.current) : updater
     setTasks(tasksRef.current)
+  }, [])
+
+  const applySuggestions = useCallback((updater) => {
+    suggestionsRef.current = typeof updater === 'function' ? updater(suggestionsRef.current) : updater
+    setSuggestions(suggestionsRef.current)
   }, [])
 
   const showToast = useCallback((text) => {
@@ -255,6 +270,16 @@ export default function EditorPage() {
         const taskRows = await listTasks(supabase, projectId)
         if (cancelled) return
         applyTasks(taskRows)
+
+        // Phase 3b: persisted AI suggestions (across any analysed video). A
+        // failure here is non-fatal — the editor still loads; suggestions just
+        // won't show until the next analyse/realtime event.
+        try {
+          const sugRows = await listProjectSuggestions(supabase, projectId)
+          if (!cancelled) applySuggestions(sugRows)
+        } catch {
+          /* non-fatal */
+        }
       } catch {
         if (!cancelled) fail()
         return
@@ -299,6 +324,43 @@ export default function EditorPage() {
               // identity entirely (probe buildHelperTaskStatusUpdate wording).
               announce(buildHelperTaskStatusUpdate(task, task.status, 'Your helper').announcement)
             }
+            // Phase 3b: if this task was created by routing a suggestion to the
+            // helper, flip that suggestion's outcome so its badge reflects the
+            // helper's response. The creator owns this linkage (they routed it);
+            // the DB write re-broadcasts as a suggestion UPDATE (idempotent here).
+            if (roleRef.current === 'creator') {
+              const linked = suggestionsRef.current.find((s) => s.task_id === task.id)
+              if (linked) {
+                const outcome = taskStatusToOutcome(task.status)
+                if (linked.outcome_status !== outcome) {
+                  applySuggestions((cur) =>
+                    cur.map((s) => (s.id === linked.id ? { ...s, outcome_status: outcome } : s))
+                  )
+                  updateSuggestionOutcome(supabase, linked.id, outcome).catch(() => {})
+                }
+              }
+            }
+          }
+        },
+        onSuggestionChange: ({ eventType, suggestion }) => {
+          if (!suggestion?.id) return
+          if (eventType === 'DELETE') {
+            applySuggestions((cur) => cur.filter((s) => s.id !== suggestion.id))
+            return
+          }
+          applySuggestions((cur) =>
+            cur.some((s) => s.id === suggestion.id)
+              ? cur.map((s) => (s.id === suggestion.id ? suggestion : s))
+              : [...cur, suggestion]
+          )
+          // Helper: a fresh analysis inserts ~3 rows near-simultaneously —
+          // announce the batch ONCE (debounced) so the helper knows to look.
+          if (eventType === 'INSERT' && roleRef.current === 'helper') {
+            const now = Date.now()
+            if (now - lastSuggestionAnnounceRef.current > 2500) {
+              lastSuggestionAnnounceRef.current = now
+              announce('The creator ran AI analysis — new suggestions are ready to review.')
+            }
           }
         },
         onPresence: (presenceState) => {
@@ -324,6 +386,8 @@ export default function EditorPage() {
             }
             const taskRows = await listTasks(supabase, projectId)
             applyTasks(taskRows)
+            const sugRows = await listProjectSuggestions(supabase, projectId)
+            applySuggestions(sugRows)
           } catch {
             // Transient refetch failure — the next state insert or reconnect catches us up.
           }
@@ -452,6 +516,50 @@ export default function EditorPage() {
     []
   )
 
+  // Phase 3b — run AI analysis for a video: the server persists the curated set
+  // (replacing any prior set for that video) and returns the rows; we swap them
+  // into local state (realtime also fans the inserts to the helper). Returns the
+  // rows so the creator device can move focus to the first suggested scene.
+  const onAnalyse = useCallback(
+    async (videoId) => {
+      if (!videoId) return []
+      try {
+        const rows = await requestSuggestions(projectId, videoId)
+        applySuggestions((cur) => [...cur.filter((s) => s.video_id !== videoId), ...rows])
+        announce(
+          rows.length
+            ? `AI analysis complete. ${rows.length} suggestion${rows.length === 1 ? '' : 's'} ready.`
+            : 'AI analysis finished — no suggestions this time.'
+        )
+        return rows
+      } catch {
+        announce("Couldn't analyse the video — try again", { assertive: true })
+        return []
+      }
+    },
+    [projectId, applySuggestions]
+  )
+
+  // Record a routing decision on a suggestion (creator only). Optimistic local
+  // update; the DB write re-broadcasts as a suggestion UPDATE to both devices.
+  const onResolveSuggestion = useCallback(
+    async (id, patch) => {
+      applySuggestions((cur) =>
+        cur.map((s) =>
+          s.id === id
+            ? { ...s, routed_to: patch.routedTo, outcome_status: patch.outcomeStatus, task_id: patch.taskId ?? s.task_id ?? null }
+            : s
+        )
+      )
+      try {
+        await setSuggestionResolution(supabase, id, { ...patch, userId })
+      } catch {
+        announce("That routing didn't save — try again", { assertive: true })
+      }
+    },
+    [applySuggestions, userId]
+  )
+
   if (error) {
     return (
       <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
@@ -510,11 +618,14 @@ export default function EditorPage() {
         sources={sources}
         descriptions={descriptions}
         tasks={tasks}
+        suggestions={suggestions}
         applyAndSave={applyAndSave}
         channel={channelApi}
         remote={remote}
         onCreateTask={onCreateTask}
         onSetTaskStatus={onSetTaskStatus}
+        onAnalyse={onAnalyse}
+        onResolveSuggestion={onResolveSuggestion}
         syncDown={syncDown}
       />
       </div>
