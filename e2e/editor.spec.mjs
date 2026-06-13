@@ -54,11 +54,15 @@ test('creator and helper collaborate live; state survives refresh', async ({ bro
 
   // (b) Creator deletes scene 1 via the new inline UI: expand the scene block ->
   // open "Edit by Myself" -> click "Delete". The helper's timeline-clip count
-  // drops by 1 within ~15s (realtime propagation).
+  // then drops by 1 once the project_state INSERT propagates over Supabase
+  // Realtime. In the healthy case this lands in ~1-2s, but realtime delivery
+  // over the public internet can legitimately stall for several seconds, so the
+  // web-first wait allows up to 30s. This is a timing allowance, NOT a weaker
+  // assertion: the helper must still reach the EXACT post-delete count.
   await sceneHeader(creator, 1).click()
   await creator.getByRole('button', { name: /^edit by myself$/i }).click()
   await creator.getByRole('button', { name: /delete this clip from the timeline/i }).click()
-  await expect(helper.getByTestId('timeline-clip')).toHaveCount(sceneCountBefore - 1, { timeout: 15_000 })
+  await expect(helper.getByTestId('timeline-clip')).toHaveCount(sceneCountBefore - 1, { timeout: 30_000 })
 
   // (c) Creator sends a task -> helper sees it -> helper marks it done ->
   // creator sees the status. Drive the task from scene 1's block. After the
@@ -92,14 +96,18 @@ test('creator and helper collaborate live; state survives refresh', async ({ bro
   // request" intent banner, so an unscoped getByText matches two elements. Exact
   // text also avoids the sr-only live-region announcement ("Creator sent you a
   // task: …").
+  // 30s for the same reason as the delete propagation above: this also rides a
+  // Supabase Realtime INSERT over the public internet (exact task text still
+  // required — only the wait is widened).
   const activityFeed = helper.getByRole('region', { name: /tasks and activity/i })
   await expect(
     activityFeed.getByText('Please trim the shaky part', { exact: true })
-  ).toBeVisible({ timeout: 15_000 })
+  ).toBeVisible({ timeout: 30_000 })
   await helper.getByRole('button', { name: /mark done/i }).click()
 
-  // Creator's "Recent Tasks" reflects the helper's status as "Helper: Done".
-  await expect(creator.getByText(/helper:\s*done/i)).toBeVisible({ timeout: 15_000 })
+  // Creator's "Recent Tasks" reflects the helper's status as "Helper: Done"
+  // (realtime UPDATE propagation — same cross-internet timing allowance).
+  await expect(creator.getByText(/helper:\s*done/i)).toBeVisible({ timeout: 30_000 })
 
   // (d) Refresh both -> the deleted scene stays gone, the task stays done.
   await creator.reload()
