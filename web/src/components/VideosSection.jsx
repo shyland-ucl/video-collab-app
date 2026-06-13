@@ -39,7 +39,7 @@ export default function VideosSection({ projectId }) {
   const loadVideos = useCallback(async () => {
     const { data, error: loadErr } = await supabase
       .from('videos')
-      .select('id, original_name, status, error, created_at')
+      .select('id, original_name, status, error, created_at, uploaded_by')
       .eq('project_id', projectId)
       .order('created_at', { ascending: false })
     if (loadErr) {
@@ -200,8 +200,9 @@ export default function VideosSection({ projectId }) {
                   View scenes and descriptions
                 </Link>
               )}
-              {/* Fix 2 — stuck-uploading rows (no in-flight upload) also get Retry */}
-              {(v.status === 'failed' || (v.status === 'uploading' && progress === null)) && (
+              {/* Fix 2 — stuck-uploading rows (no in-flight upload) also get Retry;
+                  Task 11 — gated to the uploader for uploading status */}
+              {(v.status === 'failed' || (v.status === 'uploading' && progress === null && v.uploaded_by === user.id)) && (
                 <button
                   onClick={() => handleRetry(v)}
                   aria-label={`Retry processing ${v.original_name}`}

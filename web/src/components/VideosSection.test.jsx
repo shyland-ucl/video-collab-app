@@ -111,15 +111,30 @@ describe('VideosSection', () => {
     expect(mockServerPost).toHaveBeenCalledWith('/api/videos/v9/process')
   })
 
-  // Fix 2: stuck-uploading row gets a Retry button
+  // Fix 2: stuck-uploading row gets a Retry button (uploader-gated — Task 11)
   it('offers retry for a stuck uploading row when no upload is in flight', async () => {
     mockOrder.mockResolvedValue({
-      data: [{ id: 'v7', original_name: 'stuck.mp4', status: 'uploading', error: null, created_at: '2026-06-12' }],
+      data: [{ id: 'v7', original_name: 'stuck.mp4', status: 'uploading', uploaded_by: 'u1', error: null, created_at: '2026-06-12' }],
       error: null,
     })
     renderSection()
     await userEvent.click(await screen.findByRole('button', { name: /retry processing stuck\.mp4/i }))
     expect(mockServerPost).toHaveBeenCalledWith('/api/videos/v7/process')
+  })
+
+  // Task 11: retry on stuck-uploading is gated to the uploader; failed rows are always retryable
+  it('hides retry for a stuck-uploading row belonging to another user, but shows it for their failed row', async () => {
+    mockOrder.mockResolvedValue({
+      data: [
+        { id: 'v8', original_name: 'other-stuck.mp4', status: 'uploading', uploaded_by: 'other', error: null, created_at: '2026-06-12' },
+        { id: 'v9', original_name: 'other-failed.mp4', status: 'failed', uploaded_by: 'other', error: null, created_at: '2026-06-12' },
+      ],
+      error: null,
+    })
+    renderSection()
+    await screen.findByText('other-stuck.mp4')
+    expect(screen.queryByRole('button', { name: /retry processing other-stuck\.mp4/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /retry processing other-failed\.mp4/i })).toBeInTheDocument()
   })
 
   // Fix 5: processing-start failure announced separately from upload failure
