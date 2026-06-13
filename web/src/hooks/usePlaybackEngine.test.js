@@ -1,5 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { computeClipLayout } from './usePlaybackEngine.js'
+import { renderHook } from '@testing-library/react'
+import usePlaybackEngine, { computeClipLayout } from './usePlaybackEngine.js'
+
+// A minimal stand-in for an <video> element: the engine only touches
+// muted/volume/currentTime/paused/play/pause + the seeked event listeners.
+function fakeVideo() {
+  return {
+    muted: false,
+    volume: 1,
+    currentTime: 0,
+    paused: true,
+    play: () => Promise.resolve(),
+    pause() { this.paused = true },
+    addEventListener() {},
+    removeEventListener() {},
+  }
+}
 
 // computeClipLayout(clips) — pure EDL layout helper extracted from usePlaybackEngine.
 // Each entry: { clip, effectiveStart, effectiveEnd, duration, edlOffset }
@@ -74,5 +90,54 @@ describe('computeClipLayout (characterization)', () => {
     expect(layout[2].effectiveStart).toBe(0)
     expect(layout[2].effectiveEnd).toBe(3)
     expect(layout[2].duration).toBe(3)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Per-clip mute + volume render — the active source's <video> element gets
+// muted/volume from the active clip (Fix 1). One place, honoured on BOTH
+// devices since both drive playback through this engine.
+// ---------------------------------------------------------------------------
+describe('usePlaybackEngine — mute + volume on the active element', () => {
+  function setup(clips) {
+    const el = fakeVideo()
+    const videoRefs = { v1: { current: el } }
+    renderHook(() => usePlaybackEngine(null, clips, [], true, videoRefs))
+    return el
+  }
+
+  it('mutes the active source video when the active clip is muted', () => {
+    const el = setup([
+      { id: 's1', sourceId: 'v1', name: 's1', startTime: 0, endTime: 10, trimStart: 0, trimEnd: 0, muted: true },
+    ])
+    expect(el.muted).toBe(true)
+  })
+
+  it('leaves the active video unmuted when the active clip is not muted', () => {
+    const el = setup([
+      { id: 's1', sourceId: 'v1', name: 's1', startTime: 0, endTime: 10, trimStart: 0, trimEnd: 0, muted: false },
+    ])
+    expect(el.muted).toBe(false)
+  })
+
+  it('maps clip.volume (0-200 percent) onto element.volume (0-1)', () => {
+    const el = setup([
+      { id: 's1', sourceId: 'v1', name: 's1', startTime: 0, endTime: 10, trimStart: 0, trimEnd: 0, volume: 40 },
+    ])
+    expect(el.volume).toBe(0.4)
+  })
+
+  it('clamps volume above 100% to a max element volume of 1', () => {
+    const el = setup([
+      { id: 's1', sourceId: 'v1', name: 's1', startTime: 0, endTime: 10, trimStart: 0, trimEnd: 0, volume: 200 },
+    ])
+    expect(el.volume).toBe(1)
+  })
+
+  it('defaults to full volume (1) when the clip carries no volume', () => {
+    const el = setup([
+      { id: 's1', sourceId: 'v1', name: 's1', startTime: 0, endTime: 10, trimStart: 0, trimEnd: 0 },
+    ])
+    expect(el.volume).toBe(1)
   })
 })

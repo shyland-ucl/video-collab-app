@@ -368,6 +368,24 @@ function findVolumeChange(prevClips, nextClips) {
   return null;
 }
 
+// Mute toggle on the original scene audio (clip.muted boolean). Distinct from
+// volume: a mute-only diff changes no other clip field, so without this the
+// diff used to fall through to an empty summary → no announce to the creator.
+function findMuteChange(prevClips, nextClips) {
+  if (prevClips.length !== nextClips.length) return null;
+  for (let i = 0; i < prevClips.length; i += 1) {
+    const prev = prevClips[i];
+    const next = nextClips[i];
+    if (!next || prev.id !== next.id) continue;
+    const prevMuted = !!prev.muted;
+    const nextMuted = !!next.muted;
+    if (prevMuted !== nextMuted) {
+      return { index: i, muted: nextMuted };
+    }
+  }
+  return null;
+}
+
 // The colour map is keyed on rootSegmentId (the helper grades via
 // applyAndSave → state.colour[rootSegmentId(sceneId)]). Compare the prev/next
 // maps to find the first scene whose grade changed and, where unambiguous,
@@ -558,7 +576,18 @@ export function summarizeEditStateChange(prevState, nextState, actorLabel = 'Col
   } else {
     const soundChange = findSoundChange(prevClips, nextClips);
     const volumeChange = soundChange ? null : findVolumeChange(prevClips, nextClips);
-    if (soundChange) {
+    const muteChange = soundChange || volumeChange ? null : findMuteChange(prevClips, nextClips);
+    if (muteChange) {
+      // Reuse describeEditOp's mute/unmute mapping for the verb, anchored to the
+      // scene so the creator hears e.g. "Helper muted scene 2" / "unmuted".
+      // (A volume change to 0 is handled by the volume branch above; this fires
+      // only for the boolean muted toggle, which carries no volume diff.)
+      const label = sceneLabel(muteChange.index);
+      actionText = muteChange.muted ? `muted ${label}` : `unmuted ${label}`;
+      promptText = muteChange.muted
+        ? 'Play the scene to confirm the original audio is silenced.'
+        : 'Play the scene to confirm the original audio is back.';
+    } else if (soundChange) {
       const label = sceneLabel(soundChange.index);
       const soundName = soundChange.sound?.name || 'sound';
       if (soundChange.type === 'added') {

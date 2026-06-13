@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { announce } from '../../utils/announcer'
 import {
   splitClip, deleteClip, moveClip, addCaption, getClipForScene,
+  setClipMuted, getClipMuted, setClipVolume, getClipVolume,
 } from '../../lib/editor/sceneEditOps'
 import { summarizeVisualAdjustment } from '../../lib/editor/projectOverview'
 import { rootSegmentId } from '../../lib/editor/stateStore'
@@ -28,13 +29,16 @@ import { rootSegmentId } from '../../lib/editor/stateStore'
 // caption editor, the visual-adjustment slider set + ranges, and all aria.
 // REQUIRED: every clip element carries data-testid="timeline-clip".
 
-const COLOUR_SLIDERS = [
+// Exported so the slider set (incl. the restored rotate control) is unit-testable
+// without mounting the full timeline.
+export const COLOUR_SLIDERS = [
   { id: 'brightness', label: 'Brightness', min: -100, max: 100, step: 5, suffix: '' },
   { id: 'contrast', label: 'Contrast', min: -100, max: 100, step: 5, suffix: '' },
   { id: 'saturation', label: 'Saturation', min: -100, max: 100, step: 5, suffix: '' },
   { id: 'zoom', label: 'Zoom', min: 100, max: 250, step: 10, suffix: '%' },
+  { id: 'rotate', label: 'Rotate', min: -180, max: 180, step: 15, suffix: '°' },
 ]
-const COLOUR_DEFAULTS = { brightness: 0, contrast: 0, saturation: 0, zoom: 100 }
+const COLOUR_DEFAULTS = { brightness: 0, contrast: 0, saturation: 0, zoom: 100, rotate: 0 }
 const TRIM_STEP = 0.5
 
 function effectiveDuration(clip) {
@@ -77,6 +81,7 @@ export default function EditorTimeline({
   const [selectedClipIndex, setSelectedClipIndex] = useState(null)
   const [showCaptionEditor, setShowCaptionEditor] = useState(false)
   const [showVisualPanel, setShowVisualPanel] = useState(false)
+  const [showSoundPanel, setShowSoundPanel] = useState(false)
   const [captionText, setCaptionText] = useState('')
   const timelineRef = useRef(null)
   const toolbarRef = useRef(null)
@@ -200,6 +205,44 @@ export default function EditorTimeline({
     )
   }, [activeToolClip, applyAndSave])
 
+  // ---- Sound: mute toggle + scene-volume commit (probe Sound panel) ----
+  // Target scene = the colour/visual target (selection, else playhead clip).
+  // Mute is a synchronous toggle; volume commits on slider release / change-end
+  // (mirroring the colour sliders) so a drag doesn't spam saves.
+  const soundSceneId = activeToolClip ? activeToolClip.id : null
+  const isMuted = getClipMuted({ clips }, soundSceneId)
+  const soundSceneNumber = useMemo(() => {
+    if (!activeToolClip) return null
+    const idx = clips.findIndex((c) => c.id === activeToolClip.id)
+    return idx >= 0 ? idx + 1 : null
+  }, [clips, activeToolClip])
+  const committedVolume = getClipVolume({ clips }, soundSceneId)
+  const [pendingVolume, setPendingVolume] = useState(null)
+  const shownVolume = pendingVolume != null ? pendingVolume : committedVolume
+
+  const toggleMute = useCallback(() => {
+    if (!activeToolClip) return
+    const id = activeToolClip.id
+    const next = !getClipMuted({ clips }, id)
+    const label = soundSceneNumber ?? '?'
+    applyAndSave(
+      (s) => setClipMuted(s, id, next),
+      next ? `Helper muted scene ${label}` : `Helper unmuted scene ${label}`,
+    )
+  }, [activeToolClip, clips, soundSceneNumber, applyAndSave])
+
+  const commitVolume = useCallback((value) => {
+    if (!activeToolClip) return
+    const id = activeToolClip.id
+    const numVal = Math.max(0, Math.min(200, Number(value)))
+    setPendingVolume(null)
+    const label = soundSceneNumber ?? '?'
+    const announceText = numVal === 0
+      ? `Helper muted scene ${label}`
+      : `Helper set scene ${label} volume to ${numVal}%`
+    applyAndSave((s) => setClipVolume(s, id, numVal), announceText)
+  }, [activeToolClip, soundSceneNumber, applyAndSave])
+
   // ---- Keyboard ----
   const handleTimelineKeyDown = (e) => {
     if (e.key === 'ArrowRight') {
@@ -280,6 +323,18 @@ export default function EditorTimeline({
           aria-pressed={showVisualPanel}
         >
           Visual
+        </button>
+        <div className="border-l border-white/30 h-6 mx-1" aria-hidden="true" />
+        <button
+          onClick={() => setShowSoundPanel((v) => !v)}
+          className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors focus:outline-2 focus:outline-offset-1 focus:outline-white ${
+            showSoundPanel ? 'bg-[#a855f7] text-white' : 'bg-white/20 text-white border border-white/30 hover:bg-white/30'
+          }`}
+          style={{ minHeight: '44px', minWidth: '44px' }}
+          aria-label={showSoundPanel ? 'Hide sound panel' : 'Show sound panel'}
+          aria-pressed={showSoundPanel}
+        >
+          Sound
         </button>
       </div>
 
@@ -489,6 +544,70 @@ export default function EditorTimeline({
             </div>
           ) : (
             <p className="text-white/50 text-xs">Select a clip on the timeline (or play one) to adjust.</p>
+          )}
+        </div>
+      )}
+
+      {/* Sound — mute the original scene audio + per-scene volume. Volume
+          PERSISTS on commit (slider release / change-end), like the colour
+          sliders. The SOUND_LIBRARY "attach sound" feature is intentionally
+          NOT here (it needs a real audio-asset pipeline). */}
+      {showSoundPanel && (
+        <div className="mx-2 mb-3 p-3 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-white text-sm font-semibold">Sound</h3>
+            <span className="text-[10px] font-bold uppercase tracking-wide text-amber-300">Preview only until export</span>
+          </div>
+          {activeToolClip ? (
+            <div className="space-y-3">
+              <p className="text-white/70 text-xs">
+                Target: Scene {soundSceneNumber}
+                {isMuted && (
+                  <span className="ml-2 inline-block px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200">
+                    original muted
+                  </span>
+                )}
+              </p>
+              <button
+                type="button"
+                onClick={toggleMute}
+                aria-pressed={isMuted}
+                aria-label={
+                  isMuted
+                    ? `Unmute the original audio for scene ${soundSceneNumber}`
+                    : `Mute the original audio for scene ${soundSceneNumber}`
+                }
+                className={`w-full py-2 text-sm font-bold rounded border transition-colors focus:outline-2 focus:outline-offset-1 focus:outline-white ${
+                  isMuted
+                    ? 'bg-amber-600 text-white border-amber-700'
+                    : 'bg-white/20 text-white border-white/30 hover:bg-white/30'
+                }`}
+                style={{ minHeight: '44px' }}
+              >
+                {isMuted ? 'Unmute original audio' : 'Mute original audio'}
+              </button>
+              <div>
+                <label className="flex items-center justify-between text-sm mb-1 text-white/85">
+                  <span>Scene volume</span>
+                  <span className="text-xs text-white/50">{shownVolume}%</span>
+                </label>
+                <input
+                  type="range"
+                  min={0}
+                  max={200}
+                  step={10}
+                  value={shownVolume}
+                  onChange={(e) => setPendingVolume(Number(e.target.value))}
+                  onPointerUp={(e) => commitVolume(e.target.value)}
+                  onKeyUp={(e) => { if (e.key.startsWith('Arrow')) commitVolume(e.target.value) }}
+                  className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-purple-500 bg-white/20"
+                  aria-label={`Scene ${soundSceneNumber} volume: ${shownVolume} percent`}
+                  style={{ minHeight: '44px' }}
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-white/50 text-xs">Select a clip on the timeline (or play one) to adjust sound.</p>
           )}
         </div>
       )}

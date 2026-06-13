@@ -60,9 +60,10 @@ export function colourValuesToFilter(values) {
 }
 export function colourValuesToTransform(values) {
   if (!values) return undefined
-  const { zoom = 100 } = values
-  if (zoom === 100) return undefined
-  return `scale(${(zoom / 100).toFixed(3)})`
+  const { zoom = 100, rotate = 0 } = values
+  if (zoom === 100 && rotate === 0) return undefined
+  const scale = `scale(${(zoom / 100).toFixed(3)})`
+  return rotate === 0 ? scale : `${scale} rotate(${rotate}deg)`
 }
 
 export default function HelperDevice({

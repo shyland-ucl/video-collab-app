@@ -3,7 +3,7 @@ import { announce } from '../../utils/announcer'
 import ttsService from '../../services/ttsService'
 import { useAccessibility } from '../../contexts/AccessibilityContext'
 import { serverPost } from '../../lib/serverApi'
-import { applyOperation } from '../../lib/editor/sceneEditOps'
+import { applyOperation, getClipMuted } from '../../lib/editor/sceneEditOps'
 import { rootSegmentId } from '../../lib/editor/stateStore'
 import DetailLevelSelector from './sceneblocks/DetailLevelSelector'
 import VoiceComposer from './VoiceComposer'
@@ -244,6 +244,23 @@ export default function SceneActions({
     setCaptionText('')
     setShowCaptionInput(false)
   }, [captionText, clip, index, runEdit])
+
+  // Mute / unmute the ORIGINAL scene audio (probe EditByMyselfPanel mute
+  // control). applyOperation('toggle_mute') flips clip.muted; the engine reads
+  // it on the active clip so the change is audible on both devices. The
+  // post-save announceText drives the helper's cross-device summary; the
+  // immediate scene-numbered announce is the creator's own confirmation.
+  const isMuted = clip ? getClipMuted({ clips: aiClips }, clip.id) : false
+  const handleToggleMute = useCallback(() => {
+    if (!clip) return
+    const next = !getClipMuted({ clips: aiClips }, clip.id)
+    runEdit('toggle_mute', {}, next ? `Muted ${clip.name}` : `Unmuted ${clip.name}`)
+    announce(
+      next
+        ? `Original audio muted on scene ${index + 1}.`
+        : `Original audio unmuted on scene ${index + 1}.`
+    )
+  }, [clip, aiClips, index, runEdit])
 
   // Undo/redo: state-REPLACING opFns, non-rebasable (probe contract). Undo
   // replaces the timeline with the edit's captured pre-image; redo re-applies
@@ -537,6 +554,25 @@ export default function SceneActions({
                 </button>
               </div>
             )}
+            {/* Mute / unmute the ORIGINAL scene audio (probe Day 1 D4). */}
+            <button
+              type="button"
+              onClick={handleToggleMute}
+              aria-pressed={isMuted}
+              aria-label={
+                isMuted
+                  ? `Unmute the original audio for scene ${index + 1}`
+                  : `Mute the original audio for scene ${index + 1}`
+              }
+              className={`w-full py-3 rounded-lg text-sm font-bold border focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-1 ${
+                isMuted
+                  ? 'bg-amber-600 text-white border-amber-700 hover:bg-amber-700'
+                  : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50'
+              }`}
+              style={{ minHeight: '48px' }}
+            >
+              {isMuted ? 'Unmute original audio' : 'Mute original audio'}
+            </button>
           </div>
         )}
       </div>

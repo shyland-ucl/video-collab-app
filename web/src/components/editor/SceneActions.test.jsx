@@ -207,6 +207,35 @@ describe('SceneActions — edit by myself', () => {
     expect(mockAnnounce).toHaveBeenCalledWith('Caption added to scene 1.')
   })
 
+  it('Mute toggle calls applyAndSave with a toggle_mute opFn that sets clip.muted true', async () => {
+    const { props } = renderActions()
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(screen.getByRole('button', { name: /mute the original audio for scene 1/i }))
+
+    expect(props.applyAndSave).toHaveBeenCalledTimes(1)
+    const [opFn, announceText] = props.applyAndSave.mock.calls[0]
+    // Run the captured opFn against the fixture state: s1 gains muted: true.
+    const next = opFn(STATE)
+    expect(next.clips.find((c) => c.id === 's1').muted).toBe(true)
+    expect(next.clips.find((c) => c.id === 's2').muted).toBeFalsy()
+    // Input is never mutated (pure op).
+    expect(STATE.clips.find((c) => c.id === 's1').muted).toBeFalsy()
+    expect(announceText).toMatch(/muted Scene 1/i)
+  })
+
+  it('Mute toggle immediately announces the scene-numbered confirmation', async () => {
+    renderActions({ index: 1 })
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(screen.getByRole('button', { name: /mute the original audio for scene 2/i }))
+    expect(mockAnnounce).toHaveBeenCalledWith('Original audio muted on scene 2.')
+  })
+
+  it('the mute button reads "Unmute original audio" when the clip is already muted', async () => {
+    renderActions({ clip: { ...CLIP, muted: true } })
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+    expect(screen.getByRole('button', { name: /unmute the original audio for scene 1/i })).toBeInTheDocument()
+  })
+
   it('Undo applies a non-rebasable state-replacing op', async () => {
     const { props } = renderActions()
     await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))

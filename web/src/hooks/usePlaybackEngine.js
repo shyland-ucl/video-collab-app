@@ -251,6 +251,29 @@ export default function usePlaybackEngine(videoRef, clips, captions, isEngineAct
     }
   }, [isEngineActive, clipsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---------------------------------------------------------------------------
+  // Per-clip mute + volume render (probe VideoPlayer effect, lines ~138-152).
+  //
+  // The active clip carries `muted` (boolean) and may carry `volume` (0-200,
+  // percent; default 100 = unchanged). Map them onto the ACTIVE source's <video>
+  // element so a muted/volume-adjusted clip is actually inaudible/quieter. This
+  // is the single place both devices share — CreatorDevice (pinned video) and
+  // HelperDevice (EditorVideoPlayer preview) both drive playback through this
+  // engine over the same videoRefs, so honouring it here makes the edit audible
+  // on BOTH without either device re-deriving it. Re-runs whenever the active
+  // clip index, the clips content, or the active source changes.
+  useEffect(() => {
+    if (!isEngineActive) return;
+    const currentClips = clipsRef.current;
+    const activeClip = currentClips?.[currentClipIndex] || null;
+    if (!activeClip) return;
+    const el = getActiveVideo();
+    if (!el) return;
+    el.muted = !!activeClip.muted;
+    const pct = typeof activeClip.volume === 'number' ? activeClip.volume : 100;
+    el.volume = Math.max(0, Math.min(1, pct / 100));
+  }, [isEngineActive, currentClipIndex, clipsKey, activeSourceId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Play through the engine
   const play = useCallback(() => {
     const layout = computeClipLayout(clipsRef.current);

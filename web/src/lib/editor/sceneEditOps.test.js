@@ -62,6 +62,7 @@ import { describe, it, expect } from 'vitest'
 import {
   splitClip, moveClip, deleteClip, addCaption,
   trimClipStart, trimClipEnd, applyOperation, getClipForScene,
+  setClipVolume, getClipVolume,
 } from './sceneEditOps.js'
 
 function makeState() {
@@ -321,6 +322,36 @@ describe('sceneEditOps (characterization of the probe port)', () => {
   it('applyOperation "mute_audio" sets clip.muted === true', () => {
     const next = applyOperation(makeState(), 's1', 'mute_audio')
     expect(getClipForScene(next, 's1').muted).toBe(true)
+  })
+
+  // ------------------------------------------------------------------ volume
+  it('setClipVolume sets clip.volume and clamps to 0..200', () => {
+    const next = setClipVolume(makeState(), 's1', 40)
+    expect(getClipForScene(next, 's1').volume).toBe(40)
+    expect(setClipVolume(makeState(), 's1', 999).clips[0].volume).toBe(200)
+    expect(setClipVolume(makeState(), 's1', -10).clips[0].volume).toBe(0)
+  })
+
+  it('setClipVolume does not mutate the input and leaves other clips untouched', () => {
+    const state = makeState()
+    const next = setClipVolume(state, 's1', 70)
+    expect(state.clips[0].volume).toBeUndefined()
+    expect(getClipForScene(next, 's2').volume).toBeUndefined()
+  })
+
+  it('setClipVolume propagates to split halves of the same scene', () => {
+    const state = makeState()
+    state.clips.push({ ...state.clips[0], id: 's1-split-123-a' })
+    const next = setClipVolume(state, 's1', 150)
+    expect(next.clips.find((c) => c.id === 's1').volume).toBe(150)
+    expect(next.clips.find((c) => c.id === 's1-split-123-a').volume).toBe(150)
+  })
+
+  it('getClipVolume defaults to 100 when no volume is set, and reads split halves', () => {
+    expect(getClipVolume(makeState(), 's1')).toBe(100)
+    const state = makeState()
+    state.clips[0].volume = 30
+    expect(getClipVolume(state, 's1')).toBe(30)
   })
 
   it('getClipForScene returns null for an unknown scene id', () => {

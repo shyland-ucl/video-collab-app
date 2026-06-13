@@ -227,6 +227,29 @@ export function getClipMuted(editState, sceneId) {
 }
 
 /**
+ * Set the per-scene playback volume (0–200, percent; 100 = unchanged). Like
+ * setClipMuted, propagates to every clip derived from a split so the timeline
+ * stays consistent. The playback engine reads clip.volume on the active clip.
+ */
+export function setClipVolume(editState, sceneId, volume) {
+  const numVal = Math.max(0, Math.min(200, Number(volume)));
+  const clips = (editState.clips || []).map((c) => {
+    const matches = c.id === sceneId
+      || (typeof c.id === 'string' && c.id.startsWith(`${sceneId}-split-`));
+    return matches ? { ...c, volume: numVal } : c;
+  });
+  return { ...editState, clips };
+}
+
+export function getClipVolume(editState, sceneId) {
+  const clip = (editState?.clips || []).find(
+    (c) => c.id === sceneId
+      || (typeof c.id === 'string' && c.id.startsWith(`${sceneId}-split-`))
+  );
+  return typeof clip?.volume === 'number' ? clip.volume : 100;
+}
+
+/**
  * Single dispatcher for both AI-accept and self-edit paths. Maps a free-form
  * operation key (from `ai_edits_prepared` keys, Gemini drafts, or self-edit
  * buttons) to the matching scene-edit op. Returns a new editState; never

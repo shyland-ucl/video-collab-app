@@ -28,8 +28,8 @@ vi.mock('../../hooks/usePlaybackEngine', async (importOriginal) => ({
   default: () => engineMock,
 }))
 
-import HelperDevice from './HelperDevice'
-import { makeTrimOp } from './EditorTimeline'
+import HelperDevice, { colourValuesToTransform } from './HelperDevice'
+import { makeTrimOp, COLOUR_SLIDERS } from './EditorTimeline'
 
 const STATE = {
   clips: [
@@ -234,6 +234,60 @@ describe('HelperDevice — colour (persistent)', () => {
   })
 })
 
+describe('HelperDevice — Sound panel (mute + volume)', () => {
+  it('the Sound toolbar button opens a panel with a mute toggle and a scene-volume slider', async () => {
+    renderDevice()
+    await userEvent.click(screen.getByRole('button', { name: /show sound panel/i }))
+    // Defaults: active tool clip is s1 (playhead at 0), not muted.
+    expect(screen.getByRole('button', { name: /mute the original audio for scene 1/i })).toBeInTheDocument()
+    expect(screen.getByRole('slider', { name: /scene 1 volume/i })).toBeInTheDocument()
+  })
+
+  it('the mute toggle calls applyAndSave with a setClipMuted opFn that flips clip.muted', async () => {
+    const { props } = renderDevice()
+    await userEvent.click(screen.getByRole('button', { name: /show sound panel/i }))
+    await userEvent.click(screen.getByRole('button', { name: /mute the original audio for scene 1/i }))
+
+    expect(props.applyAndSave).toHaveBeenCalledTimes(1)
+    const [opFn, announceText] = props.applyAndSave.mock.calls[0]
+    const next = opFn(STATE)
+    // s1 is the active tool clip under the playhead → its muted flag flips true.
+    expect(next.clips.find((c) => c.id === 's1').muted).toBe(true)
+    // Other clips untouched; input never mutated.
+    expect(next.clips.find((c) => c.id === 's2').muted).toBeFalsy()
+    expect(STATE.clips.find((c) => c.id === 's1').muted).toBeFalsy()
+    expect(announceText).toMatch(/muted scene 1/i)
+  })
+
+  it('committing the volume slider calls applyAndSave setting clip.volume on the active scene', async () => {
+    const { props } = renderDevice()
+    await userEvent.click(screen.getByRole('button', { name: /show sound panel/i }))
+    const slider = screen.getByRole('slider', { name: /scene 1 volume/i })
+
+    fireEvent.change(slider, { target: { value: '40' } })
+    fireEvent.pointerUp(slider)
+
+    expect(props.applyAndSave).toHaveBeenCalled()
+    const [opFn, announceText] = props.applyAndSave.mock.calls[0]
+    const next = opFn(STATE)
+    expect(next.clips.find((c) => c.id === 's1').volume).toBe(40)
+    expect(announceText).toMatch(/scene 1 volume to 40%/i)
+  })
+
+  it('a volume commit of 0 announces a mute (probe wording)', async () => {
+    const { props } = renderDevice()
+    await userEvent.click(screen.getByRole('button', { name: /show sound panel/i }))
+    const slider = screen.getByRole('slider', { name: /scene 1 volume/i })
+
+    fireEvent.change(slider, { target: { value: '0' } })
+    fireEvent.pointerUp(slider)
+
+    const [opFn, announceText] = props.applyAndSave.mock.calls[0]
+    expect(opFn(STATE).clips.find((c) => c.id === 's1').volume).toBe(0)
+    expect(announceText).toMatch(/muted scene 1/i)
+  })
+})
+
 describe('EditorTimeline — trim opFn (makeTrimOp factory)', () => {
   // The trim opFn is keyboard/pointer-driven on slider handles inside the
   // selected clip (pointer capture is not reliable in jsdom), so the component
@@ -320,5 +374,33 @@ describe('HelperDevice — local scrub', () => {
     expect(props.channel.sendActivity).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'Seeked' })
     )
+  })
+})
+
+describe('colourValuesToTransform — rotate', () => {
+  it('returns undefined when zoom and rotate are both neutral', () => {
+    expect(colourValuesToTransform(undefined)).toBeUndefined()
+    expect(colourValuesToTransform({})).toBeUndefined()
+    expect(colourValuesToTransform({ zoom: 100, rotate: 0 })).toBeUndefined()
+  })
+
+  it('appends rotate() when rotate !== 0 (probe editStateView mapping)', () => {
+    expect(colourValuesToTransform({ zoom: 100, rotate: 90 })).toBe('scale(1.000) rotate(90deg)')
+    expect(colourValuesToTransform({ rotate: -45 })).toBe('scale(1.000) rotate(-45deg)')
+  })
+
+  it('combines zoom scale with rotate', () => {
+    expect(colourValuesToTransform({ zoom: 150, rotate: 15 })).toBe('scale(1.500) rotate(15deg)')
+  })
+
+  it('keeps zoom-only output unchanged (no rotate term) when rotate is 0', () => {
+    expect(colourValuesToTransform({ zoom: 200, rotate: 0 })).toBe('scale(2.000)')
+  })
+})
+
+describe('EditorTimeline — COLOUR_SLIDERS includes rotate', () => {
+  it('exposes a rotate slider spanning -180..180 step 15', () => {
+    const rotate = COLOUR_SLIDERS.find((s) => s.id === 'rotate')
+    expect(rotate).toMatchObject({ id: 'rotate', min: -180, max: 180, step: 15, suffix: '°' })
   })
 })

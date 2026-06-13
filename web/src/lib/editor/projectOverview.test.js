@@ -223,6 +223,40 @@ describe('summarizeEditStateChange', () => {
     expect(summary.actionText).toBe('')
     expect(summary.announcement).toBe('')
   })
+
+  // ---- Mute toggle announcement (helper/creator mute → other device) ----
+  // A mute-ONLY diff changes no clip count / order / trim / caption, so before
+  // the mute branch it fell through to an empty summary and the creator heard
+  // nothing. The branch must yield a non-empty, scene-anchored announcement.
+  it('announces a mute-only diff as "muted scene N"', () => {
+    const prev = { clips: [clip1, clip2], captions: [], textOverlays: [] }
+    const next = {
+      clips: [clip1, { ...clip2, muted: true }], captions: [], textOverlays: [],
+    }
+    const summary = summarizeEditStateChange(prev, next, 'Helper')
+    expect(summary.actionText).toBe('muted scene 2')
+    expect(summary.shortText).toBe('Helper muted scene 2')
+    expect(summary.announcement).toMatch(/^Helper muted scene 2\./)
+    expect(summary.announcement).toBeTruthy()
+  })
+
+  it('announces an unmute-only diff as "unmuted scene N"', () => {
+    const prev = { clips: [{ ...clip1, muted: true }, clip2], captions: [], textOverlays: [] }
+    const next = { clips: [clip1, clip2], captions: [], textOverlays: [] }
+    const summary = summarizeEditStateChange(prev, next, 'Helper')
+    expect(summary.actionText).toBe('unmuted scene 1')
+    expect(summary.shortText).toBe('Helper unmuted scene 1')
+    expect(summary.announcement).toMatch(/^Helper unmuted scene 1\./)
+  })
+
+  it('stays empty when the muted flag is unchanged (no spurious announcement)', () => {
+    const state = {
+      clips: [{ ...clip1, muted: true }, clip2], captions: [], textOverlays: [],
+    }
+    const summary = summarizeEditStateChange(state, state, 'Helper')
+    expect(summary.actionText).toBe('')
+    expect(summary.announcement).toBe('')
+  })
 })
 
 // ---------------------------------------------------------------------------
