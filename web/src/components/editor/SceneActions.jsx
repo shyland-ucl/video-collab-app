@@ -369,9 +369,12 @@ export default function SceneActions({
               submitLabel="Ask"
               inputAriaLabel="Your question"
             />
-            {vqaPending && <p className="text-sm text-gray-700 italic" role="status">Getting the answer...</p>}
+            {vqaPending && <p className="text-sm text-gray-700 italic" aria-live="polite">Getting the answer...</p>}
             {vqaAnswer && (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg" role="status" aria-live="polite">
+              // Visual only — the answer is spoken once via announce(answer)
+              // (handleVqaSubmit). A second role="status"/aria-live region here
+              // made VoiceOver read the answer twice and append "status".
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                 <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1">Answer</p>
                 <p className="text-sm text-gray-800">{vqaAnswer}</p>
               </div>
@@ -519,9 +522,11 @@ export default function SceneActions({
               submitLabel="Ask AI"
               inputAriaLabel="Task description"
             />
-            {aiEditPending && <p className="text-sm text-gray-700 italic" role="status">AI is working...</p>}
+            {aiEditPending && <p className="text-sm text-gray-700 italic" aria-live="polite">AI is working...</p>}
             {aiEditNote && (
-              <div className="p-3 border-2 rounded-lg bg-yellow-50 border-yellow-300" role="status" aria-live="polite">
+              // Visual only — the note is spoken once via announce() in
+              // handleAiEditSubmit; a second live region read it twice + "status".
+              <div className="p-3 border-2 rounded-lg bg-yellow-50 border-yellow-300">
                 <p className="text-sm text-yellow-800">{aiEditNote}</p>
               </div>
             )}

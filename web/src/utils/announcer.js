@@ -13,9 +13,9 @@
  * implementation the user heard only the second; with the queue both
  * announcements are read.
  *
- * The element itself sets `role="status" aria-live="polite"
- * aria-atomic="true"` in App.jsx; this module only manages the text
- * content.
+ * The elements set `aria-live` + `aria-atomic="true"` in App.jsx (NO explicit
+ * role="status"/"alert" — that makes VoiceOver speak the role name after every
+ * message). This module only manages the text content.
  */
 
 const QUEUE_GAP_MS = 150;

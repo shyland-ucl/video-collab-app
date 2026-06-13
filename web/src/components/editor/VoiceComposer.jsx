@@ -90,15 +90,13 @@ export default function VoiceComposer({
         type="button"
         ref={voiceButtonRef}
         onClick={handleVoiceClick}
-        aria-label={
-          isPreparing
-            ? 'Preparing microphone, please wait'
-            : isListening
-              ? 'Listening, speak now or tap to stop'
-              : 'Voice input — speak your message'
-        }
+        // Short, stable accessible name. State is conveyed concisely by
+        // aria-pressed (the screen reader says "pressed"/"not pressed"); the
+        // spoken "Speak now…" comes once from the live region on mic-open, so
+        // the button must NOT also narrate a "listening, speak now…" sentence
+        // (that double-spoke and echoed "speak now").
+        aria-label={isListening || isPreparing ? 'Stop voice input' : 'Voice input'}
         aria-pressed={isListening || isPreparing}
-        aria-busy={isPreparing || undefined}
         aria-disabled={disabled || undefined}
         className={`flex items-center justify-center rounded transition-colors focus:outline-2 focus:outline-offset-2 focus:outline-blue-500 ${
           isListening

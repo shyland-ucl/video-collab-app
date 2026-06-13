@@ -80,26 +80,30 @@ describe('VoiceComposer', () => {
     expect(onSubmit).toHaveBeenCalledWith('a person stirs a pot')
   })
 
-  it('mic aria-label + aria-pressed reflect the idle state', () => {
+  it('mic has a short stable label + aria-pressed in the idle state', () => {
     render(<VoiceComposer onSubmit={vi.fn()} />)
-    const mic = screen.getByRole('button', { name: /voice input — speak your message/i })
+    // Label is concise and does NOT narrate a "speak now" sentence (which
+    // double-spoke with the live region). State is carried by aria-pressed.
+    const mic = screen.getByRole('button', { name: /^voice input$/i })
     expect(mic).toHaveAttribute('aria-pressed', 'false')
+    expect(mic).not.toHaveAttribute('aria-busy')
   })
 
-  it('mic aria-label + aria-pressed reflect the listening state', () => {
+  it('mic flips to a short "stop" label + aria-pressed when listening', () => {
     hookState.isListening = true
     render(<VoiceComposer onSubmit={vi.fn()} />)
-    const mic = screen.getByRole('button', { name: /listening, speak now or tap to stop/i })
+    const mic = screen.getByRole('button', { name: /^stop voice input$/i })
     expect(mic).toHaveAttribute('aria-pressed', 'true')
     expect(mic.className).toMatch(/animate-pulse/)
   })
 
-  it('mic shows the preparing state', () => {
+  it('mic shows the preparing state without an aria-busy chatter trigger', () => {
     hookState.isPreparing = true
     render(<VoiceComposer onSubmit={vi.fn()} />)
-    const mic = screen.getByRole('button', { name: /preparing microphone/i })
+    const mic = screen.getByRole('button', { name: /^stop voice input$/i })
     expect(mic).toHaveAttribute('aria-pressed', 'true')
-    expect(mic).toHaveAttribute('aria-busy', 'true')
+    // aria-busy removed — it caused extra screen-reader announcements.
+    expect(mic).not.toHaveAttribute('aria-busy')
   })
 
   it('disabled gates submit + does not call onSubmit', async () => {

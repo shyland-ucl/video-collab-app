@@ -27,8 +27,12 @@ export default function App() {
         <Route path="/projects/:projectId/videos/:videoId" element={<RequireAuth><VideoPage /></RequireAuth>} />
         <Route path="/projects/:projectId/edit" element={<RequireAuth><EditorPage /></RequireAuth>} />
       </Routes>
-      <div id="sr-announcer" role="status" aria-live="polite" aria-atomic="true" className="sr-only" />
-      <div id="sr-announcer-assertive" role="alert" aria-live="assertive" aria-atomic="true" className="sr-only" />
+      {/* Live announcers use aria-live ONLY (no role="status"/"alert"): an
+          explicit role makes VoiceOver speak the role name ("status"/"alert")
+          after every message. aria-live drives the announcement identically
+          without that trailing chatter. */}
+      <div id="sr-announcer" aria-live="polite" aria-atomic="true" className="sr-only" />
+      <div id="sr-announcer-assertive" aria-live="assertive" aria-atomic="true" className="sr-only" />
       </AccessibilityProvider>
     </AuthProvider>
   )

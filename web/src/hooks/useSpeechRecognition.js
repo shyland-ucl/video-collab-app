@@ -62,7 +62,11 @@ export default function useSpeechRecognition({
       setIsListening(true);
       gotResultRef.current = false;
       playEarcon(READY_EARCON.freq, READY_EARCON.duration);
-      announce(announcement);
+      // Assertive so it replaces any queued chatter and is the single spoken
+      // cue for "the mic is open" — the earcon is the audible "go", this is
+      // the words. Everything else (preparing/closed) is intentionally silent
+      // to keep the voice flow quiet for screen-reader users.
+      announce(announcement, { assertive: true });
     };
 
     recognition.onresult = (event) => {
@@ -103,7 +107,8 @@ export default function useSpeechRecognition({
       const msg = messages[event.error];
       if (msg) {
         playEarcon(ERROR_EARCON.freq, ERROR_EARCON.duration);
-        announce(msg);
+        announce(msg, { assertive: true });
+        recognition._errored = true; // so onend doesn't double-announce
       }
     };
 
@@ -111,20 +116,22 @@ export default function useSpeechRecognition({
       if (!mountedRef.current) return;
       setIsListening(false);
       setIsPreparing(false);
-      // If the recogniser ended without ever firing onresult (silence timeout,
-      // etc.), nudge them so they're not left wondering whether they were
-      // heard — but stay quiet when the user themselves stopped it.
-      if (!recognition._cancelled && !gotResultRef.current) {
-        announce('Microphone closed.');
+      // Silent on normal close: a captured result, a user-initiated stop, or an
+      // already-announced error all need nothing more. Only speak when the mic
+      // closed on its own with nothing heard and no error — the one case the
+      // user genuinely can't infer (the error earcon already signals failures).
+      if (!recognition._cancelled && !gotResultRef.current && !recognition._errored) {
+        announce('Microphone closed, nothing heard.', { assertive: true });
       }
     };
 
     recognitionRef.current = recognition;
     recognition.start();
-    // Pre-flight state: button shows "preparing" / "Wait..." until onstart
-    // confirms the mic is hot. Brief on most devices, ~300–500ms on Android.
+    // Pre-flight state: button shows "preparing" until onstart confirms the
+    // mic is hot (~300–500ms on Android). Deliberately NOT announced — the
+    // single "Speak now…" on onstart is the only spoken cue, so the flow
+    // isn't a pile-up of "getting ready / speak now / closed".
     setIsPreparing(true);
-    announce('Getting the microphone ready.');
   }, [isListening, isPreparing, lang, onResult, announcement]);
 
   return { isListening, isPreparing, toggleListening };
