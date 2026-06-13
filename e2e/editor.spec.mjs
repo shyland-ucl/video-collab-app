@@ -50,7 +50,10 @@ test('creator runs AI analysis; a suggestion appears, routes, and persists', asy
   }
   // Analysis completed (live Gemini) → the trigger card shows its summary and
   // the suggestions persisted.
-  await expect(creator.getByText(/ai analysis complete/i)).toBeVisible({ timeout: 90_000 })
+  // Scope to the done-card's unique wording ("now showing"); the #sr-announcer
+  // live region also contains "AI analysis complete" ("…ready in your scenes"),
+  // which would otherwise be a strict-mode two-match.
+  await expect(creator.getByText(/ai analysis complete.*now showing/i)).toBeVisible({ timeout: 90_000 })
 
   // A suggested scene's collapsed header gains "Has an AI suggestion" in its
   // accessible name (the ✨ AI pill). Expand it (only if collapsed) to reveal
@@ -71,7 +74,7 @@ test('creator runs AI analysis; a suggestion appears, routes, and persists', asy
 
   // Reload → the suggestion AND its resolution survive (persisted to Supabase).
   await creator.reload()
-  await expect(creator.getByText(/ai analysis complete/i)).toBeVisible({ timeout: 30_000 })
+  await expect(creator.getByText(/ai analysis complete.*now showing/i)).toBeVisible({ timeout: 30_000 })
   const stillSuggested = creator.getByRole('button', { name: /has an ai suggestion/i }).first()
   await expect(stillSuggested).toBeVisible({ timeout: 15_000 })
   if (/tap to open actions/i.test((await stillSuggested.getAttribute('aria-label')) || '')) {
@@ -256,4 +259,29 @@ test('creator and helper collaborate live; state survives refresh', async ({ bro
 
   await creatorCtx.close()
   await helperCtx.close()
+})
+
+// Phase 4 — the creator exports the project to a downloadable video. Rides LIVE
+// ffmpeg on the server (download source + per-clip encode + concat + upload) so
+// the timeout is generous. Runs last; works on whatever clips remain.
+test('creator exports the project to a downloadable video', async ({ browser }) => {
+  const creatorCtx = await browser.newContext()
+  const creator = await creatorCtx.newPage()
+  await signIn(creator, state.creatorEmail, state.password)
+  await creator.goto(`/projects/${state.projectId}/edit`)
+  await expect(sceneHeader(creator, 1)).toBeVisible({ timeout: 30_000 })
+
+  // Trigger the export if it hasn't run (retries reuse the project; a prior
+  // render persists, so the panel may already show a Download link).
+  const exportBtn = creator.getByRole('button', { name: /^export this project as a video$/i })
+  if (await exportBtn.isVisible().catch(() => false)) {
+    await exportBtn.click()
+  }
+  // The render completes (live ffmpeg) → a Download link with a real href.
+  const download = creator.getByRole('link', { name: /download video/i })
+  await expect(download).toBeVisible({ timeout: 120_000 })
+  const href = await download.getAttribute('href')
+  expect(href).toBeTruthy()
+
+  await creatorCtx.close()
 })

@@ -167,10 +167,15 @@ export default async function globalSetup() {
   // 5. Synthesize a ~12s clip (12s @ 5s segments -> 3 scenes).
   const workDir = await fs.mkdtemp(join(os.tmpdir(), 'vca-e2e-'))
   const clipFile = join(workDir, 'testclip.mp4')
+  // Include an audio track (a sine tone) — real inputs are phone videos WITH
+  // audio, and the Phase 4 render normalises every clip to one aac stream
+  // (mute = volume 0), so a silent test source wouldn't exercise that path.
   await execFileAsync(ffmpegPath, [
     '-y',
     '-f', 'lavfi', '-i', 'testsrc=duration=12:size=320x240:rate=30',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=12',
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'fast',
+    '-c:a', 'aac', '-shortest',
     clipFile,
   ], { maxBuffer: 10 * 1024 * 1024 })
   const clipBytes = await fs.readFile(clipFile)
