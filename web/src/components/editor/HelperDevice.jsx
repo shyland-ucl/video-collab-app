@@ -219,6 +219,28 @@ export default function HelperDevice({
 
       {/* Scrollable: activity feed + editor tools */}
       <div className="flex-1 min-h-0 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+        {/* Creator Intent Banner — most recent unfinished task from the feed */}
+        {(() => {
+          const activeTask = [...tasks].reverse().find((t) => !t.status || t.status === 'pending' || t.status === 'sent')
+          if (!activeTask) return null
+          return (
+            <div
+              role="region"
+              aria-label="Creator's current request"
+              className="rounded-xl px-4 py-3 mb-4 border-l-4"
+              style={{ borderColor: '#E67E22', backgroundColor: '#FFF8F1' }}
+            >
+              <p className="text-xs font-bold text-orange-700 uppercase tracking-wider mb-1">Creator's Intent</p>
+              <p className="text-sm text-gray-800 font-medium">{activeTask.text || 'Task from creator'}</p>
+              {activeTask.segment_label && (
+                <div className="flex gap-2 mt-1">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">{activeTask.segment_label}</span>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
         {/* Activity Feed */}
         <div role="region" aria-label="Tasks and activity" className="rounded-2xl overflow-hidden mb-4" style={{ border: '1px solid rgba(230,126,34,0.2)', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <div className="px-4 py-2.5" style={{ background: '#fff8f1', borderBottom: '1px solid #fde8d0' }}>

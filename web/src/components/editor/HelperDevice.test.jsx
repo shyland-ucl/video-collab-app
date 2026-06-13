@@ -96,7 +96,8 @@ describe('HelperDevice — tasks (activity feed)', () => {
       ],
     })
 
-    expect(screen.getByText('Trim the shaky part')).toBeInTheDocument()
+    // The task text now appears in both the Creator Intent Banner and the Activity Feed.
+    expect(screen.getAllByText('Trim the shaky part').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByRole('button', { name: /mark done/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /needs discussion/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /can't do/i })).toBeInTheDocument()
