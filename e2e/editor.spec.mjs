@@ -15,6 +15,18 @@ async function signIn(page, email, password) {
   await expect(page.getByRole('heading', { name: /your projects/i })).toBeVisible()
 }
 
+// Creator-side selectors are honest against the Phase 2a scene-block creator UI
+// (web/src/components/editor/{CreatorDevice,SceneActions}.jsx +
+// sceneblocks/SceneBlock.jsx). The creator is now an inline list of collapsible
+// scene blocks, NOT the old single-scene modal. Each scene's collapsed header
+// button has aria-label "Scene N of M: <name>. ..." (SceneBlock.jsx). Expanding
+// it reveals the per-scene SceneActions: "Edit by Myself" toggles a panel whose
+// "Delete" button keeps the aria-label "Delete this clip from the timeline";
+// "Ask Helper to Edit" toggles a panel with a "Task description" textbox + a
+// "Send to helper" button.
+const sceneHeader = (page, n) =>
+  page.getByRole('button', { name: new RegExp(`^scene ${n} of`, 'i') })
+
 test('creator and helper collaborate live; state survives refresh', async ({ browser }) => {
   const creatorCtx = await browser.newContext()
   const helperCtx = await browser.newContext()
@@ -28,11 +40,10 @@ test('creator and helper collaborate live; state survives refresh', async ({ bro
   await helper.goto(`/projects/${state.projectId}/edit`)
 
   // (a) Both devices load their role UIs.
-  // Creator: ExplorationMode's "Edit Myself" action (aria-label
-  // "Edit this clip yourself") only exists on the creator device.
-  await expect(
-    creator.getByRole('button', { name: /edit this clip yourself/i })
-  ).toBeVisible({ timeout: 30_000 })
+  // Creator: the scene-block list renders one collapsed header per scene. The
+  // first scene's header (aria-label "Scene 1 of N: …") only exists on the
+  // creator device.
+  await expect(sceneHeader(creator, 1)).toBeVisible({ timeout: 30_000 })
   // Helper: HelperDevice renders the "Activity Feed" heading.
   await expect(helper.getByRole('heading', { name: /activity feed/i })).toBeVisible({ timeout: 30_000 })
 
@@ -41,23 +52,49 @@ test('creator and helper collaborate live; state survives refresh', async ({ bro
   const sceneCountBefore = await helper.getByTestId('timeline-clip').count()
   expect(sceneCountBefore).toBeGreaterThan(1)
 
-  // (b) Creator deletes the current scene via Edit Myself -> Delete; the
-  // helper's timeline-clip count drops by 1 within ~15s (realtime propagation).
-  await creator.getByRole('button', { name: /edit this clip yourself/i }).click()
+  // (b) Creator deletes scene 1 via the new inline UI: expand the scene block ->
+  // open "Edit by Myself" -> click "Delete". The helper's timeline-clip count
+  // drops by 1 within ~15s (realtime propagation).
+  await sceneHeader(creator, 1).click()
+  await creator.getByRole('button', { name: /^edit by myself$/i }).click()
   await creator.getByRole('button', { name: /delete this clip from the timeline/i }).click()
   await expect(helper.getByTestId('timeline-clip')).toHaveCount(sceneCountBefore - 1, { timeout: 15_000 })
 
   // (c) Creator sends a task -> helper sees it -> helper marks it done ->
-  // creator sees the status.
-  await creator.getByRole('button', { name: /ask helper to edit this clip/i }).click()
-  await creator.getByLabel(/task description/i).fill('Please trim the shaky part')
-  await creator.getByRole('button', { name: /send task/i }).click()
+  // creator sees the status. Drive the task from scene 1's block. After the
+  // delete, SceneBlockList keeps expandedIndex=0, so the NEW scene 1 (former
+  // scene 2) AUTO-EXPANDS onto its actions — tapping the header again would
+  // COLLAPSE it. So make the expand idempotent off the header's own a11y state:
+  // an expanded header's aria-label ends with "Tap to close actions.", a
+  // collapsed one with "Tap to open actions." Only tap the header when it's
+  // collapsed, then drive the actions. Scope the "Task description" textbox +
+  // send button to the "Ask Helper" group — the "Ask AI to Edit" panel reuses
+  // the same "Task description" aria-label.
+  const collapsedScene1 = creator.getByRole('button', {
+    name: /^scene 1 of .*tap to open actions\.$/i,
+  })
+  // Wait for the list to settle into a deterministic post-delete state: scene 1
+  // is either already expanded (auto-follow) or collapsed.
+  await expect(sceneHeader(creator, 1)).toBeVisible()
+  if (await collapsedScene1.isVisible()) {
+    await collapsedScene1.click()
+  }
+  const askHelperToggle = creator.getByRole('button', { name: /^ask helper to edit$/i })
+  await expect(askHelperToggle).toBeVisible()
+  await askHelperToggle.click()
+  const askHelper = creator.getByRole('group', { name: /^ask helper$/i })
+  await askHelper.getByLabel(/task description/i).fill('Please trim the shaky part')
+  await askHelper.getByRole('button', { name: /send to helper/i }).click()
 
   // Helper receives the task via realtime INSERT and renders its text in the
-  // ActivityFeed. Scope to the visible task article — exact text avoids matching
-  // the sr-only live-region announcement ("Creator sent you a task: …").
+  // ActivityFeed. Scope to the "Tasks and activity" region (the ActivityFeed) —
+  // the helper ALSO echoes the latest task text in its "Creator's current
+  // request" intent banner, so an unscoped getByText matches two elements. Exact
+  // text also avoids the sr-only live-region announcement ("Creator sent you a
+  // task: …").
+  const activityFeed = helper.getByRole('region', { name: /tasks and activity/i })
   await expect(
-    helper.getByText('Please trim the shaky part', { exact: true })
+    activityFeed.getByText('Please trim the shaky part', { exact: true })
   ).toBeVisible({ timeout: 15_000 })
   await helper.getByRole('button', { name: /mark done/i }).click()
 
