@@ -357,7 +357,7 @@ export default function EditorPage() {
   }, [projectId, userId, applySnapshot, applyTasks, refreshSources, showToast])
 
   const applyAndSave = useCallback(
-    async (opFn, announceText) => {
+    async (opFn, announceText, options = {}) => {
       // A newer remote insert can land while the save is in flight — every
       // applySnapshot below is gated so an older result never overwrites it.
       const before = snapshotRef.current
@@ -366,11 +366,22 @@ export default function EditorPage() {
       // Optimistic local apply.
       const optimistic = { version: before.version, state: next }
       applySnapshot(optimistic)
-      const result = await saveWithRebase(supabase, projectId, userId, opFn, next, before.version)
+
+      // State-REPLACING opFns (undo/redo: `() => snapshot`) ignore their input,
+      // so reapplying them onto freshly-loaded remote state would clobber a
+      // concurrent helper edit with a stale snapshot. Such saves opt out of the
+      // rebase: a clean first save wins; a conflicting one resyncs to the latest
+      // state and surfaces the conflict instead of overwriting it.
+      const rebasable = options.rebasable !== false
+      const result = rebasable
+        ? await saveWithRebase(supabase, projectId, userId, opFn, next, before.version)
+        : await saveState(supabase, projectId, userId, next, before.version)
       if (result.ok) {
         // The saved state may differ from the optimistic one after a rebase.
+        // saveState (non-rebasable path) returns no state — keep the optimistic.
+        const savedState = result.state ?? next
         if (result.version > (snapshotRef.current?.version ?? 0)) {
-          applySnapshot({ version: result.version, state: result.state })
+          applySnapshot({ version: result.version, state: savedState })
         }
         if (announceText) announce(announceText)
         return

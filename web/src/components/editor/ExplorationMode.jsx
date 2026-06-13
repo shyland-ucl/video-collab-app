@@ -318,7 +318,9 @@ export default function ExplorationMode({
     const prev = undoStack[undoStack.length - 1]
     setRedoStack((r) => [...r, state])
     setUndoStack((u) => u.slice(0, -1))
-    applyAndSave(() => prev, 'Undo')
+    // State-REPLACING opFn — non-rebasable so a conflict surfaces and resyncs
+    // instead of clobbering a concurrent helper edit with this stale snapshot.
+    applyAndSave(() => prev, 'Undo', { rebasable: false })
   }, [undoStack, state, applyAndSave])
 
   const handleRedo = useCallback(() => {
@@ -326,7 +328,8 @@ export default function ExplorationMode({
     const next = redoStack[redoStack.length - 1]
     setUndoStack((u) => [...u, state])
     setRedoStack((r) => r.slice(0, -1))
-    applyAndSave(() => next, 'Redo')
+    // State-REPLACING opFn — non-rebasable (see handleUndo).
+    applyAndSave(() => next, 'Redo', { rebasable: false })
   }, [redoStack, state, applyAndSave])
 
   const handleAddCaption = useCallback(() => {

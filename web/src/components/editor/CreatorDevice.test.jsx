@@ -277,10 +277,13 @@ describe('CreatorDevice — Edit Myself', () => {
     await userEvent.click(undoBtn)
 
     expect(props.applyAndSave).toHaveBeenCalledTimes(2)
-    const [opFn, announceText] = props.applyAndSave.mock.calls[1]
+    const [opFn, announceText, options] = props.applyAndSave.mock.calls[1]
     expect(announceText).toBe('Undo')
     // state-replacing opFn: returns the snapshot regardless of input
     expect(opFn({ clips: [], captions: [] })).toEqual(STATE)
+    // The state-replacing snapshot must NOT be rebased onto remote state — a
+    // conflict would otherwise clobber a concurrent helper edit (silent loss).
+    expect(options).toEqual({ rebasable: false })
   })
 })
 

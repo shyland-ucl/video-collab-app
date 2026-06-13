@@ -333,6 +333,59 @@ describe('EditorPage', () => {
     expect(captured.creator.version).toBe(3)
   })
 
+  it('persists a clean non-rebasable save via saveState (not saveWithRebase) and announces', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    mockSaveState.mockResolvedValue({ ok: true, version: 2 })
+
+    await act(async () => {
+      await captured.creator.applyAndSave(() => STATE_V2, 'Undo', { rebasable: false })
+    })
+
+    expect(mockSaveWithRebase).not.toHaveBeenCalled()
+    expect(mockSaveState).toHaveBeenCalledWith(expect.anything(), 'p1', 'u1', STATE_V2, 1)
+    expect(announce).toHaveBeenCalledWith('Undo')
+    expect(captured.creator.state).toEqual(STATE_V2)
+    expect(captured.creator.version).toBe(2)
+  })
+
+  it('does NOT rebase a non-rebasable save on conflict — resyncs to latest instead of clobbering with the stale snapshot', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    // Non-rebasable saves go straight through saveState (NOT saveWithRebase).
+    // The first save conflicts; the page must resync to the remote winner and
+    // must never reapply the state-replacing opFn onto remote state.
+    mockSaveState.mockResolvedValue({ ok: false, conflict: true })
+    mockLoadLatestState.mockResolvedValue({ version: 3, state: STATE_V2 })
+
+    // A state-REPLACING opFn that ignores its input (undo/redo shape). If the
+    // page reapplied it on remote state, STATE_V3 (the stale snapshot) would win.
+    const staleSnapshot = STATE_V3
+    await act(async () => {
+      await captured.creator.applyAndSave(() => staleSnapshot, 'Undo', { rebasable: false })
+    })
+
+    // saveWithRebase was bypassed entirely; only the first saveState ran.
+    expect(mockSaveWithRebase).not.toHaveBeenCalled()
+    expect(mockSaveState).toHaveBeenCalledTimes(1)
+    expect(mockSaveState).toHaveBeenCalledWith(expect.anything(), 'p1', 'u1', staleSnapshot, 1)
+
+    // Conflict announced assertively, latest refetched + applied, undo dropped.
+    expect(announce).toHaveBeenCalledWith(
+      "Your change conflicted with your helper's — the timeline was updated",
+      { assertive: true }
+    )
+    expect(announce).not.toHaveBeenCalledWith('Undo')
+    expect(captured.creator.state).toEqual(STATE_V2)
+    expect(captured.creator.version).toBe(3)
+    // The stale snapshot did NOT become the saved/visible state.
+    expect(captured.creator.state).not.toEqual(staleSnapshot)
+  })
+
   it('shows a visible alert banner and announces when live sync errors', async () => {
     renderPage()
     await screen.findByText('creator device')
