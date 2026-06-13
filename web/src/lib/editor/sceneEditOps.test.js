@@ -326,4 +326,75 @@ describe('sceneEditOps (characterization of the probe port)', () => {
   it('getClipForScene returns null for an unknown scene id', () => {
     expect(getClipForScene(makeState(), 'unknown-id')).toBe(null)
   })
+
+  // ------------------------------------------------------------------ deleteClip — tombstone (delete-tombstone behavior)
+  it('deleteClip tombstones the root segment id when no sibling survives', () => {
+    // Deleting a normal (non-split) clip → its id IS the root → tombstoned.
+    const next = deleteClip(makeState(), 's1')
+    expect(next.deletedSegmentIds).toContain('s1')
+  })
+
+  it('deleteClip does NOT tombstone the root when a split sibling still survives', () => {
+    // One split half present alongside the original — deleting the split piece
+    // leaves 's1' (the root-bearing clip) in the clips array, so 'g1' must NOT
+    // be tombstoned.
+    const state = {
+      ...makeState(),
+      clips: [
+        { id: 'g1', sourceId: 'v1', name: 'Scene 1', startTime: 0, endTime: 5, trimStart: 0, trimEnd: 0, color: '#aaa', muted: false },
+        { id: 'g1-split-123-a', sourceId: 'v1', name: 'Scene 1b', startTime: 2.5, endTime: 5, trimStart: 0, trimEnd: 0, color: '#bbb', muted: false },
+      ],
+    }
+    // Delete the split piece — 'g1' (root) still survives in the clips list.
+    const next = deleteClip(state, 'g1-split-123-a')
+    expect((next.deletedSegmentIds ?? [])).not.toContain('g1')
+  })
+
+  it('deleteClip tombstones the root after BOTH split halves are deleted', () => {
+    // First delete one split half, then delete the other — root 'g1' should be
+    // tombstoned only after the last clip sharing that root is gone.
+    const state = {
+      ...makeState(),
+      clips: [
+        { id: 'g1', sourceId: 'v1', name: 'Scene 1', startTime: 0, endTime: 2.5, trimStart: 0, trimEnd: 0, color: '#aaa', muted: false },
+        { id: 'g1-split-123-a', sourceId: 'v1', name: 'Scene 1b', startTime: 2.5, endTime: 5, trimStart: 0, trimEnd: 0, color: '#bbb', muted: false },
+      ],
+    }
+    // Step 1: delete the split piece — sibling 'g1' (root) still present → no tombstone yet.
+    const mid = deleteClip(state, 'g1-split-123-a')
+    expect((mid.deletedSegmentIds ?? [])).not.toContain('g1')
+    // Step 2: delete the surviving root piece — no siblings left → tombstoned.
+    const final = deleteClip(mid, 'g1')
+    expect(final.deletedSegmentIds).toContain('g1')
+  })
+
+  it('deleteClip does NOT tombstone root when deleting the original while a split piece survives', () => {
+    // Deleting the original 'g1' while 'g1-split-123-a' still exists — the root
+    // is still represented by the split survivor, so 'g1' must NOT be tombstoned.
+    const state = {
+      ...makeState(),
+      clips: [
+        { id: 'g1', sourceId: 'v1', name: 'Scene 1', startTime: 0, endTime: 2.5, trimStart: 0, trimEnd: 0, color: '#aaa', muted: false },
+        { id: 'g1-split-123-a', sourceId: 'v1', name: 'Scene 1b', startTime: 2.5, endTime: 5, trimStart: 0, trimEnd: 0, color: '#bbb', muted: false },
+      ],
+    }
+    const next = deleteClip(state, 'g1')
+    expect((next.deletedSegmentIds ?? [])).not.toContain('g1')
+  })
+
+  it('deleteClip is idempotent: re-deleting an already-tombstoned id keeps deletedSegmentIds deduped and does not mutate input', () => {
+    // First delete to tombstone 's1'.
+    const after1 = deleteClip(makeState(), 's1')
+    expect(after1.deletedSegmentIds).toEqual(['s1'])
+
+    // Re-apply deleteClip for the same id on the already-tombstoned state.
+    // The clip is already gone so clips is unchanged; deletedSegmentIds must
+    // still contain exactly one entry (no duplicates).
+    const after2 = deleteClip(after1, 's1')
+    expect(after2.deletedSegmentIds).toEqual(['s1'])
+    expect(after2.deletedSegmentIds.filter((id) => id === 's1')).toHaveLength(1)
+
+    // Input state must not be mutated.
+    expect(after1.deletedSegmentIds).toEqual(['s1'])
+  })
 })

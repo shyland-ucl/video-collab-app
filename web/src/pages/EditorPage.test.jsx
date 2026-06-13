@@ -518,6 +518,26 @@ describe('EditorPage', () => {
     expect(captured.creator.state.clips).toHaveLength(2)
   })
 
+  it('does not re-append a segment whose id is in deletedSegmentIds (tombstone skip on load)', async () => {
+    // State has g1 already deleted (tombstoned); the DB still lists g1 in segments.
+    // mergeNewSegments must skip g1 because it is in deletedSegmentIds — no saveState call.
+    const tombstonedState = {
+      ...G_STATE,
+      clips: [],               // g1 was deleted — no clips remain
+      deletedSegmentIds: ['g1'],
+    }
+    mockSegmentsOrder.mockResolvedValue({ data: [G_SEGMENTS[0]], error: null })
+    mockLoadLatestState.mockResolvedValue({ version: 2, state: tombstonedState })
+
+    renderPage()
+
+    expect(await screen.findByText('creator device')).toBeInTheDocument()
+    // mergeNewSegments found no missing segments (g1 is tombstoned) — no save.
+    expect(mockSaveState).not.toHaveBeenCalled()
+    // The tombstoned segment must not appear in the displayed clips.
+    expect(captured.creator.state.clips.map((c) => c.id)).not.toContain('g1')
+  })
+
   it('treats split-derived clips as covering their root segment (no duplicate append)', async () => {
     mockSegmentsOrder.mockResolvedValue({ data: [G_SEGMENTS[0]], error: null })
     mockLoadLatestState.mockResolvedValue({
