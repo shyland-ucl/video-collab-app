@@ -69,6 +69,23 @@ describe('VideosSection', () => {
     )
   })
 
+  it('offers an Open in editor link per ready video pointing at the editor with ?video=', async () => {
+    mockOrder.mockResolvedValue({
+      data: [
+        { id: 'v1', original_name: 'kitchen.mp4', status: 'ready', error: null, created_at: '2026-06-12' },
+        { id: 'v2', original_name: 'garden.mp4', status: 'processing', error: null, created_at: '2026-06-12' },
+      ],
+      error: null,
+    })
+    renderSection()
+    await screen.findByText('kitchen.mp4')
+    expect(screen.getByRole('link', { name: /open kitchen\.mp4 in the editor/i })).toHaveAttribute(
+      'href', '/projects/proj-1/edit?video=v1'
+    )
+    // Only the ready video gets the link; the processing one does not.
+    expect(screen.queryByRole('link', { name: /open garden\.mp4 in the editor/i })).toBeNull()
+  })
+
   it('uploads a chosen file: inserts row, runs TUS upload, triggers processing', async () => {
     renderSection()
     const input = await screen.findByLabelText(/upload a video/i)

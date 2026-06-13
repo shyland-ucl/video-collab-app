@@ -353,6 +353,49 @@ describe('CreatorDevice — VQA', () => {
   })
 })
 
+describe('CreatorDevice — open from a chosen video (initialVideoId jump)', () => {
+  // STATE spans two videos: clips s1,s2 belong to v1, clip s3 belongs to v2.
+  // The actions region a SceneBlock renders for the children is tagged
+  // data-scene-actions-region="<0-based index>" — present only when expanded.
+  function actionsRegionForIndex(n) {
+    return document.querySelector(`[data-scene-actions-region="${n}"]`)
+  }
+
+  it('expands the first scene of the chosen video on mount (v2 → block index 2)', async () => {
+    await act(async () => { renderDevice({ initialVideoId: 'v2' }) })
+
+    // Scene 3 (block index 2, the first clip whose sourceId === 'v2') is expanded.
+    await waitFor(() => expect(actionsRegionForIndex(2)).toBeTruthy())
+    // The other scenes stay collapsed.
+    expect(actionsRegionForIndex(0)).toBeNull()
+    expect(actionsRegionForIndex(1)).toBeNull()
+  })
+
+  it('expands the first matching scene when the video has several scenes (v1 → block index 0)', async () => {
+    await act(async () => { renderDevice({ initialVideoId: 'v1' }) })
+
+    await waitFor(() => expect(actionsRegionForIndex(0)).toBeTruthy())
+    expect(actionsRegionForIndex(1)).toBeNull()
+    expect(actionsRegionForIndex(2)).toBeNull()
+  })
+
+  it('auto-expands nothing when initialVideoId is absent', async () => {
+    await act(async () => { renderDevice() })
+
+    expect(actionsRegionForIndex(0)).toBeNull()
+    expect(actionsRegionForIndex(1)).toBeNull()
+    expect(actionsRegionForIndex(2)).toBeNull()
+  })
+
+  it('auto-expands nothing when initialVideoId matches no clip', async () => {
+    await act(async () => { renderDevice({ initialVideoId: 'v-nope' }) })
+
+    expect(actionsRegionForIndex(0)).toBeNull()
+    expect(actionsRegionForIndex(1)).toBeNull()
+    expect(actionsRegionForIndex(2)).toBeNull()
+  })
+})
+
 describe('CreatorDevice — playback (bounded vs unbounded)', () => {
   it('Play this scene is BOUNDED: seeks to the scene start, plays, and pauses at the scene boundary', async () => {
     const props = makeProps()

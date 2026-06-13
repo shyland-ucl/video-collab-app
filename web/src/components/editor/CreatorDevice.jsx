@@ -59,9 +59,20 @@ export default function CreatorDevice({
   applyAndSave,
   channel,
   onCreateTask,
+  initialVideoId = null,
 }) {
   const clips = useMemo(() => state?.clips ?? [], [state])
   const captions = state?.captions ?? []
+
+  // Optional "open from a chosen video" landing: resolve the index of the first
+  // clip belonging to initialVideoId so SceneBlockList can expand/scroll to it
+  // once on mount. The whole-project timeline is unchanged; this is a view jump.
+  // Absent or unmatched id → null → SceneBlockList expands nothing.
+  const initialExpandedIndex = useMemo(() => {
+    if (!initialVideoId) return null
+    const idx = clips.findIndex((clip) => clip.sourceId === initialVideoId)
+    return idx === -1 ? null : idx
+  }, [clips, initialVideoId])
 
   // clipId → clip, so renderSceneActions can resolve the real (camelCase) app
   // clip from the snake_case scene SceneBlockList hands it.
@@ -330,6 +341,7 @@ export default function CreatorDevice({
         disableAutoFollow={playingSegmentEnd != null}
         editedScenes={editedScenes}
         editState={state}
+        initialExpandedIndex={initialExpandedIndex}
         renderSceneActions={renderSceneActions}
       />
 

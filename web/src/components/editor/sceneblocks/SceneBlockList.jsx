@@ -107,6 +107,11 @@ export default function SceneBlockList({
   // "What changed" line prepended to the description.
   editedScenes = {},
   editState = null,
+  // Optional one-time landing: when the editor is opened from a chosen video
+  // (`/projects/:id/edit?video=<id>`), the caller resolves the index of that
+  // video's first scene and passes it here. We expand + scroll to it ONCE on
+  // mount, then behave exactly as today. null/undefined → nothing auto-expanded.
+  initialExpandedIndex = null,
 }) {
   const [expandedIndex, setExpandedIndex] = useState(null);
   // Where the latest expansion came from. Drives focus behavior in SceneBlock:
@@ -135,6 +140,7 @@ export default function SceneBlockList({
   const sceneHistoryTokenRef = useRef(null);
   const ignoreNextScenePopRef = useRef(false);
   const wasAnyExpandedRef = useRef(false);
+  const didInitialExpandRef = useRef(false);
 
   const clearFocusRestoreTimers = useCallback(() => {
     focusRestoreTimersRef.current.forEach((timer) => clearTimeout(timer));
@@ -201,6 +207,24 @@ export default function SceneBlockList({
   useEffect(() => {
     stableScrollTopRef.current = scrollContainerRef.current?.scrollTop || 0;
   }, [scenes.length]);
+
+  // One-time landing on the chosen video's first scene. Runs once, only after
+  // the scenes have loaded and only when a valid index is supplied. It expands
+  // that block as a manual ('user') expansion — so SceneBlock lands focus on
+  // the actions region, exactly like a tap — and scrolls it into view. After
+  // it fires, the normal auto-follow/manual machinery owns expandedIndex.
+  useEffect(() => {
+    if (didInitialExpandRef.current) return;
+    if (initialExpandedIndex == null) return;
+    if (initialExpandedIndex < 0 || initialExpandedIndex >= scenes.length) return;
+    didInitialExpandRef.current = true;
+    setExpandSource('user');
+    setExpandedIndex(initialExpandedIndex);
+    const raf = requestAnimationFrame(() => {
+      headerRefs.current[initialExpandedIndex]?.scrollIntoView?.({ behavior: 'auto', block: 'nearest' });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [initialExpandedIndex, scenes.length]);
 
   const handleListFocusCapture = useCallback((event) => {
     const container = scrollContainerRef.current;

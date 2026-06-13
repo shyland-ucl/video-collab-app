@@ -173,10 +173,10 @@ const SUMMARY = {
   announcement: 'Your collaborator deleted scene 1. Check the timeline to confirm the updated sequence.',
 }
 
-function renderPage(projectId = 'p1') {
+function renderPage(projectId = 'p1', search = '') {
   return render(
     <AccessibilityProvider>
-      <MemoryRouter initialEntries={[`/projects/${projectId}/edit`]}>
+      <MemoryRouter initialEntries={[`/projects/${projectId}/edit${search}`]}>
         <Routes>
           <Route path="/projects/:projectId/edit" element={<EditorPage />} />
         </Routes>
@@ -240,6 +240,20 @@ describe('EditorPage', () => {
 
     unmount()
     expect(channelApi.leave).toHaveBeenCalled()
+  })
+
+  it('passes the ?video= query param down to the creator device as initialVideoId', async () => {
+    renderPage('p1', '?video=v2')
+
+    expect(await screen.findByText('creator device')).toBeInTheDocument()
+    await waitFor(() => expect(captured.creator.initialVideoId).toBe('v2'))
+  })
+
+  it('passes initialVideoId=null when no ?video= is present', async () => {
+    renderPage()
+
+    expect(await screen.findByText('creator device')).toBeInTheDocument()
+    await waitFor(() => expect(captured.creator.initialVideoId).toBeNull())
   })
 
   it('renders the editor main as a full-height flex column so the device scrolls, not the page', async () => {

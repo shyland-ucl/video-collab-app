@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { announce } from '../utils/announcer'
@@ -69,6 +69,10 @@ function mergeNewSegments(state, videos, segments) {
 
 export default function EditorPage() {
   const { projectId } = useParams()
+  const [searchParams] = useSearchParams()
+  // Optional ?video=<id>: the editor still loads the whole-project timeline,
+  // but the creator device jumps to that video's first scene on mount.
+  const initialVideoId = searchParams.get('video') || null
   const { user } = useAuth()
   const userId = user?.id
 
@@ -495,6 +499,7 @@ export default function EditorPage() {
       <Device
         role={role}
         projectId={projectId}
+        initialVideoId={initialVideoId}
         user={user}
         state={snapshot.state}
         version={snapshot.version}

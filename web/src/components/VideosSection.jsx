@@ -200,6 +200,15 @@ export default function VideosSection({ projectId }) {
                   View scenes and descriptions
                 </Link>
               )}
+              {v.status === 'ready' && (
+                <Link
+                  to={`/projects/${projectId}/edit?video=${v.id}`}
+                  aria-label={`Open ${v.original_name} in the editor`}
+                  className="mt-1 ml-4 inline-block min-h-12 underline"
+                >
+                  Open in editor
+                </Link>
+              )}
               {/* Fix 2 — stuck-uploading rows (no in-flight upload) also get Retry;
                   Task 11 — gated to the uploader for uploading status */}
               {(v.status === 'failed' || (v.status === 'uploading' && progress === null && v.uploaded_by === user.id)) && (
