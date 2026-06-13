@@ -31,7 +31,9 @@ export function makeRenderRoutes(supabase, deps = {}) {
       buildRenderPlan(latest?.state ?? {}, sources) // throws nothing_to_render
       edlVersion = latest?.version ?? null
     } catch (err) {
-      if (err.code === 'nothing_to_render') return res.status(400).json({ error: 'nothing_to_render' })
+      if (err.code === 'nothing_to_render' || err.code === 'too_many_clips') {
+        return res.status(400).json({ error: err.code })
+      }
       return res.status(500).json({ error: 'server_error' })
     }
 

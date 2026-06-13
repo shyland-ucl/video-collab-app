@@ -136,6 +136,34 @@ A render is **project-level** (the EDL can span multiple source videos), so it i
 
 This is one coherent plan (one render job, one table, one route, one UI). v2 (captions + overlays) is a separate spec — it adds `drawtext` per overlay/caption and resolves the caption time base, with no change to the job/table/route built here.
 
+## Adversarial review outcome (2026-06-13)
+
+A 3-lens review (security/ffmpeg-safety, correctness, a11y) + verify pass ran
+over the diff: 3 critical + 7 important confirmed, **all fixed**:
+
+- **CRITICAL — ffmpeg filtergraph injection** via an unsanitised `rotate` value
+  (project_state JSONB is member-writable with no DB shape check, so a crafted
+  `rotate` string could inject filters / read local files on the render host).
+  Fixed: `colourToVf` coerces every field with `Number()` (injection-proof on
+  its own), and `buildRenderPlan` `sanitizeColour`-clamps every grade + coerces
+  all time/volume fields. A non-numeric value can never reach the `-vf` string.
+- **CRITICAL — muted clips used `-an`**, breaking `concat -c copy` across mixed
+  muted/unmuted timelines. Fixed: mute = `volume=0` (keeps a uniform audio
+  stream), and every clip pins `-c:a aac -ar 48000 -ac 2` so the concat copies.
+- **CRITICAL — stranded focus** when the Download link appears. Fixed: the link
+  is focused on mount (rAF), mirroring the suggestion-route focus fixes.
+- **IMPORTANT**: time/volume fields coerced+validated (same root cause as the
+  rotate injection); `MAX_CLIPS=300` DoS bound; the optimistic 'pending' render
+  row can no longer block the real row (and a 409 refetches the in-flight row);
+  the ExportPanel rendering card + "Preparing…" are no longer duplicate live
+  regions (EditorPage announces once); `latestRender` has a deterministic
+  tiebreak.
+
+Accepted / deferred minors: rotate's visual frame is not expanded to match the
+CSS preview exactly (rare, cosmetic); a source with NO audio track would fail
+the `volume=0` filter (phone videos always have audio — v1 limitation); the
+single-flight 409 is check-then-insert (one creator, UI-gated — low risk).
+
 ## Constraints (carried from the project)
 
 `scripts/diag-smtp.mjs` never staged; probe read-only; `gemini-2.5-flash` injected (N/A here); commit messages end `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`; `npx supabase db push --yes` = LIVE (migration 0012 is additive — a new table + a bucket-limit bump). The render worker runs in-process after the 202 (single-instance Railway), consistent with the processing pipeline; if renders prove long enough to risk request-process limits, a real queue is a future change, not part of v1.

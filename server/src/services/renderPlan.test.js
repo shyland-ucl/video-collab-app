@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildRenderPlan, colourToVf, clipFfmpegArgs, OUTPUT } from './renderPlan.js'
+import { buildRenderPlan, colourToVf, clipFfmpegArgs, sanitizeColour, OUTPUT, MAX_CLIPS } from './renderPlan.js'
 
 const SOURCES = [
   { id: 'v1', storage_path: 'p1/v1/original.mp4' },
@@ -43,6 +43,42 @@ describe('buildRenderPlan', () => {
     expect(plan).toHaveLength(1)
     expect(plan[0].index).toBe(1)
   })
+
+  it('coerces string time fields and skips non-numeric ones', () => {
+    const state = {
+      clips: [
+        baseClip({ id: 'a', sourceId: 'v1', startTime: '1', endTime: '4' }), // strings → coerced to 1..4
+        baseClip({ id: 'b', sourceId: 'v1', startTime: 'NaNsy', endTime: 5 }), // non-numeric → skip
+      ],
+      colour: {},
+    }
+    const plan = buildRenderPlan(state, SOURCES)
+    expect(plan).toHaveLength(1)
+    expect(plan[0]).toMatchObject({ effStart: 1, effEnd: 4 })
+  })
+
+  it('clamps volume to 0..200', () => {
+    const state = { clips: [baseClip({ id: 'a', sourceId: 'v1', startTime: 0, endTime: 2, volume: 9999 })], colour: {} }
+    expect(buildRenderPlan(state, SOURCES)[0].volume).toBe(200)
+  })
+
+  it('throws too_many_clips above MAX_CLIPS', () => {
+    const clips = Array.from({ length: MAX_CLIPS + 1 }, (_, i) => baseClip({ id: `c${i}`, sourceId: 'v1', startTime: 0, endTime: 1 }))
+    expect(() => buildRenderPlan({ clips, colour: {} }, SOURCES)).toThrow(/too_many_clips/)
+  })
+})
+
+describe('sanitizeColour (injection + range hardening)', () => {
+  it('drops a non-numeric (injection) value entirely', () => {
+    // a crafted rotate string must never survive into the filtergraph
+    expect(sanitizeColour({ rotate: "0,drawtext=text='pwn':fontfile=/etc/passwd" })).toBeNull()
+  })
+  it('clamps out-of-range fields to the slider bounds', () => {
+    expect(sanitizeColour({ brightness: 9999, zoom: 9999, rotate: -9999 })).toEqual({ brightness: 100, zoom: 250, rotate: -180 })
+  })
+  it('drops neutral fields and returns null for an all-neutral grade', () => {
+    expect(sanitizeColour({ brightness: 0, contrast: 0, saturation: 0, zoom: 100, rotate: 0 })).toBeNull()
+  })
 })
 
 describe('colourToVf', () => {
@@ -80,11 +116,18 @@ describe('clipFfmpegArgs', () => {
     expect(args.join(' ')).toMatch(/scale=1280:720/)
     expect(args[args.length - 1]).toBe('/tmp/clip_000.mp4')
   })
-  it('drops audio for a muted clip and sets volume otherwise', () => {
+  it('mutes via volume=0 (keeps a uniform audio stream for concat copy), not -an', () => {
     const muted = clipFfmpegArgs({ sourcePath: '/s', effStart: 0, effEnd: 2, colour: null, muted: true, volume: 100 }, '/o.mp4')
-    expect(muted).toContain('-an')
+    expect(muted.join(' ')).toContain('volume=0')
+    expect(muted).not.toContain('-an')
+    expect(muted.join(' ')).toContain('-ar 48000') // pinned audio params so concat -c copy matches
     const loud = clipFfmpegArgs({ sourcePath: '/s', effStart: 0, effEnd: 2, colour: null, muted: false, volume: 150 }, '/o.mp4')
     expect(loud.join(' ')).toContain('volume=1.5')
+  })
+
+  it('coerces a hostile rotate value to a no-op instead of injecting filters', () => {
+    const args = clipFfmpegArgs({ sourcePath: '/s', effStart: 0, effEnd: 2, colour: { rotate: "0,drawtext=text='pwn'" }, muted: false, volume: 100 }, '/o.mp4')
+    expect(args.join(' ')).not.toContain('drawtext')
   })
   it('applies the canonical fit even with no colour grade', () => {
     const args = clipFfmpegArgs({ sourcePath: '/s', effStart: 0, effEnd: 2, colour: null, muted: false, volume: 100 }, '/o.mp4')

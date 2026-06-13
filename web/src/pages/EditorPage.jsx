@@ -383,8 +383,12 @@ export default function EditorPage() {
         onRenderChange: ({ eventType, render: row }) => {
           if (!row?.id || eventType === 'DELETE') return
           const prev = renderRef.current
-          // Keep the newest render (don't let a stale row overwrite a newer one).
-          if (prev && row.id !== prev.id && String(row.created_at) < String(prev.created_at)) return
+          // Always accept a real row over the optimistic 'pending' placeholder
+          // (its client-clock created_at must never block the server row). Only
+          // reject a strictly-OLDER real render than one we already hold.
+          if (prev && prev.id !== 'pending' && row.id !== prev.id) {
+            if (new Date(row.created_at).getTime() < new Date(prev.created_at).getTime()) return
+          }
           const prevStatus = prev?.id === row.id ? prev.status : null
           applyRender(row)
           if (row.status !== prevStatus) {
@@ -590,7 +594,12 @@ export default function EditorPage() {
     } catch (err) {
       if (String(err?.message).includes('already_rendering')) {
         announce('A render is already in progress.', { assertive: true })
-        // leave the optimistic 'rendering' — realtime will deliver the real row
+        // Replace the optimistic placeholder with the REAL in-flight row, in
+        // case realtime missed its insert (otherwise 'pending' could stick).
+        try {
+          const real = await latestRender(supabase, projectId)
+          if (real) applyRender(real)
+        } catch { /* realtime will catch us up */ }
       } else {
         applyRender(renderRef.current?.id === 'pending' ? null : renderRef.current)
         announce("Couldn't start the export — try again.", { assertive: true })

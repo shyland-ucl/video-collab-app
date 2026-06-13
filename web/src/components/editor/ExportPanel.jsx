@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 /**
  * Phase 4 — Export/Download panel (creator surface). Four states keyed on the
@@ -21,6 +21,7 @@ const ACCENT = '#9B59B6'
 export default function ExportPanel({ render, onExport, getDownloadUrl }) {
   const status = render?.status ?? null
   const [downloadUrl, setDownloadUrl] = useState(null)
+  const downloadRef = useRef(null)
 
   // Resolve the signed URL when a render becomes ready.
   useEffect(() => {
@@ -34,14 +35,25 @@ export default function ExportPanel({ render, onExport, getDownloadUrl }) {
     return () => { cancelled = true }
   }, [status, render?.output_path, getDownloadUrl])
 
+  // Move focus to the Download link when it appears (the Export button it
+  // replaced just unmounted; without this focus falls to <body> — the same
+  // stranded-focus trap as the suggestion routes). EditorPage's assertive
+  // "ready to download" announce carries the news; this gives a focus target.
+  useEffect(() => {
+    if (downloadUrl && downloadRef.current) {
+      const raf = requestAnimationFrame(() => downloadRef.current?.focus?.())
+      return () => cancelAnimationFrame(raf)
+    }
+    return undefined
+  }, [downloadUrl])
+
   const handleExport = useCallback(() => { onExport?.() }, [onExport])
 
   if (status === 'rendering') {
+    // Visual only — NOT a live region. EditorPage announces "Rendering…" on the
+    // triggering action, so a live region here would double-announce.
     return (
-      <div
-        aria-live="polite"
-        className="rounded-xl border-2 border-[#9B59B6]/40 bg-[#f5eefa] px-4 py-3 mb-3 flex items-center gap-3"
-      >
+      <div className="rounded-xl border-2 border-[#9B59B6]/40 bg-[#f5eefa] px-4 py-3 mb-3 flex items-center gap-3">
         <span className="flex gap-1" aria-hidden="true">
           <span className="w-2 h-2 rounded-full bg-[#9B59B6] animate-bounce" style={{ animationDelay: '0ms' }} />
           <span className="w-2 h-2 rounded-full bg-[#9B59B6] animate-bounce" style={{ animationDelay: '120ms' }} />
@@ -58,6 +70,7 @@ export default function ExportPanel({ render, onExport, getDownloadUrl }) {
         <p className="text-sm font-medium text-[#6b3f86]">Your exported video is ready.</p>
         {downloadUrl ? (
           <a
+            ref={downloadRef}
             href={downloadUrl}
             download="export.mp4"
             className="inline-flex items-center justify-center w-full py-3 rounded-lg text-white text-sm font-bold hover:opacity-90 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
@@ -66,7 +79,7 @@ export default function ExportPanel({ render, onExport, getDownloadUrl }) {
             Download video
           </a>
         ) : (
-          <p className="text-sm text-gray-500" aria-live="polite">Preparing your download…</p>
+          <p className="text-sm text-gray-500">Preparing your download…</p>
         )}
         <button
           type="button"

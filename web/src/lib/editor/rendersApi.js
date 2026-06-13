@@ -16,6 +16,7 @@ export async function latestRender(supabase, projectId) {
     .select('id, project_id, status, output_path, error, edl_version, created_at')
     .eq('project_id', projectId)
     .order('created_at', { ascending: false })
+    .order('id', { ascending: false }) // deterministic tiebreak on equal timestamps
     .limit(1)
     .maybeSingle()
   if (error) throw new Error(error.message)

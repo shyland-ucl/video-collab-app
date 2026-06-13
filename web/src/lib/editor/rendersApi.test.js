@@ -8,9 +8,10 @@ function fakeSupabase() {
   const calls = []
   return {
     calls,
-    from: (table) => ({
-      select: () => ({ eq: () => ({ order: () => ({ limit: () => ({ maybeSingle: async () => { calls.push({ op: 'latest', table }); return { data: { id: 'r1', status: 'ready', output_path: 'p1/renders/r1.mp4' }, error: null } } }) }) }) }),
-    }),
+    from: (table) => {
+      const orderable = { order: () => orderable, limit: () => ({ maybeSingle: async () => { calls.push({ op: 'latest', table }); return { data: { id: 'r1', status: 'ready', output_path: 'p1/renders/r1.mp4' }, error: null } } }) }
+      return { select: () => ({ eq: () => orderable }) }
+    },
     storage: { from: () => ({ createSignedUrl: async (path, ttl) => { calls.push({ op: 'sign', path, ttl }); return { data: { signedUrl: `https://signed/${path}` }, error: null } } }) },
   }
 }
