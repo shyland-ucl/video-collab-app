@@ -6,6 +6,7 @@ import { serverPost } from '../../lib/serverApi'
 import { applyOperation } from '../../lib/editor/sceneEditOps'
 import { rootSegmentId } from '../../lib/editor/stateStore'
 import DetailLevelSelector from './sceneblocks/DetailLevelSelector'
+import VoiceComposer from './VoiceComposer'
 import ConfirmAiEditDialog, { proposalToOpFn, describeProposal } from './ConfirmAiEditDialog'
 
 /**
@@ -95,10 +96,9 @@ export default function SceneActions({
   const [showAiEdit, setShowAiEdit] = useState(false)
   const [showHelper, setShowHelper] = useState(false)
 
-  // Per-panel composer text.
-  const [vqaText, setVqaText] = useState('')
-  const [aiEditText, setAiEditText] = useState('')
-  const [helperText, setHelperText] = useState('')
+  // Per-panel composer text. VQA / AI-edit / helper text now lives inside the
+  // VoiceComposer (which feeds it here via voice or typing); only the caption
+  // sub-input keeps its own controlled state.
   const [captionText, setCaptionText] = useState('')
   const [showCaptionInput, setShowCaptionInput] = useState(false)
 
@@ -146,8 +146,8 @@ export default function SceneActions({
   // ---------------------------------------------------------------------------
   // VQA (Ask AI about this scene) — serverPost to the segment vqa endpoint.
   // ---------------------------------------------------------------------------
-  const handleVqaSubmit = useCallback(async () => {
-    const question = vqaText.trim()
+  const handleVqaSubmit = useCallback(async (text) => {
+    const question = (text || '').trim()
     if (!question || !clip) return
     setVqaPending(true)
     setVqaAnswer(null)
@@ -161,7 +161,7 @@ export default function SceneActions({
       setVqaPending(false)
       announce(VQA_FAILED_TEXT, { assertive: true })
     }
-  }, [vqaText, clip, speakResponse])
+  }, [clip, speakResponse])
 
   // ---------------------------------------------------------------------------
   // Edit by Myself — every edit routes through applyAndSave(opFn, text).
@@ -239,8 +239,8 @@ export default function SceneActions({
   // ---------------------------------------------------------------------------
   // Ask AI to Edit — confirm-first. serverPost → describeProposal → dialog.
   // ---------------------------------------------------------------------------
-  const handleAiEditSubmit = useCallback(async () => {
-    const request = aiEditText.trim()
+  const handleAiEditSubmit = useCallback(async (text) => {
+    const request = (text || '').trim()
     if (!request || !clip) return
     setAiEditPending(true)
     setAiEditNote(null)
@@ -275,12 +275,11 @@ export default function SceneActions({
         return
       }
       setAiProposal(proposal)
-      setAiEditText('')
     } catch {
       setAiEditPending(false)
       announce(AI_FAILED_TEXT, { assertive: true })
     }
-  }, [aiEditText, clip, aiClips, projectId, speakResponse])
+  }, [clip, aiClips, projectId, speakResponse])
 
   const handleAiConfirm = useCallback(() => {
     const proposal = aiProposal
@@ -299,18 +298,17 @@ export default function SceneActions({
   // ---------------------------------------------------------------------------
   // Ask Helper to Edit — onCreateTask({ text, segmentLabel: clip.name }).
   // ---------------------------------------------------------------------------
-  const handleHelperSubmit = useCallback(async () => {
-    const text = helperText.trim()
+  const handleHelperSubmit = useCallback(async (rawText) => {
+    const text = (rawText || '').trim()
     if (!text || !clip) return
     try {
       await onCreateTask({ text, segmentLabel: clip.name })
       announce('Sent to helper.')
-      setHelperText('')
       setShowHelper(false)
     } catch {
       // EditorPage already announces the failure assertively.
     }
-  }, [helperText, clip, onCreateTask])
+  }, [clip, onCreateTask])
 
   if (!clip) return null
 
@@ -363,27 +361,14 @@ export default function SceneActions({
             aria-label="Ask AI about Scene"
             className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 flex flex-col gap-2"
           >
-            <input
-              type="text"
-              value={vqaText}
-              onChange={(e) => setVqaText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleVqaSubmit() }}
-              placeholder="Ask a question about this scene..."
+            <VoiceComposer
+              onSubmit={handleVqaSubmit}
               disabled={vqaPending}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-2 focus:outline-[#2B579A] disabled:opacity-50"
-              style={{ minHeight: '48px' }}
-              aria-label="Your question"
+              placeholder="Ask a question about this scene..."
+              announcement="Speak now. Ask your question."
+              submitLabel="Ask"
+              inputAriaLabel="Your question"
             />
-            <button
-              type="button"
-              onClick={handleVqaSubmit}
-              disabled={!vqaText.trim() || vqaPending}
-              className="w-full py-3 rounded-lg text-sm font-bold text-white disabled:opacity-40 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
-              style={{ minHeight: '48px', backgroundColor: '#2B579A' }}
-              aria-label="Ask"
-            >
-              Ask
-            </button>
             {vqaPending && <p className="text-sm text-gray-700 italic" role="status">Getting the answer...</p>}
             {vqaAnswer && (
               <div className="p-3 bg-green-50 border border-green-200 rounded-lg" role="status" aria-live="polite">
@@ -526,27 +511,14 @@ export default function SceneActions({
             aria-label="Ask AI to Edit"
             className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 flex flex-col gap-2"
           >
-            <input
-              type="text"
-              value={aiEditText}
-              onChange={(e) => setAiEditText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleAiEditSubmit() }}
-              placeholder="Describe what you want done..."
+            <VoiceComposer
+              onSubmit={handleAiEditSubmit}
               disabled={aiEditPending}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-2 focus:outline-[#F0AD4E] disabled:opacity-50"
-              style={{ minHeight: '48px' }}
-              aria-label="Task description"
+              placeholder="Describe what you want done..."
+              announcement="Speak now. Describe the edit."
+              submitLabel="Ask AI"
+              inputAriaLabel="Task description"
             />
-            <button
-              type="button"
-              onClick={handleAiEditSubmit}
-              disabled={!aiEditText.trim() || aiEditPending}
-              className="w-full py-3 rounded-lg text-sm font-bold text-white disabled:opacity-40 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
-              style={{ minHeight: '48px', backgroundColor: AI_EDIT_COLOR }}
-              aria-label="Ask AI"
-            >
-              Ask AI
-            </button>
             {aiEditPending && <p className="text-sm text-gray-700 italic" role="status">AI is working...</p>}
             {aiEditNote && (
               <div className="p-3 border-2 rounded-lg bg-yellow-50 border-yellow-300" role="status" aria-live="polite">
@@ -573,26 +545,13 @@ export default function SceneActions({
             aria-label="Ask Helper"
             className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 flex flex-col gap-2"
           >
-            <input
-              type="text"
-              value={helperText}
-              onChange={(e) => setHelperText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleHelperSubmit() }}
+            <VoiceComposer
+              onSubmit={handleHelperSubmit}
               placeholder="Describe what you want done..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-2 focus:outline-[#9B59B6]"
-              style={{ minHeight: '48px' }}
-              aria-label="Task description"
+              announcement="Speak now. Describe the task for your helper."
+              submitLabel="Send to helper"
+              inputAriaLabel="Task description"
             />
-            <button
-              type="button"
-              onClick={handleHelperSubmit}
-              disabled={!helperText.trim()}
-              className="w-full py-3 rounded-lg text-sm font-bold text-white disabled:opacity-40 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
-              style={{ minHeight: '48px', backgroundColor: ACCENT }}
-              aria-label="Send to helper"
-            >
-              Send to helper
-            </button>
           </div>
         )}
       </div>

@@ -20,6 +20,14 @@ vi.mock('../../contexts/AccessibilityContext', () => ({
   useAccessibility: () => a11yState,
 }))
 
+// Mock the speech-recognition hook so jsdom never touches the Web Speech API.
+// VoiceComposer (used by all three composers) is the only consumer; we return
+// an idle, no-op shape so the text-input path the existing tests drive is
+// unaffected and the mic button still renders.
+vi.mock('../../hooks/useSpeechRecognition', () => ({
+  default: () => ({ isListening: false, isPreparing: false, toggleListening: vi.fn() }),
+}))
+
 import SceneActions from './SceneActions'
 import { applyOperation } from '../../lib/editor/sceneEditOps'
 
@@ -145,6 +153,29 @@ describe('SceneActions — ask helper', () => {
       text: 'brighten this shot',
       segmentLabel: 'Scene 1',
     })
+  })
+})
+
+describe('SceneActions — voice input present in every composer', () => {
+  it('the VQA composer renders a mic (voice input) button', async () => {
+    renderActions()
+    await userEvent.click(screen.getByRole('button', { name: /ask ai about scene/i }))
+    const panel = screen.getByRole('group', { name: /ask ai about scene/i })
+    expect(within(panel).getByRole('button', { name: /voice input/i })).toBeInTheDocument()
+  })
+
+  it('the Ask-AI-to-Edit composer renders a mic (voice input) button', async () => {
+    renderActions()
+    await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
+    const panel = screen.getByRole('group', { name: /ask ai to edit/i })
+    expect(within(panel).getByRole('button', { name: /voice input/i })).toBeInTheDocument()
+  })
+
+  it('the Ask-Helper composer renders a mic (voice input) button', async () => {
+    renderActions()
+    await userEvent.click(screen.getByRole('button', { name: /ask helper to edit/i }))
+    const panel = screen.getByRole('group', { name: /ask helper/i })
+    expect(within(panel).getByRole('button', { name: /voice input/i })).toBeInTheDocument()
   })
 })
 
