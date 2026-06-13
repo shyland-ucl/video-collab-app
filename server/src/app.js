@@ -29,7 +29,9 @@ export function makeApp(supabaseClient, videoDeps = {}) {
 
   app.use(makeVideoRoutes(supabaseClient, videoDeps))
   app.use(makeAiEditRoutes(supabaseClient, videoDeps))
-  app.use(makeSuggestRoutes(supabaseClient, videoDeps))
+  // No videoDeps: the suggest route's injectable `propose` would otherwise
+  // collide with ai-edit's in the shared bag. Its tests mount it directly.
+  app.use(makeSuggestRoutes(supabaseClient))
 
   return app
 }

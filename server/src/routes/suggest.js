@@ -4,7 +4,13 @@ import { makeGeminiModel } from '../services/descriptions.js'
 import { proposeSuggestions } from '../services/suggestions.js'
 import { loadVideoForSuggestions } from '../services/suggestionsData.js'
 
-const LOADER_ERROR_STATUS = { video_not_found: 404, video_not_ready: 400, no_segments: 400 }
+const LOADER_ERROR_STATUS = {
+  video_not_found: 404,
+  video_not_ready: 400,
+  no_segments: 400,
+  segments_query_failed: 500,
+  descriptions_query_failed: 500,
+}
 
 export function makeSuggestRoutes(supabase, deps = {}) {
   const { propose = proposeSuggestions, getModel = makeGeminiModel, loadVideo = loadVideoForSuggestions } = deps
@@ -29,7 +35,9 @@ export function makeSuggestRoutes(supabase, deps = {}) {
 
     const loaded = await loadVideo(supabase, project.id, videoId)
     if (loaded.error) {
-      return res.status(LOADER_ERROR_STATUS[loaded.error] ?? 500).json({ error: loaded.error })
+      const status = LOADER_ERROR_STATUS[loaded.error] ?? 500
+      // Don't echo internal DB-failure codes back to the client on a 5xx.
+      return res.status(status).json({ error: status >= 500 ? 'server_error' : loaded.error })
     }
 
     const proposal = await propose(model, loaded.scenes, loaded.keyframes)

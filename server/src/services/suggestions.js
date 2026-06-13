@@ -44,7 +44,9 @@ export function cleanSuggestion(s, sceneCount) {
   if (!s || typeof s !== 'object') return null
   if (!SUGGESTION_CATEGORIES.includes(s.category)) return null
   const text = typeof s.text === 'string' ? s.text.trim().slice(0, 300) : ''
-  if (!text) return null
+  // The prompt asks for a 12–30 word sentence; reject obvious hallucinated
+  // fragments ("x", ".") well below any real suggestion's length.
+  if (text.length < 12) return null
   const scenes = Array.isArray(s.relatedScene) ? s.relatedScene : [s.relatedScene]
   const valid = scenes.filter((i) => Number.isInteger(i) && i >= 0 && i < sceneCount)
   if (!valid.length) return null

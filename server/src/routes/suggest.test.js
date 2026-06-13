@@ -60,6 +60,12 @@ describe('POST /api/projects/:id/suggest', () => {
     expect(r400.status).toBe(400)
   })
 
+  it('maps a DB-failure loader error to a 500 without leaking the internal code', async () => {
+    const res = await request(appWith(makeFakeSupabase({ project: PROJECT, member: MEMBER }), { loaded: { error: 'segments_query_failed' } })).post('/api/projects/p1/suggest').set('Authorization', 'Bearer good').send({ videoId: 'v1' })
+    expect(res.status).toBe(500)
+    expect(res.body.error).toBe('server_error')
+  })
+
   it('returns curated suggestions for a member', async () => {
     const res = await request(appWith(makeFakeSupabase({ project: PROJECT, member: MEMBER }))).post('/api/projects/p1/suggest').set('Authorization', 'Bearer good').send({ videoId: 'v1' })
     expect(res.status).toBe(200)

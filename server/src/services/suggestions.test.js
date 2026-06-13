@@ -26,6 +26,7 @@ describe('cleanFixTemplate', () => {
     expect(cleanFixTemplate({ action: 'mute', value: true, label: 'Mute' })).toEqual({ action: 'mute', value: true, label: 'Mute' })
     expect(cleanFixTemplate({ action: 'mute', value: false, label: 'Mute' })).toBeNull()
     expect(cleanFixTemplate({ action: 'unmute', value: false, label: 'Unmute' })).toEqual({ action: 'unmute', value: false, label: 'Unmute' })
+    expect(cleanFixTemplate({ action: 'unmute', value: true, label: 'Unmute' })).toBeNull()
   })
   it('rejects an unknown action or empty label', () => {
     expect(cleanFixTemplate({ action: 'stabilize', value: 1, label: 'x' })).toBeNull()
@@ -35,26 +36,29 @@ describe('cleanFixTemplate', () => {
 
 describe('cleanSuggestion', () => {
   it('keeps a valid suggestion and trims text', () => {
-    const s = cleanSuggestion({ id: 'sug_001', category: 'issue', text: '  too dark  ', relatedScene: 0, prototype_action: 'brightness', fix_template: { action: 'brightness', value: 30, label: 'Brighten' } }, SCENES.length)
-    expect(s).toMatchObject({ category: 'issue', text: 'too dark', relatedScene: 0, prototype_action: 'brightness' })
+    const s = cleanSuggestion({ id: 'sug_001', category: 'issue', text: '  too dark in this shot  ', relatedScene: 0, prototype_action: 'brightness', fix_template: { action: 'brightness', value: 30, label: 'Brighten' } }, SCENES.length)
+    expect(s).toMatchObject({ category: 'issue', text: 'too dark in this shot', relatedScene: 0, prototype_action: 'brightness' })
     expect(s.fix_template).toEqual({ action: 'brightness', value: 30, label: 'Brighten' })
   })
   it('drops an out-of-range relatedScene', () => {
-    expect(cleanSuggestion({ category: 'issue', text: 'x', relatedScene: 9, prototype_action: 'delete' }, SCENES.length)).toBeNull()
+    expect(cleanSuggestion({ category: 'issue', text: 'darken this scene a touch', relatedScene: 9, prototype_action: 'delete' }, SCENES.length)).toBeNull()
   })
   it('drops an unknown category', () => {
-    expect(cleanSuggestion({ category: 'banana', text: 'x', relatedScene: 0, prototype_action: 'delete' }, SCENES.length)).toBeNull()
+    expect(cleanSuggestion({ category: 'banana', text: 'darken this scene a touch', relatedScene: 0, prototype_action: 'delete' }, SCENES.length)).toBeNull()
   })
   it('drops an unknown prototype_action', () => {
-    expect(cleanSuggestion({ category: 'issue', text: 'x', relatedScene: 0, prototype_action: 'teleport' }, SCENES.length)).toBeNull()
+    expect(cleanSuggestion({ category: 'issue', text: 'darken this scene a touch', relatedScene: 0, prototype_action: 'teleport' }, SCENES.length)).toBeNull()
+  })
+  it('drops an obvious hallucinated fragment below the length floor', () => {
+    expect(cleanSuggestion({ category: 'issue', text: 'x', relatedScene: 0, prototype_action: 'delete' }, SCENES.length)).toBeNull()
   })
   it('keeps the suggestion but strips an invalid fix_template', () => {
-    const s = cleanSuggestion({ category: 'issue', text: 'x', relatedScene: 0, prototype_action: 'zoom', fix_template: { action: 'zoom', value: 9999, label: 'Zoom' } }, SCENES.length)
+    const s = cleanSuggestion({ category: 'issue', text: 'zoom in a little here', relatedScene: 0, prototype_action: 'zoom', fix_template: { action: 'zoom', value: 9999, label: 'Zoom' } }, SCENES.length)
     expect(s).not.toBeNull()
     expect(s.fix_template).toBeUndefined()
   })
   it('narrows an array relatedScene to its in-range members', () => {
-    const s = cleanSuggestion({ category: 'structural', text: 'x', relatedScene: [1, 99], prototype_action: 'reorder' }, SCENES.length)
+    const s = cleanSuggestion({ category: 'structural', text: 'reorder these two scenes', relatedScene: [1, 99], prototype_action: 'reorder' }, SCENES.length)
     expect(s.relatedScene).toEqual([1])
   })
 })
@@ -116,8 +120,8 @@ describe('proposeSuggestions', () => {
 
   it('reports how many raw suggestions were dropped', async () => {
     const model = { generateContent: vi.fn(async () => reply({ suggestions: [
-      { category: 'issue', text: 'ok', relatedScene: 0, prototype_action: 'brightness' },
-      { category: 'banana', text: 'bad', relatedScene: 0, prototype_action: 'brightness' },
+      { category: 'issue', text: 'this suggestion is fine', relatedScene: 0, prototype_action: 'brightness' },
+      { category: 'banana', text: 'bad category should drop', relatedScene: 0, prototype_action: 'brightness' },
     ] })) }
     const out = await proposeSuggestions(model, SCENES, [], { readPrompt: async () => 'PROMPT' })
     expect(out.dropped).toBe(1)

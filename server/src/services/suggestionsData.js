@@ -43,13 +43,16 @@ export async function loadVideoForSuggestions(supabase, projectId, videoId, deps
     level3: byId[s.id]?.[3] ?? '',
   }))
 
-  const keyframes = []
-  for (const s of used) {
-    if (!s.keyframe_path) { keyframes.push(null); continue }
-    const { data: blob, error } = await supabase.storage.from('videos').download(s.keyframe_path)
-    if (error || !blob) { keyframes.push(null); continue }
-    keyframes.push(Buffer.from(await blob.arrayBuffer()).toString('base64'))
-  }
+  // Download keyframes concurrently (≤ maxScenes) so one stalled object can't
+  // serialise the whole loop; a failed/absent keyframe maps to null in place.
+  const keyframes = await Promise.all(
+    used.map(async (s) => {
+      if (!s.keyframe_path) return null
+      const { data: blob, error } = await supabase.storage.from('videos').download(s.keyframe_path)
+      if (error || !blob) return null
+      return Buffer.from(await blob.arrayBuffer()).toString('base64')
+    })
+  )
 
   return { scenes, keyframes, truncated, totalScenes: segments.length }
 }
