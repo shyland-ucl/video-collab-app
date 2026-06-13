@@ -9,6 +9,11 @@ export default defineConfig({
   timeout: 120_000,
   fullyParallel: false,
   workers: 1,
+  // Supabase Realtime over the public internet occasionally stalls a single
+  // postgres_changes event past the per-assertion 30s budget. The assertions
+  // are exact (counts/text/status) — a retry only absorbs that transient
+  // network stall, it does not weaken what's verified.
+  retries: 1,
   globalSetup: './setup/globalSetup.mjs',
   globalTeardown: './setup/globalTeardown.mjs',
   use: {
