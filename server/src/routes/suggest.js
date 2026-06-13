@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { makeRequireAuth } from '../middleware/requireAuth.js'
 import { makeGeminiModel } from '../services/descriptions.js'
-import { proposeSuggestions } from '../services/suggestions.js'
+import { proposeSuggestions, persistSuggestions } from '../services/suggestions.js'
 import { loadVideoForSuggestions } from '../services/suggestionsData.js'
 
 const LOADER_ERROR_STATUS = {
@@ -13,7 +13,12 @@ const LOADER_ERROR_STATUS = {
 }
 
 export function makeSuggestRoutes(supabase, deps = {}) {
-  const { propose = proposeSuggestions, getModel = makeGeminiModel, loadVideo = loadVideoForSuggestions } = deps
+  const {
+    propose = proposeSuggestions,
+    getModel = makeGeminiModel,
+    loadVideo = loadVideoForSuggestions,
+    persist = persistSuggestions,
+  } = deps
   const router = Router()
   const requireAuth = makeRequireAuth(supabase)
 
@@ -41,7 +46,12 @@ export function makeSuggestRoutes(supabase, deps = {}) {
     }
 
     const proposal = await propose(model, loaded.scenes, loaded.keyframes)
-    res.json({ suggestions: proposal.suggestions ?? [] })
+    const generated = proposal.suggestions ?? []
+    // Persist (replace any prior set) so suggestions + resolutions survive reload
+    // and fan out over Realtime. A persist failure must not fail the analyse —
+    // fall back to the in-memory set (it just won't be durable/visible to the peer).
+    const persisted = await persist(supabase, project.id, videoId, generated, loaded.scenes)
+    res.json({ suggestions: persisted ?? generated })
   })
 
   return router

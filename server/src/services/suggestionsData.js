@@ -35,6 +35,7 @@ export async function loadVideoForSuggestions(supabase, projectId, videoId, deps
 
   const scenes = used.map((s) => ({
     idx: s.idx,
+    segmentId: s.id,
     start_seconds: s.start_seconds,
     end_seconds: s.end_seconds,
     label: s.label,

@@ -22,13 +22,16 @@ const PROJECT = { id: 'p1', title: 'T' }
 const MEMBER = { user_id: 'user-1' }
 const SUGGESTIONS = [{ category: 'issue', text: 'too dark', relatedScene: 0, prototype_action: 'brightness' }]
 
-let proposeSpy, loadSpy
+let proposeSpy, loadSpy, persistSpy
 function appWith(supabase, { loaded = { scenes: [{}], keyframes: [null] }, proposal = { suggestions: SUGGESTIONS, dropped: 0 } } = {}) {
   proposeSpy = vi.fn(async () => proposal)
   loadSpy = vi.fn(async () => loaded)
+  // Echo the generated suggestions back as if persisted (the route returns the
+  // persisted rows). Returning the same array keeps the body assertions stable.
+  persistSpy = vi.fn(async (_s, _p, _v, suggestions) => suggestions)
   const app = express()
   app.use(express.json())
-  app.use(makeSuggestRoutes(supabase, { propose: proposeSpy, getModel: () => ({}), loadVideo: loadSpy }))
+  app.use(makeSuggestRoutes(supabase, { propose: proposeSpy, getModel: () => ({}), loadVideo: loadSpy, persist: persistSpy }))
   return app
 }
 
@@ -66,11 +69,21 @@ describe('POST /api/projects/:id/suggest', () => {
     expect(res.body.error).toBe('server_error')
   })
 
-  it('returns curated suggestions for a member', async () => {
+  it('returns persisted suggestions for a member', async () => {
     const res = await request(appWith(makeFakeSupabase({ project: PROJECT, member: MEMBER }))).post('/api/projects/p1/suggest').set('Authorization', 'Bearer good').send({ videoId: 'v1' })
     expect(res.status).toBe(200)
     expect(res.body.suggestions).toEqual(SUGGESTIONS)
     expect(loadSpy).toHaveBeenCalledWith(expect.anything(), 'p1', 'v1')
     expect(proposeSpy).toHaveBeenCalled()
+    // suggestions are persisted (service-role) before returning
+    expect(persistSpy).toHaveBeenCalledWith(expect.anything(), 'p1', 'v1', SUGGESTIONS, expect.anything())
+  })
+
+  it('falls back to the generated set if persistence fails (analyse never 500s)', async () => {
+    const app = appWith(makeFakeSupabase({ project: PROJECT, member: MEMBER }))
+    persistSpy.mockResolvedValueOnce(null)
+    const res = await request(app).post('/api/projects/p1/suggest').set('Authorization', 'Bearer good').send({ videoId: 'v1' })
+    expect(res.status).toBe(200)
+    expect(res.body.suggestions).toEqual(SUGGESTIONS)
   })
 })
