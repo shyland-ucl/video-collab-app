@@ -207,6 +207,22 @@ After the unit tests pass and the diag run prints real suggestions:
 
 ---
 
+## Known limitations deferred to Phase 3b (surfaced in spike review)
+
+- **No rate limiting.** Each call triggers 1–2 Gemini multimodal round-trips
+  plus ≤40 keyframe downloads. Inherited from the ai-edit endpoint, acceptable
+  for a spike with no UI trigger, but a per-user throttle / cost circuit-breaker
+  should land before a UI button is wired in Phase 3b.
+- **No persistence or realtime broadcast** of suggestions — the endpoint is
+  stateless. Phase 3b decides where suggestions live (`project_state`?) and how
+  the helper sees them.
+- **Full-video escalation not built.** Input is keyframes + descriptions. If the
+  quality judgement says keyframes are too thin, the documented next lever is to
+  send the full video file; that path is not yet implemented.
+- **`relatedScene` is block position, not the DB `idx`** (which can have gaps
+  after deletes). The validator and diag both key off block position; Phase 3b's
+  apply-path must do the same.
+
 ## Constraints carried from the project (non-negotiable)
 
 - `scripts/diag-smtp.mjs` is never staged/committed.
