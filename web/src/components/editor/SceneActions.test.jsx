@@ -178,6 +178,37 @@ describe('SceneActions — ask AI to edit (confirm-first)', () => {
     expect(next.clips.map((c) => c.id)).toEqual(['s2'])
   })
 
+  it('forwards the FULL allClips timeline + focused_clip_id; a proposal targeting a NON-focused clip still validates', async () => {
+    // The model targets s2 even though the focused scene is s1 — this must
+    // still validate because describeProposal runs against the full allClips.
+    mockServerPost.mockResolvedValueOnce({ op: 'delete', target_clip_id: 's2', summary: 'drop scene two' })
+    const ALL = STATE.clips // [s1, s2]
+    const { props } = renderActions({ allClips: ALL })
+
+    await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
+    const panel = screen.getByRole('group', { name: /ask ai to edit/i })
+    await userEvent.type(within(panel).getByRole('textbox'), 'delete the second scene')
+    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+
+    // The request body carries the WHOLE timeline (not just the focused clip)
+    // plus focused_clip_id naming the scene the request came from.
+    const [path, body] = mockServerPost.mock.calls[0]
+    expect(path).toBe('/api/projects/p1/ai-edit')
+    expect(body.focused_clip_id).toBe('s1')
+    expect(body.clips.map((c) => c.id)).toEqual(['s1', 's2'])
+
+    // The deterministic sentence names the NON-focused target (validated
+    // against allClips, not [clip]).
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText('Delete Scene 2?')).toBeInTheDocument()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /^confirm/i }))
+    expect(props.applyAndSave).toHaveBeenCalledTimes(1)
+    const [opFn, doneText] = props.applyAndSave.mock.calls[0]
+    expect(doneText).toBe('Deleted Scene 2.')
+    expect(opFn(STATE).clips.map((c) => c.id)).toEqual(['s1'])
+  })
+
   it('clarification: speaks/announces it, keeps the panel open, opens no dialog', async () => {
     a11yState.audioEnabled = true
     mockServerPost.mockResolvedValueOnce({ clarification: 'Which scene do you mean?' })

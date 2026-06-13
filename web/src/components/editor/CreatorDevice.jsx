@@ -1,42 +1,45 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import { announce } from '../../utils/announcer'
-import ttsService from '../../services/ttsService'
-import { serverPost } from '../../lib/serverApi'
 import { rootSegmentId } from '../../lib/editor/stateStore'
-import { useAccessibility } from '../../contexts/AccessibilityContext'
+import { summarizeEditStateChange } from '../../lib/editor/projectOverview'
 import usePlaybackEngine, { computeClipLayout } from '../../hooks/usePlaybackEngine'
-import ExplorationMode from './ExplorationMode'
-import TaskRequestModal from './TaskRequestModal'
-import ConfirmAiEditDialog, { proposalToOpFn, describeProposal } from './ConfirmAiEditDialog'
+import SceneBlockList from './sceneblocks/SceneBlockList'
+import SceneActions from './SceneActions'
 
 /**
  * Creator device — the primary interface for a blind/low-vision creator.
- * Ported from probe src/components/decoupled/DecoupledCreatorDevice.jsx (Task 9).
  *
- * Prop contract (EditorPage): { role, projectId, user, state, version,
- * sources, descriptions, tasks, applyAndSave, channel, remote, onCreateTask,
- * onSetTaskStatus, syncDown }.
+ * Phase 2a Task 3: rebuilt around the Probe 3 SceneBlockList experience
+ * (pinned visually-only video at top + inline collapsible scene blocks with a
+ * per-scene 3-level detail picker and per-scene actions), replacing the old
+ * single-scene ExplorationMode modal. This is a faithful UX port of the probe's
+ * Probe3Page creator branch
+ * (video-collab-probe/src/pages/Probe3Page.jsx, `role === 'creator'`) — same
+ * layout (max-w-lg, pinned video, SceneBlockList over scenes) and the same
+ * bounded/unbounded play semantics (handlePlaySegment vs onPlay) — but wired to
+ * THIS app's realtime backend instead of the study's wsRelayService/logEvent.
  *
- * Stripped per the adaptation contract:
- * - webrtcService EDIT_STATE_UPDATE / TASK_TO_HELPER sends → `applyAndSave`
- *   and `onCreateTask` props (EditorPage persists + Realtime distributes)
- * - window.__taskStatusUpdate / __aiEditReceive / __aiEditResponse WoZ hooks —
- *   deleted; task status arrives via the `tasks` prop re-rendering, AI edits
- *   go through the real `/api/projects/:id/ai-edit` endpoint
- * - EventLoggerContext / logEvent / eventTypes — deleted
- * - useSceneSoundPlayback (placeholder sound catalogue) and projectUpdate
- *   toast (EditorPage owns the toast + announce for remote changes)
- * - condition prop — only the probe2b/3 behavior remains
+ * Prop contract (EditorPage — UNCHANGED): { role, projectId, user, state,
+ * version, sources, descriptions, tasks, applyAndSave, channel, remote,
+ * onCreateTask, onSetTaskStatus, syncDown }.
+ *
+ * Stripped per the adaptation contract (vs the probe creator branch):
+ * - wsRelayService PLAY/PAUSE/SEEK/EDIT_STATE_UPDATE sends → channel.send* +
+ *   applyAndSave (EditorPage persists + Realtime distributes)
+ * - EventLoggerContext / logEvent / EventTypes / Actors — deleted
+ * - the Phase 3 AI-suggestion engine (AIAnalysisTriggerCard, curatedSuggestions,
+ *   sceneIndicesWithSuggestions, suggestion routing) — deferred to Phase 3
+ * - vqaHistories / awarenessData / onAwarenessViewed — the per-scene VQA lives
+ *   inside SceneActions (Task 2); awareness telemetry is study-only
  *
  * Replaced:
- * - PLAY/PAUSE/SEEK WS sends → `channel.sendTransport({ action, time })`
- * - 2s STATE_UPDATE cadence → `channel.sendPlayhead({ isPlaying, time,
- *   segmentId })` on the same cadence
+ * - PLAY/PAUSE/SEEK WS sends → channel.sendTransport({ action, time })
+ * - 2s STATE_UPDATE cadence → channel.sendPlayhead({ isPlaying, time, segmentId })
  * - probe VideoPlayer (visual-only, aria-hidden + inert) → the same pattern
  *   driven directly by usePlaybackEngine over the `sources` signed URLs
  */
 
 const PLAYHEAD_INTERVAL_MS = 2000
+const SEGMENT_END_EPSILON = 0.05
 
 const TASK_STATUS_TEXT = {
   pending: 'Sent to helper',
@@ -45,10 +48,7 @@ const TASK_STATUS_TEXT = {
   cant_do: "Helper: Can't do",
 }
 
-const AI_INVALID_PROPOSAL_TEXT =
-  "The AI suggested an edit that doesn't match the current timeline — try asking again"
-const AI_FAILED_TEXT = 'The AI request failed — try again'
-const VQA_FAILED_TEXT = "The question couldn't be answered — try again"
+const ACCENT = '#9B59B6' // Probe 3 creator primary (purple)
 
 export default function CreatorDevice({
   projectId,
@@ -60,14 +60,17 @@ export default function CreatorDevice({
   channel,
   onCreateTask,
 }) {
-  const { audioEnabled, speechRate } = useAccessibility()
-  const clips = state?.clips ?? []
+  const clips = useMemo(() => state?.clips ?? [], [state])
   const captions = state?.captions ?? []
+
+  // clipId → clip, so renderSceneActions can resolve the real (camelCase) app
+  // clip from the snake_case scene SceneBlockList hands it.
+  const clipsById = useMemo(() => new Map(clips.map((c) => [c.id, c])), [clips])
 
   // ---------------------------------------------------------------------------
   // Playback — one hidden <video> per source, sequenced by the EDL engine
   // (the probe's creator player was identical: aria-hidden + inert, visual/audio
-  // only; the exploration UI is the accessible surface).
+  // only; the scene-block list below is the accessible surface).
   // ---------------------------------------------------------------------------
   const videoRefsMapRef = useRef({})
   const videoRefs = useMemo(() => {
@@ -81,24 +84,39 @@ export default function CreatorDevice({
   const engine = usePlaybackEngine(null, clips, captions, clips.length > 0, videoRefs)
   const [isPlaying, setIsPlaying] = useState(false)
 
+  // Bounded "Play this scene": the EDL offset at which playback should stop.
+  // While set, the SceneBlockList auto-follow is suppressed (disableAutoFollow)
+  // so a timeUpdate tick that lands a few ms past the boundary can't expand the
+  // next block before the boundary pause takes effect (probe Day-1 fix #2).
+  const [playingSegmentEnd, setPlayingSegmentEnd] = useState(null)
+
   const activeClip = clips[engine.currentClipIndex] ?? null
 
-  // Refs so the broadcast effects/interval read fresh values without re-running.
-  const stateRef = useRef(state)
-  stateRef.current = state
+  // Refs so the broadcast effects/interval + the boundary watcher read fresh
+  // values without re-running.
   const playingRef = useRef(false)
   playingRef.current = isPlaying
   const timeRef = useRef(0)
   timeRef.current = engine.edlTime
   const activeClipRef = useRef(null)
   activeClipRef.current = activeClip
+  const stateRef = useRef(state)
+  stateRef.current = state
 
-  // Stop when playback runs off the end of the timeline.
+  // Bounded-playback boundary watcher: pause at the scene end and KEEP
+  // playingSegmentEnd set through the pause so disableAutoFollow holds (probe
+  // handleTimeUpdate). Stop also when playback runs off the end of the timeline.
   useEffect(() => {
-    if (isPlaying && engine.totalDuration > 0 && engine.edlTime >= engine.totalDuration) {
+    if (!isPlaying) return
+    if (playingSegmentEnd != null && engine.edlTime >= playingSegmentEnd - SEGMENT_END_EPSILON) {
+      engine.pause()
+      setIsPlaying(false)
+      return
+    }
+    if (engine.totalDuration > 0 && engine.edlTime >= engine.totalDuration) {
       setIsPlaying(false)
     }
-  }, [isPlaying, engine.edlTime, engine.totalDuration])
+  }, [isPlaying, engine, engine.edlTime, engine.totalDuration, playingSegmentEnd])
 
   // Send play/pause to the helper when the transport flips (probe cadence).
   const prevPlayingRef = useRef(false)
@@ -122,149 +140,149 @@ export default function CreatorDevice({
 
   const seekToClip = useCallback(
     (clip) => {
-      if (!clip) return
+      if (!clip) return null
       const layout = computeClipLayout(stateRef.current?.clips ?? [])
       const entry = layout.find((e) => e.clip.id === clip.id)
-      if (!entry) return
+      if (!entry) return null
       engine.seekEdl(entry.edlOffset)
       channel.sendTransport({ action: 'seek', time: entry.edlOffset })
+      return entry
     },
     [engine, channel]
   )
 
-  const handlePlay = useCallback(
+  // Bounded "Play this scene": seek to the clip start, play, and stop at the
+  // clip's EDL end. disableAutoFollow holds while playingSegmentEnd is set.
+  const playScene = useCallback(
     (clip) => {
-      seekToClip(clip) // probe: play restarts from the current scene's start
+      const entry = seekToClip(clip)
+      if (!entry) return
+      setPlayingSegmentEnd(entry.edlOffset + entry.duration)
       engine.play()
       setIsPlaying(true)
     },
     [seekToClip, engine]
   )
 
-  const handlePause = useCallback(() => {
+  // Unbounded "Play from here": seek + play, continues across scene boundaries;
+  // auto-follow stays on (playingSegmentEnd cleared).
+  const playFromHere = useCallback(
+    (clip) => {
+      setPlayingSegmentEnd(null)
+      seekToClip(clip)
+      engine.play()
+      setIsPlaying(true)
+    },
+    [seekToClip, engine]
+  )
+
+  const pause = useCallback(() => {
+    setPlayingSegmentEnd(null)
     engine.pause()
     setIsPlaying(false)
   }, [engine])
 
-  // ---------------------------------------------------------------------------
-  // Task routing (Ask Helper / Ask AI / VQA) + confirm-first AI edits
-  // ---------------------------------------------------------------------------
-  const [taskModal, setTaskModal] = useState(null) // { mode: 'ai'|'helper'|'vqa', clip }
-  const [taskPending, setTaskPending] = useState(false)
-  const [taskResponse, setTaskResponse] = useState(null)
-  const [aiProposal, setAiProposal] = useState(null)
-
-  const openTaskModal = useCallback((mode, clip) => {
-    setTaskModal({ mode, clip })
-    setTaskPending(false)
-    setTaskResponse(null)
-  }, [])
-
-  const closeTaskModal = useCallback(() => {
-    setTaskModal(null)
-    setTaskPending(false)
-    setTaskResponse(null)
-  }, [])
-
-  const speakResponse = useCallback(
-    (text) => {
-      if (audioEnabled) ttsService.speak(text, { rate: speechRate })
+  // Auto-follow seek (SceneBlockList onSeek): expand-driven seeks that should
+  // NOT start a bounded segment. Used when the user expands a block.
+  const handleSeek = useCallback(
+    (edlTime) => {
+      setPlayingSegmentEnd(null)
+      engine.seekEdl(edlTime)
+      channel.sendTransport({ action: 'seek', time: edlTime })
     },
-    [audioEnabled, speechRate]
+    [engine, channel]
   )
 
-  const handleTaskSend = useCallback(
-    async (text) => {
-      if (!taskModal) return
-      const { mode, clip } = taskModal
+  // ---------------------------------------------------------------------------
+  // Edit stamps (amber "Edited" badge + "what changed" line).
+  //
+  // Approach: a single state-diff watcher. Whenever the `state` prop changes
+  // (local applyAndSave optimistic apply OR a remote insert landing via
+  // EditorPage), diff the previous clips against the next and stamp the one
+  // scene that changed using summarizeEditStateChange (the same summarizer
+  // EditorPage announces with). This is deliberately simple and covers both
+  // sources of change with one code path: we don't try to attribute actor
+  // precisely (local edits stamp 'You'), the goal is the badge + change line
+  // appearing on freshly-edited scenes. Stamps are short-lived in the map and
+  // overwrite per scene id.
+  // ---------------------------------------------------------------------------
+  const [editedScenes, setEditedScenes] = useState({})
+  const prevStateForStampRef = useRef(state)
+  useEffect(() => {
+    const prev = prevStateForStampRef.current
+    prevStateForStampRef.current = state
+    if (!prev || prev === state) return
+    const summary = summarizeEditStateChange(prev, state, 'You')
+    if (!summary.actionText) return
+    // Resolve which scene the change landed on. summarizeEditStateChange names
+    // scenes as "scene N" (1-based) inside actionText; map that back to the
+    // affected clip id from whichever clip set still holds it.
+    const sceneId = resolveChangedSceneId(prev, state)
+    if (!sceneId) return
+    setEditedScenes((cur) => ({
+      ...cur,
+      [sceneId]: { text: capitalize(summary.actionText), actor: 'You', timestamp: Date.now() },
+    }))
+  }, [state])
 
-      if (mode === 'helper') {
-        try {
-          await onCreateTask({ text, segmentLabel: clip?.name ?? null })
-          announce('Sent to helper.')
-        } catch {
-          // EditorPage already announces the failure assertively.
+  // ---------------------------------------------------------------------------
+  // Scene shape SceneBlockList consumes (snake_case + level_N descriptions),
+  // derived from state.clips + descriptions[rootSegmentId(clip.id)].
+  // ---------------------------------------------------------------------------
+  const scenes = useMemo(
+    () =>
+      clips.map((clip) => {
+        const desc = descriptions[rootSegmentId(clip.id)] ?? {}
+        return {
+          id: clip.id,
+          name: clip.name,
+          color: clip.color,
+          start_time: clip.startTime,
+          end_time: clip.endTime,
+          descriptions: { level_1: desc[1], level_2: desc[2], level_3: desc[3] },
         }
-        return
-      }
-
-      if (mode === 'vqa') {
-        setTaskPending(true)
-        try {
-          const { answer } = await serverPost(`/api/segments/${rootSegmentId(clip.id)}/vqa`, {
-            question: text,
-          })
-          setTaskPending(false)
-          setTaskResponse(answer)
-          announce(answer)
-          speakResponse(answer)
-        } catch {
-          setTaskPending(false)
-          announce(VQA_FAILED_TEXT, { assertive: true })
-        }
-        return
-      }
-
-      // mode === 'ai'
-      setTaskPending(true)
-      try {
-        const currentClips = stateRef.current?.clips ?? []
-        const proposal = await serverPost(`/api/projects/${projectId}/ai-edit`, {
-          request: text,
-          clips: currentClips.map((c) => ({
-            id: c.id,
-            name: c.name,
-            duration_seconds: (c.endTime - c.trimEnd) - (c.startTime + c.trimStart),
-          })),
-        })
-        setTaskPending(false)
-        if (proposal?.clarification) {
-          // Clarification: speak it and keep the modal open for a follow-up.
-          setTaskResponse(proposal.clarification)
-          announce(proposal.clarification)
-          speakResponse(proposal.clarification)
-          return
-        }
-        if (!describeProposal(proposal, stateRef.current?.clips ?? [])) {
-          setTaskResponse(AI_INVALID_PROPOSAL_TEXT)
-          announce(AI_INVALID_PROPOSAL_TEXT, { assertive: true })
-          return
-        }
-        closeTaskModal()
-        setAiProposal(proposal)
-      } catch {
-        setTaskPending(false)
-        announce(AI_FAILED_TEXT, { assertive: true })
-      }
-    },
-    [taskModal, onCreateTask, projectId, speakResponse, closeTaskModal]
+      }),
+    [clips, descriptions]
   )
 
-  const handleAiConfirm = useCallback(() => {
-    const proposal = aiProposal
-    setAiProposal(null)
-    const described = describeProposal(proposal, stateRef.current?.clips ?? [])
-    if (!described) return
-    applyAndSave(proposalToOpFn(proposal), described.done)
-  }, [aiProposal, applyAndSave])
-
-  const handleAiCancel = useCallback(() => {
-    setAiProposal(null)
-    announce('Cancelled — no change was made.')
-  }, [])
-
-  const handleAskAI = useCallback((clip) => openTaskModal('ai', clip), [openTaskModal])
-  const handleAskHelper = useCallback((clip) => openTaskModal('helper', clip), [openTaskModal])
-  const handleAskQuestion = useCallback((clip) => openTaskModal('vqa', clip), [openTaskModal])
+  const renderSceneActions = useCallback(
+    (args) => {
+      const { scene, currentLevel, onLevelChange, isPlaying: ip, currentTime: ct } = args
+      const clip = clipsById.get(scene.id)
+      if (!clip) return null
+      const isActiveScene =
+        ip && ct >= scene.start_time && ct < scene.end_time
+      return (
+        <SceneActions
+          clip={clip}
+          allClips={clips}
+          projectId={projectId}
+          level={currentLevel}
+          onLevelChange={onLevelChange}
+          descriptions={descriptions}
+          isPlaying={ip}
+          isActiveScene={isActiveScene}
+          onPlayScene={playScene}
+          onPlayFromHere={playFromHere}
+          onPause={pause}
+          applyAndSave={applyAndSave}
+          onCreateTask={onCreateTask}
+        />
+      )
+    },
+    [clipsById, clips, projectId, descriptions, playScene, playFromHere, pause, applyAndSave, onCreateTask]
+  )
 
   return (
-    <div role="region" aria-label="Creator device">
-      {/* Video player — visual only (probe pattern: out of the AT tree;
-          the exploration UI below is the accessible surface). */}
-      {/* React 19: `inert` is a real boolean prop (the probe's React-18
-          `inert=""` idiom would be treated as FALSE here). */}
-      <div aria-hidden="true" inert className="pointer-events-none mb-4">
-        <div className="relative bg-black mx-auto overflow-hidden rounded-xl" style={{ aspectRatio: '16 / 9', width: '100%', maxHeight: '40vh' }}>
+    <div role="region" aria-label="Creator device" className="flex flex-col flex-1 min-h-0 max-w-lg mx-auto w-full">
+      {/* Video player — visual only (probe pattern: out of the AT tree; the
+          scene-block list below is the accessible surface).
+          React 19: `inert` is a real boolean prop. */}
+      <div aria-hidden="true" inert className="flex-shrink-0 pointer-events-none mb-2">
+        <div
+          className="relative bg-black mx-auto overflow-hidden rounded-xl"
+          style={{ aspectRatio: '16 / 9', width: '100%', maxHeight: '32vh' }}
+        >
           {sources.map((source, idx) => {
             const isActive = engine.activeSourceId ? engine.activeSourceId === source.id : idx === 0
             return (
@@ -284,7 +302,10 @@ export default function CreatorDevice({
             )
           })}
           {engine.activeCaption && (
-            <div className="absolute bottom-0 left-0 right-0 flex justify-center pointer-events-none" style={{ padding: '0 8px 16px' }}>
+            <div
+              className="absolute bottom-0 left-0 right-0 flex justify-center pointer-events-none"
+              style={{ padding: '0 8px 16px' }}
+            >
               <div
                 className="px-4 py-2 rounded text-white text-center max-w-[90%]"
                 style={{ backgroundColor: 'rgba(0, 0, 0, 0.75)', textShadow: '0 1px 3px rgba(0,0,0,0.8)', lineHeight: 1.4 }}
@@ -296,49 +317,27 @@ export default function CreatorDevice({
         </div>
       </div>
 
-      {/* Exploration Mode — the accessible scene-by-scene surface */}
-      <ExplorationMode
-        state={state}
-        descriptions={descriptions}
-        isPlaying={isPlaying}
+      {/* Probe 3 scene-block list — the accessible scene-by-scene surface.
+          It owns its own keyboard model (expand/collapse/detail/auto-follow). */}
+      <SceneBlockList
+        scenes={scenes}
         currentTime={engine.edlTime}
-        activeClipIndex={engine.currentClipIndex}
-        applyAndSave={applyAndSave}
-        onPlay={handlePlay}
-        onPause={handlePause}
-        onSeekToClip={seekToClip}
-        onAskAI={handleAskAI}
-        onAskHelper={handleAskHelper}
-        onAskQuestion={handleAskQuestion}
-        suspendKeys={Boolean(taskModal || aiProposal)}
+        isPlaying={isPlaying}
+        onSeek={handleSeek}
+        onPlay={playFromHere}
+        onPause={pause}
+        accentColor={ACCENT}
+        videoCount={sources.length || 1}
+        disableAutoFollow={playingSegmentEnd != null}
+        editedScenes={editedScenes}
+        editState={state}
+        renderSceneActions={renderSceneActions}
       />
-
-      {/* Task Request Modal (Ask AI / Ask Helper / Ask about this scene) */}
-      {taskModal && (
-        <TaskRequestModal
-          mode={taskModal.mode}
-          clip={taskModal.clip}
-          onSend={handleTaskSend}
-          onClose={closeTaskModal}
-          pending={taskPending}
-          response={taskResponse}
-        />
-      )}
-
-      {/* Confirm-first AI edit dialog */}
-      {aiProposal && (
-        <ConfirmAiEditDialog
-          proposal={aiProposal}
-          clips={clips}
-          onConfirm={handleAiConfirm}
-          onCancel={handleAiCancel}
-        />
-      )}
 
       {/* Recent Tasks — rendered from the tasks prop; status-change
           announcements happen in EditorPage, not here. */}
       {tasks.length > 0 && (
-        <div role="region" aria-label="Recent tasks" className="border-2 border-[#64748b] rounded-xl overflow-hidden bg-white mt-3">
+        <div role="region" aria-label="Recent tasks" className="flex-shrink-0 border-2 border-[#64748b] rounded-xl overflow-hidden bg-white mt-3">
           <div className="bg-[#f1f5f9] px-3 py-2.5 border-b border-[#cbd5e1]">
             <span className="text-xs font-bold tracking-wide text-[#475569] uppercase">
               Recent Tasks ({tasks.length})
@@ -363,4 +362,73 @@ export default function CreatorDevice({
       )}
     </div>
   )
+}
+
+function capitalize(text) {
+  if (!text) return text
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+// Resolve the clip id a structural edit landed on, by diffing prev vs next
+// clips. Covers the edits the scene-block creator can produce: delete (removed
+// id), split (the new -split- piece's root is the original), reorder (the moved
+// id), caption (the caption's sceneId), and per-clip mutations (trim/volume/
+// mute — the id whose fields changed). Falls back to null when it can't tell,
+// so the watcher simply doesn't stamp.
+function resolveChangedSceneId(prevState, nextState) {
+  const prev = prevState?.clips ?? []
+  const next = nextState?.clips ?? []
+  const prevIds = new Set(prev.map((c) => c.id))
+  const nextIds = new Set(next.map((c) => c.id))
+
+  // Deleted clip.
+  const deleted = prev.find((c) => !nextIds.has(c.id))
+  if (deleted) {
+    // After a delete, the deleted scene is gone from the list; stamp the
+    // clip now occupying its slot (the next scene) so the user still sees a
+    // change marker on a live scene. If it was the last, stamp the new last.
+    const deletedIdx = prev.findIndex((c) => c.id === deleted.id)
+    const survivor = next[Math.min(deletedIdx, next.length - 1)]
+    return survivor?.id ?? null
+  }
+
+  // Added clip (split). The new piece's id ends in -split-…; its root segment
+  // id is the original scene, which is still present and is what we stamp.
+  const added = next.find((c) => !prevIds.has(c.id))
+  if (added) return rootSegmentId(added.id)
+
+  // Caption change — stamp the captioned scene.
+  const prevCaps = prevState?.captions ?? []
+  const nextCaps = nextState?.captions ?? []
+  if (nextCaps.length !== prevCaps.length) {
+    const prevCapIds = new Set(prevCaps.map((c) => c.id))
+    const nextCapIds = new Set(nextCaps.map((c) => c.id))
+    const changed =
+      nextCaps.find((c) => !prevCapIds.has(c.id)) ||
+      prevCaps.find((c) => !nextCapIds.has(c.id))
+    if (changed?.sceneId) return changed.sceneId
+  }
+
+  // Same ids: reorder or per-clip mutation. Find the first clip whose id moved
+  // position or whose fields changed.
+  for (let i = 0; i < next.length; i += 1) {
+    if (prev[i]?.id !== next[i]?.id) {
+      // Reorder — stamp the clip that is now at the first differing slot.
+      return next[i]?.id ?? null
+    }
+  }
+  for (let i = 0; i < next.length; i += 1) {
+    const a = prev[i]
+    const b = next[i]
+    if (!a || !b) continue
+    if (
+      a.trimStart !== b.trimStart ||
+      a.trimEnd !== b.trimEnd ||
+      a.muted !== b.muted ||
+      a.volume !== b.volume
+    ) {
+      return b.id
+    }
+  }
+  return null
 }

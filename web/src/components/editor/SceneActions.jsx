@@ -69,6 +69,7 @@ const VQA_FAILED_TEXT = "The question couldn't be answered — try again"
 
 export default function SceneActions({
   clip,
+  allClips,
   projectId,
   level = 1,
   onLevelChange,
@@ -81,6 +82,10 @@ export default function SceneActions({
   applyAndSave,
   onCreateTask,
 }) {
+  // The AI-edit endpoint wants the WHOLE timeline so it can target any clip
+  // (not just the focused one); CreatorDevice (Task 3) passes state.clips.
+  // Default to [clip] so the unit test / standalone use still self-contains.
+  const aiClips = allClips && allClips.length > 0 ? allClips : (clip ? [clip] : [])
   const { audioEnabled, speechRate } = useAccessibility()
 
   // Inline toggle panels (probe pattern — NOT full-screen modals). Only the
@@ -242,16 +247,17 @@ export default function SceneActions({
     try {
       // The endpoint wants the whole timeline (so the AI can target any clip);
       // applyAndSave will receive the live state when the user confirms.
+      // focused_clip_id tells the model which scene the request came from; the
+      // server accepts a clips array and ignores unknown body fields.
       const proposal = await serverPost(`/api/projects/${projectId}/ai-edit`, {
         request,
-        clips: [
-          {
-            id: clip.id,
-            name: clip.name,
-            duration_seconds:
-              clip.endTime - (clip.trimEnd || 0) - (clip.startTime + (clip.trimStart || 0)),
-          },
-        ],
+        focused_clip_id: clip.id,
+        clips: aiClips.map((c) => ({
+          id: c.id,
+          name: c.name,
+          duration_seconds:
+            c.endTime - (c.trimEnd || 0) - (c.startTime + (c.trimStart || 0)),
+        })),
       })
       setAiEditPending(false)
       if (proposal?.clarification) {
@@ -261,10 +267,9 @@ export default function SceneActions({
         speakResponse(proposal.clarification)
         return
       }
-      // The deterministic sentence is composed against the clips the dialog is
-      // given — pass the single clip we know about so describeProposal can
-      // name it. (Task 3 passes the full timeline; here we self-contain.)
-      if (!describeProposal(proposal, [clip])) {
+      // The deterministic sentence is composed against the FULL timeline so a
+      // proposal targeting a non-focused clip still validates + names correctly.
+      if (!describeProposal(proposal, aiClips)) {
         setAiEditNote(AI_INVALID_PROPOSAL_TEXT)
         announce(AI_INVALID_PROPOSAL_TEXT, { assertive: true })
         return
@@ -275,16 +280,16 @@ export default function SceneActions({
       setAiEditPending(false)
       announce(AI_FAILED_TEXT, { assertive: true })
     }
-  }, [aiEditText, clip, projectId, speakResponse])
+  }, [aiEditText, clip, aiClips, projectId, speakResponse])
 
   const handleAiConfirm = useCallback(() => {
     const proposal = aiProposal
     setAiProposal(null)
-    const described = describeProposal(proposal, [clip])
+    const described = describeProposal(proposal, aiClips)
     if (!described) return
     applyAndSave(proposalToOpFn(proposal), described.done)
     setShowAiEdit(false)
-  }, [aiProposal, clip, applyAndSave])
+  }, [aiProposal, aiClips, applyAndSave])
 
   const handleAiCancel = useCallback(() => {
     setAiProposal(null)
@@ -597,7 +602,7 @@ export default function SceneActions({
       {aiProposal && (
         <ConfirmAiEditDialog
           proposal={aiProposal}
-          clips={[clip]}
+          clips={aiClips}
           onConfirm={handleAiConfirm}
           onCancel={handleAiCancel}
         />
