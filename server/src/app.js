@@ -3,6 +3,7 @@ import cors from 'cors'
 import { makeRequireAuth } from './middleware/requireAuth.js'
 import { makeVideoRoutes } from './routes/videos.js'
 import { makeAiEditRoutes } from './routes/aiEdit.js'
+import { makeSuggestRoutes } from './routes/suggest.js'
 
 export function makeApp(supabaseClient, videoDeps = {}) {
   const app = express()
@@ -28,6 +29,7 @@ export function makeApp(supabaseClient, videoDeps = {}) {
 
   app.use(makeVideoRoutes(supabaseClient, videoDeps))
   app.use(makeAiEditRoutes(supabaseClient, videoDeps))
+  app.use(makeSuggestRoutes(supabaseClient, videoDeps))
 
   return app
 }
