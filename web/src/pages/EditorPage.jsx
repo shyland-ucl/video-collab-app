@@ -7,6 +7,7 @@ import { SCENE_COLORS, buildInitialState, loadLatestState, rootSegmentId, saveSt
 import { joinProjectChannel } from '../lib/editor/projectChannel'
 import { createTask, listTasks, setTaskStatus } from '../lib/editor/tasksApi'
 import { summarizeEditStateChange } from '../lib/editor/projectOverview'
+import { AccessibilityProvider } from '../contexts/AccessibilityContext'
 import CreatorDevice from '../components/editor/CreatorDevice'
 import HelperDevice from '../components/editor/HelperDevice'
 
@@ -40,9 +41,12 @@ function roleLabel(role) {
 function mergeNewSegments(state, videos, segments) {
   const clips = state?.clips ?? []
   const present = new Set(clips.map((clip) => rootSegmentId(clip.id)))
+  // Deleted segments are tombstoned in state.deletedSegmentIds (sceneEditOps.
+  // deleteClip) so a re-load never resurrects a scene the user removed.
+  const deleted = new Set(state?.deletedSegmentIds ?? [])
   const orderIndex = new Map(videos.map((v, i) => [v.id, i]))
   const missing = segments
-    .filter((seg) => !present.has(seg.id))
+    .filter((seg) => !present.has(seg.id) && !deleted.has(seg.id))
     .sort((a, b) => (orderIndex.get(a.video_id) - orderIndex.get(b.video_id)) || (a.idx - b.idx))
   if (missing.length === 0) return null
   return {
@@ -460,6 +464,7 @@ export default function EditorPage() {
   const Device = role === 'creator' ? CreatorDevice : HelperDevice
 
   return (
+    <AccessibilityProvider>
     <main id="main" tabIndex={-1} className="p-4">
       {syncDown && (
         <p role="alert" className="mb-3 rounded border border-red-700 bg-red-50 p-3 text-red-700">
@@ -498,5 +503,6 @@ export default function EditorPage() {
         syncDown={syncDown}
       />
     </main>
+    </AccessibilityProvider>
   )
 }

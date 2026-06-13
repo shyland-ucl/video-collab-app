@@ -128,10 +128,27 @@ function mapClips(editState, sceneId, fn) {
   return { ...editState, clips };
 }
 
+// Strip a clip id back to its originating segment id (mirrors stateStore's
+// rootSegmentId — duplicated here to keep sceneEditOps free of cross-module
+// imports). Splits append '-split-<ts>-<seq>' suffixes; the root is the segment
+// that the timeline was bootstrapped from / that descriptions live on.
+function rootOf(clipId) {
+  return typeof clipId === 'string' ? clipId.replace(/(-split-\d+-[0-9a-z]+)+$/, '') : clipId;
+}
+
 export function deleteClip(editState, sceneId) {
   const clips = (editState.clips || []).filter((c) => c.id !== sceneId);
   const captions = (editState.captions || []).filter((cap) => cap.sceneId !== sceneId);
-  return { ...editState, clips, captions };
+  // Tombstone the deleted clip's ROOT segment so a later editor load doesn't
+  // resurrect it as a "new" ready segment (EditorPage.mergeNewSegments honours
+  // this). Only tombstone when no surviving clip still derives from that root —
+  // deleting one split piece while another remains must not erase the segment.
+  const removedRoot = rootOf(sceneId);
+  const stillPresent = clips.some((c) => rootOf(c.id) === removedRoot);
+  const deletedSegmentIds = stillPresent
+    ? editState.deletedSegmentIds || []
+    : Array.from(new Set([...(editState.deletedSegmentIds || []), removedRoot]));
+  return { ...editState, clips, captions, deletedSegmentIds };
 }
 
 /**
