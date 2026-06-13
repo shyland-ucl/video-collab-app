@@ -207,10 +207,10 @@ describe('CreatorDevice — edit by myself (delete round-trip)', () => {
     const applyAndSave = trackingApplyAndSave(tracked)
     await act(async () => { renderDevice({ applyAndSave }) })
 
-    // Edit: split (keeps the panel open so Undo is reachable in the same panel).
+    // Edit: trim/split (keeps the panel open so Undo is reachable in the same panel).
     const region = await expandScene(1, 'Scene 1')
     await userEvent.click(region.getByRole('button', { name: /edit by myself/i }))
-    await userEvent.click(region.getByRole('button', { name: /split this clip/i }))
+    await userEvent.click(region.getByRole('button', { name: /trim this scene at the current position/i }))
     // The edit landed.
     expect(tracked.state.clips.length).toBe(4)
 
@@ -255,10 +255,10 @@ describe('CreatorDevice — edit stamps (buildEditChangeSceneStamp)', () => {
     let view
     await act(async () => { view = render(<CreatorDevice {...props} />) })
 
-    // Split Scene 1 via the real Edit-by-Myself panel.
+    // Trim/split Scene 1 via the real Edit-by-Myself panel.
     const region = await expandScene(1, 'Scene 1')
     await userEvent.click(region.getByRole('button', { name: /edit by myself/i }))
-    await userEvent.click(region.getByRole('button', { name: /split this clip/i }))
+    await userEvent.click(region.getByRole('button', { name: /trim this scene at the current position/i }))
     // The split landed in tracked state: s1 → s1 + s1-split-…
     expect(tracked.state.clips.length).toBe(4)
     expect(tracked.state.clips[1].id).toMatch(/^s1-split-/)
@@ -495,6 +495,61 @@ describe('CreatorDevice — colour sync (helper grade reaches the creator video)
     const { container } = renderDevice({ state: SPLIT_STATE })
     const active = activeVideo(container)
     expect(active.style.filter).toMatch(/brightness/)
+  })
+})
+
+describe('CreatorDevice — helper text overlays (render on the pinned creator video)', () => {
+  // The bug: the creator's pinned <video> block rendered captions + colour grade
+  // but NOT state.textOverlays, while the helper preview (EditorVideoPlayer) and
+  // the probe creator both render them — a helper-added overlay reached the
+  // creator invisibly. The fix renders the visible overlays keyed on the active
+  // scene's rootSegmentId, exactly as EditorVideoPlayer does, isEditing=false.
+  // TextOverlay renders overlay.content as its text, so we assert on that.
+
+  it('renders a TextOverlay for an overlay whose sceneId matches the ACTIVE scene', () => {
+    // Active clip is s1 (currentClipIndex 0). Overlay is pinned to s1.
+    renderDevice({
+      state: {
+        ...STATE,
+        textOverlays: [{ id: 'o1', sceneId: 's1', content: 'WATCH THIS', x: 50, y: 20, size: 'M', color: '#fff' }],
+      },
+    })
+    expect(screen.getByText('WATCH THIS')).toBeInTheDocument()
+  })
+
+  it('does NOT render an overlay whose sceneId belongs to a non-active scene', () => {
+    // Active clip is s1; the overlay is pinned to s2 → filtered out.
+    renderDevice({
+      state: {
+        ...STATE,
+        textOverlays: [{ id: 'o2', sceneId: 's2', content: 'LATER SCENE', x: 50, y: 20, size: 'M', color: '#fff' }],
+      },
+    })
+    expect(screen.queryByText('LATER SCENE')).not.toBeInTheDocument()
+  })
+
+  it('renders no overlays when state.textOverlays is empty', () => {
+    const { container } = renderDevice({ state: { ...STATE, textOverlays: [] } })
+    // No overlay text nodes inside the aria-hidden video container.
+    expect(screen.queryByText('WATCH THIS')).not.toBeInTheDocument()
+    expect(container.querySelector('[role="button"][aria-label*="Reposition text"]')).toBeNull()
+  })
+
+  it('keys overlay visibility on the ROOT segment id so a split half shows the root overlay', () => {
+    const SPLIT_STATE = {
+      clips: [
+        { id: 's1', sourceId: 'v1', name: 'Scene 1', startTime: 0, endTime: 3, trimStart: 0, trimEnd: 0, color: '#E74C3C' },
+        { id: 's1-split-123-a', sourceId: 'v1', name: 'Scene 1', startTime: 3, endTime: 6, trimStart: 0, trimEnd: 0, color: '#E74C3C' },
+      ],
+      captions: [],
+      colour: {},
+      // Overlay pinned to the ROOT scene id.
+      textOverlays: [{ id: 'o3', sceneId: 's1', content: 'ROOT OVERLAY', x: 50, y: 20, size: 'M', color: '#fff' }],
+    }
+    // Second split half is the active clip — the root overlay must still show.
+    engineMock.currentClipIndex = 1
+    renderDevice({ state: SPLIT_STATE })
+    expect(screen.getByText('ROOT OVERLAY')).toBeInTheDocument()
   })
 })
 

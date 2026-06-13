@@ -114,3 +114,81 @@ describe('VoiceComposer', () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 })
+
+describe('VoiceComposer — focus management (probe parity)', () => {
+  // The mic auto-focuses on mount (mount === ask-panel-opened) and refocuses
+  // when a request resolves if focus fell to <body> — mirroring the probe's
+  // InlineVQAComposer / TaskRouterPanel so a BLV user is not stranded.
+
+  function flushRaf() {
+    // Run the rAF callbacks the focus effects scheduled. jsdom's rAF resolves on
+    // a macrotask; act() flushes the React effect, then we drain the rAF.
+    return act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()))
+    })
+  }
+
+  it('auto-focuses the mic button on mount', async () => {
+    render(<VoiceComposer onSubmit={vi.fn()} />)
+    await flushRaf()
+    const mic = screen.getByRole('button', { name: /^voice input$/i })
+    expect(document.activeElement).toBe(mic)
+  })
+
+  it('refocuses the mic when disabled goes true→false and focus is on <body>', async () => {
+    const { rerender } = render(<VoiceComposer onSubmit={vi.fn()} disabled />)
+    await flushRaf()
+    // Simulate the focus having fallen to <body> mid-request.
+    document.body.focus()
+    if (document.activeElement !== document.body) {
+      // jsdom: blur the active element so activeElement falls back to body.
+      document.activeElement?.blur?.()
+    }
+    expect(document.activeElement === document.body || !document.activeElement).toBe(true)
+
+    // Request resolves: disabled true→false.
+    rerender(<VoiceComposer onSubmit={vi.fn()} disabled={false} />)
+    await flushRaf()
+
+    const mic = screen.getByRole('button', { name: /^voice input$/i })
+    expect(document.activeElement).toBe(mic)
+  })
+})
+
+describe('VoiceComposer — submitOnVoice (per-surface voice behaviour)', () => {
+  it('with submitOnVoice default (true), a speech result auto-submits', () => {
+    const onSubmit = vi.fn()
+    render(<VoiceComposer onSubmit={onSubmit} inputAriaLabel="Your question" />)
+    act(() => {
+      hookState.lastOptions.onResult('brighten the kitchen shot')
+    })
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit).toHaveBeenCalledWith('brighten the kitchen shot')
+  })
+
+  it('with submitOnVoice={false}, a speech result FILLS the input and does NOT submit', () => {
+    const onSubmit = vi.fn()
+    render(<VoiceComposer onSubmit={onSubmit} submitOnVoice={false} inputAriaLabel="Task description" />)
+    act(() => {
+      hookState.lastOptions.onResult('trim the noisy intro and add a caption')
+    })
+    // Filled, not submitted.
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByRole('textbox', { name: /task description/i })).toHaveValue(
+      'trim the noisy intro and add a caption'
+    )
+  })
+
+  it('with submitOnVoice={false}, an explicit submit then calls onSubmit with the filled text', async () => {
+    const onSubmit = vi.fn()
+    render(<VoiceComposer onSubmit={onSubmit} submitOnVoice={false} submitLabel="Send to helper" inputAriaLabel="Task description" />)
+    act(() => {
+      hookState.lastOptions.onResult('trim the noisy intro')
+    })
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: /send to helper/i }))
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit).toHaveBeenCalledWith('trim the noisy intro')
+  })
+})

@@ -5,6 +5,7 @@ import usePlaybackEngine, { computeClipLayout } from '../../hooks/usePlaybackEng
 import { colourValuesToFilter, colourValuesToTransform } from './HelperDevice'
 import SceneBlockList from './sceneblocks/SceneBlockList'
 import SceneActions from './SceneActions'
+import TextOverlay from './TextOverlay'
 
 /**
  * Creator device — the primary interface for a blind/low-vision creator.
@@ -115,6 +116,25 @@ export default function CreatorDevice({
   const activeColour = activeClip ? colour?.[rootSegmentId(activeClip.id)] : null
   const videoFilter = useMemo(() => colourValuesToFilter(activeColour), [activeColour])
   const videoTransform = useMemo(() => colourValuesToTransform(activeColour), [activeColour])
+
+  // ---- Helper-added TEXT OVERLAYS for the active scene ----
+  // Overlays live in state.textOverlays (same project_state → realtime → state
+  // path the creator already consumes for captions + colour). The helper preview
+  // (EditorVideoPlayer) and the probe creator both render them; the creator's
+  // pinned video must too, or a helper-added overlay reaches the creator
+  // invisibly. We mirror EditorVideoPlayer exactly: filter by the active scene's
+  // rootSegmentId (so a split's halves resolve to the original scene). Rendered
+  // isEditing=false → pointer-events-none + out of the AT tree, preserving the
+  // visual-only/inert creator contract.
+  const textOverlays = state?.textOverlays ?? []
+  const activeSceneId = activeClip?.id ? rootSegmentId(activeClip.id) : null
+  const visibleTextOverlays = useMemo(
+    () =>
+      textOverlays.filter(
+        (o) => !o.sceneId || (activeSceneId && rootSegmentId(o.sceneId) === activeSceneId)
+      ),
+    [textOverlays, activeSceneId]
+  )
 
   // Refs so the broadcast effects/interval + the boundary watcher read fresh
   // values without re-running.
@@ -337,6 +357,13 @@ export default function CreatorDevice({
               />
             )
           })}
+          {/* Helper-added text overlays for the active scene — rendered
+              isEditing=false so they stay pointer-events-none and out of the AT
+              tree (the visual-only/inert creator contract). Same treatment the
+              helper preview (EditorVideoPlayer) gives captions + colour. */}
+          {visibleTextOverlays.map((o) => (
+            <TextOverlay key={o.id} overlay={o} isEditing={false} onMove={() => {}} />
+          ))}
           {engine.activeCaption && (
             <div
               className="absolute bottom-0 left-0 right-0 flex justify-center pointer-events-none"

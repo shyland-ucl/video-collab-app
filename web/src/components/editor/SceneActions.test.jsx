@@ -23,9 +23,15 @@ vi.mock('../../contexts/AccessibilityContext', () => ({
 // Mock the speech-recognition hook so jsdom never touches the Web Speech API.
 // VoiceComposer (used by all three composers) is the only consumer; we return
 // an idle, no-op shape so the text-input path the existing tests drive is
-// unaffected and the mic button still renders.
+// unaffected and the mic button still renders. We capture each mount's options
+// (keyed by announcement, which is per-surface) so a test can drive a voice
+// `onResult` into a specific composer (e.g. the Ask-Helper task composer).
+const speechHook = vi.hoisted(() => ({ byAnnouncement: {} }))
 vi.mock('../../hooks/useSpeechRecognition', () => ({
-  default: () => ({ isListening: false, isPreparing: false, toggleListening: vi.fn() }),
+  default: (options) => {
+    if (options?.announcement) speechHook.byAnnouncement[options.announcement] = options
+    return { isListening: false, isPreparing: false, toggleListening: vi.fn() }
+  },
 }))
 
 import SceneActions from './SceneActions'
@@ -77,6 +83,7 @@ function renderActions(overrides = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  speechHook.byAnnouncement = {}
 })
 
 describe('SceneActions — play controls', () => {
@@ -148,8 +155,33 @@ describe('SceneActions — edit by myself', () => {
   it('Split immediately announces "Scene N trimmed at this point." (Fix A)', async () => {
     renderActions({ index: 2 })
     await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
-    await userEvent.click(screen.getByRole('button', { name: /split this clip/i }))
+    await userEvent.click(screen.getByRole('button', { name: /trim this scene at the current position/i }))
     expect(mockAnnounce).toHaveBeenCalledWith('Scene 3 trimmed at this point.')
+  })
+
+  it('the Trim button reads "Trim here" with an explanation + clip-count line', async () => {
+    renderActions()
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+    // Button label is "Trim here" (probe wording), not the bare "Split".
+    const trim = screen.getByRole('button', { name: /trim this scene at the current position — splits it into two clips/i })
+    expect(trim).toHaveTextContent('Trim here')
+    expect(screen.queryByRole('button', { name: /^split this clip/i })).not.toBeInTheDocument()
+    // Explanatory copy + live clip-count (1 clip for an unsplit scene).
+    expect(screen.getByText(/it splits into two clips/i)).toBeInTheDocument()
+    expect(screen.getByText(/this scene currently has 1 clip\./i)).toBeInTheDocument()
+  })
+
+  it('the clip-count line reflects multiple clips after a split (allClips has split halves)', async () => {
+    // allClips carries s1 + its split half → the scene spans 2 clips.
+    renderActions({
+      allClips: [
+        { id: 's1', name: 'Scene 1', startTime: 0, endTime: 3, trimStart: 0, trimEnd: 0 },
+        { id: 's1-split-123-a', name: 'Scene 1', startTime: 3, endTime: 6, trimStart: 0, trimEnd: 0 },
+        { id: 's2', name: 'Scene 2', startTime: 6, endTime: 12, trimStart: 0, trimEnd: 0 },
+      ],
+    })
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+    expect(screen.getByText(/this scene currently has 2 clips\./i)).toBeInTheDocument()
   })
 
   it('Move earlier immediately announces "Scene N moved earlier." (Fix A)', async () => {
@@ -178,11 +210,11 @@ describe('SceneActions — edit by myself', () => {
   it('Undo applies a non-rebasable state-replacing op', async () => {
     const { props } = renderActions()
     await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
-    // Seed the undo stack with a panel-preserving edit (Split keeps the panel
+    // Seed the undo stack with a panel-preserving edit (Trim keeps the panel
     // open; Delete closes it). The real applyAndSave invokes the opFn, which
     // captures the pre-image; the spy here doesn't, but the contract under
     // test is only the non-rebasable replacement.
-    await userEvent.click(screen.getByRole('button', { name: /split this clip/i }))
+    await userEvent.click(screen.getByRole('button', { name: /trim this scene at the current position/i }))
     props.applyAndSave.mockClear()
 
     await userEvent.click(screen.getByRole('button', { name: /undo last edit/i }))
@@ -203,6 +235,48 @@ describe('SceneActions — ask helper', () => {
     expect(props.onCreateTask).toHaveBeenCalledWith({
       text: 'brighten this shot',
       segmentLabel: 'Scene 1',
+    })
+  })
+
+  it('the Ask-Helper composer gets submitOnVoice={false}: a voice result FILLS the field and does NOT send the task yet', async () => {
+    const { props } = renderActions()
+    await userEvent.click(screen.getByRole('button', { name: /ask helper to edit/i }))
+    const panel = screen.getByRole('group', { name: /ask helper/i })
+
+    // Drive a recognised transcript into the helper composer (keyed by its
+    // per-surface announcement). submitOnVoice={false} → it fills, not sends.
+    const helperOpts = speechHook.byAnnouncement['Speak now. Describe the task for your helper.']
+    expect(helperOpts).toBeTruthy()
+    act(() => {
+      helperOpts.onResult('please trim the long boring intro and brighten it')
+    })
+
+    // The transcript is in the box for review; no task created yet (review-before-send).
+    expect(props.onCreateTask).not.toHaveBeenCalled()
+    expect(within(panel).getByRole('textbox')).toHaveValue('please trim the long boring intro and brighten it')
+
+    // An explicit Send then dispatches the reviewed instruction.
+    await userEvent.click(within(panel).getByRole('button', { name: /send to helper/i }))
+    expect(props.onCreateTask).toHaveBeenCalledWith({
+      text: 'please trim the long boring intro and brighten it',
+      segmentLabel: 'Scene 1',
+    })
+  })
+
+  it('the VQA composer keeps auto-submit (submitOnVoice default): a voice result POSTs immediately', async () => {
+    mockServerPost.mockResolvedValueOnce({ answer: 'A red pot.' })
+    renderActions()
+    await userEvent.click(screen.getByRole('button', { name: /ask ai about scene/i }))
+
+    const vqaOpts = speechHook.byAnnouncement['Speak now. Ask your question.']
+    expect(vqaOpts).toBeTruthy()
+    await act(async () => {
+      vqaOpts.onResult('what colour is the pot?')
+    })
+
+    // VQA still auto-submits on voice → it POSTs straight away.
+    expect(mockServerPost).toHaveBeenCalledWith('/api/segments/s1/vqa', {
+      question: 'what colour is the pot?',
     })
   })
 })

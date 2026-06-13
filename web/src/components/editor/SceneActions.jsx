@@ -93,6 +93,15 @@ export default function SceneActions({
   const aiClips = allClips && allClips.length > 0 ? allClips : (clip ? [clip] : [])
   const { audioEnabled, speechRate } = useAccessibility()
 
+  // Live count of how many clips this scene currently spans (1 until a Trim
+  // splits it). rootSegmentId collapses a clip and all its split halves to the
+  // original scene, so counting timeline clips whose root matches this scene's
+  // root is exact (probe EditByMyselfPanel clipCountForScene). Drives the
+  // "This scene currently has N clips" line under Trim.
+  const clipCountForScene = clip
+    ? (aiClips.filter((c) => rootSegmentId(c.id) === rootSegmentId(clip.id)).length || 1)
+    : 1
+
   // Inline toggle panels (probe pattern — NOT full-screen modals). Only the
   // confirm-first AI dialog is genuinely modal (it owns useRootInert itself).
   const [showVqa, setShowVqa] = useState(false)
@@ -420,14 +429,28 @@ export default function SceneActions({
             aria-label="Edit by Myself"
             className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 flex flex-col gap-2"
           >
+            {/* Trim (split). The probe labels this "Trim here" with explanatory
+                copy + a live clip-count, because pairing Trim with Remove is how
+                a BLV creator drops an unwanted part of a scene. */}
+            <p className="text-sm text-gray-600">
+              Trims this scene at the current playback time — it splits into two
+              clips. Pair with Delete to drop the part you don&apos;t want.
+            </p>
+            <p
+              className="text-xs text-gray-500"
+              data-clip-count-for={clip.id}
+            >
+              This scene currently has {clipCountForScene} clip
+              {clipCountForScene === 1 ? '' : 's'}.
+            </p>
             <button
               type="button"
               onClick={handleSplit}
-              aria-label="Split this clip at the current playback position"
+              aria-label="Trim this scene at the current position — splits it into two clips"
               className="w-full py-3 rounded-lg bg-[#2B579A] text-sm font-bold text-white hover:bg-[#1e3f6f] focus:outline-none focus:ring-2 focus:ring-[#2B579A] focus:ring-offset-1"
               style={{ minHeight: '48px' }}
             >
-              Split
+              Trim here
             </button>
             <div className="flex gap-2">
               <button
@@ -576,6 +599,11 @@ export default function SceneActions({
               announcement="Speak now. Describe the task for your helper."
               submitLabel="Send to helper"
               inputAriaLabel="Task description"
+              // Helper-task voice FILLS the field for review, then the creator
+              // sends explicitly — a blind helper can compose a longer,
+              // multi-sentence instruction (probe TaskRouterPanel). VQA + Ask AI
+              // to Edit keep the default auto-submit.
+              submitOnVoice={false}
             />
           </div>
         )}

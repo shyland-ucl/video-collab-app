@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import useSpeechRecognition from '../../hooks/useSpeechRecognition'
 
 /**
@@ -32,6 +32,18 @@ import useSpeechRecognition from '../../hooks/useSpeechRecognition'
  *                   (per-context, e.g. "Speak now. Ask your question.").
  *   submitLabel     visible + aria text for the submit button (e.g. "Ask").
  *   inputAriaLabel  aria-label for the text input.
+ *   submitOnVoice   true (default) → a recognised transcript auto-submits
+ *                   immediately (probe InlineVQAComposer: VQA + Ask AI to Edit).
+ *                   false → the transcript FILLS the text input and waits for an
+ *                   explicit Enter / Send (probe TaskRouterPanel: the Ask-Helper
+ *                   task composer, so a blind helper can compose a longer,
+ *                   multi-sentence instruction before sending).
+ *
+ * Focus management (probe parity — InlineVQAComposer / TaskRouterPanel):
+ *   - on mount the mic button is auto-focused (the composer mounts when its "ask"
+ *     panel opens, so mount === panel-opened; landing on the mic saves a swipe);
+ *   - when `disabled` flips true→false (the request resolved) and focus fell to
+ *     <body>, the mic is refocused so the user stays anchored in the composer.
  */
 
 const ACCENT = '#9B59B6' // Probe 3 creator primary (purple)
@@ -43,9 +55,39 @@ export default function VoiceComposer({
   announcement = 'Speak now.',
   submitLabel = 'Send',
   inputAriaLabel = 'Type your message',
+  submitOnVoice = true,
 }) {
   const [input, setInput] = useState('')
   const voiceButtonRef = useRef(null)
+
+  // Auto-focus the mic button on mount. The composer renders only when its
+  // parent "ask" panel opens, so mount === panel-opened; voice is the primary
+  // BLV interaction, so landing on the mic skips one swipe (probe
+  // InlineVQAComposer / TaskRouterPanel).
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => voiceButtonRef.current?.focus())
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  // When `disabled` flips true→false (the request resolved) restore focus to the
+  // mic if focus fell to <body> — TalkBack/Chromium drop focus to <body> when a
+  // focused element is disabled, and even though we only signal disablement via
+  // aria-disabled, a tap elsewhere mid-pending can still strand focus. Probe
+  // InlineVQAComposer parity.
+  const wasDisabledRef = useRef(disabled)
+  useEffect(() => {
+    if (wasDisabledRef.current && !disabled) {
+      const raf = requestAnimationFrame(() => {
+        if (document.activeElement === document.body || !document.activeElement) {
+          voiceButtonRef.current?.focus()
+        }
+      })
+      wasDisabledRef.current = false
+      return () => cancelAnimationFrame(raf)
+    }
+    wasDisabledRef.current = disabled
+    return undefined
+  }, [disabled])
 
   const submit = useCallback(
     (text) => {
@@ -56,10 +98,24 @@ export default function VoiceComposer({
     [onSubmit, disabled]
   )
 
-  // Auto-submit on speech: the recognised transcript goes straight to submit,
-  // matching the probe (onResult wired directly to its submit function).
+  // Speech result handler. submitOnVoice (default) auto-submits the transcript
+  // straight away — the probe InlineVQAComposer behaviour (VQA + Ask AI to Edit).
+  // When false, FILL the input instead and wait for an explicit Enter / Send —
+  // the probe TaskRouterPanel behaviour (Ask-Helper task), so a blind helper can
+  // compose a longer instruction before sending.
+  const handleVoiceResult = useCallback(
+    (transcript) => {
+      if (submitOnVoice) {
+        submit(transcript)
+      } else {
+        setInput(transcript)
+      }
+    },
+    [submitOnVoice, submit]
+  )
+
   const { isListening, isPreparing, toggleListening } = useSpeechRecognition({
-    onResult: submit,
+    onResult: handleVoiceResult,
     announcement,
   })
 
