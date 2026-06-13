@@ -235,3 +235,50 @@ describe('SceneBlockList — auto-follow', () => {
     expect(document.querySelector('[data-scene-actions-region="0"]')).not.toBeInTheDocument()
   })
 })
+
+describe('SceneBlockList — a11y announce on expand', () => {
+  // Pin the core a11y contract: manual expand IS announced assertively so a
+  // screen-reader user hears which scene opened; auto-follow during playback
+  // must NOT announce so TalkBack stays silent while the video plays.
+  // (SceneBlock.jsx line 112: announce() is guarded by `if (autoFollowed) return`.)
+
+  it('manual expand calls announce() assertively; auto-follow across a boundary does NOT call announce()', async () => {
+    // ── Phase 1: manual expand (user taps Scene 1 header) ───────────────────
+    // Use a fresh render so the focus state is clean for both phases.
+    const { unmount } = renderList({ currentTime: 0, isPlaying: false })
+    mockAnnounce.mockClear()
+    await userEvent.click(headerForScene(0))
+
+    // announce() must have been called at least once for the manual expand.
+    // The exact message is "Opened scene 1. Scene 1. Showing actions." but we
+    // only assert that it was called with assertive: true, not the string, so
+    // this test stays robust to wording tweaks.
+    expect(mockAnnounce).toHaveBeenCalledWith(
+      expect.stringContaining('Scene 1'),
+      expect.objectContaining({ assertive: true }),
+    )
+    unmount()
+
+    // ── Phase 2: auto-follow across a scene boundary during playback ─────────
+    // Fresh render starting in paused state inside scene 1 (0..6).
+    mockAnnounce.mockClear()
+    const { rerender, props: props2 } = renderList({ currentTime: 3, isPlaying: false })
+
+    // Kick off playback — auto-expand-on-start fires and opens scene 1 (index 0).
+    rerender(<SceneBlockList {...props2} currentTime={3} isPlaying />)
+    expect(document.querySelector('[data-scene-actions-region="0"]')).toBeInTheDocument()
+
+    // Clear any announce calls from the initial auto-expand start.
+    mockAnnounce.mockClear()
+
+    // Cross the boundary into scene 2 (6..12). The boundary-crossing effect
+    // moves expandedIndex from 0 → 1 with expandSource='auto', so SceneBlock
+    // receives autoFollowed=true and must NOT call announce().
+    rerender(<SceneBlockList {...props2} currentTime={9} isPlaying />)
+
+    // Confirm scene 2 is now auto-expanded (guard that auto-follow fired).
+    expect(document.querySelector('[data-scene-actions-region="1"]')).toBeInTheDocument()
+    // The expand itself must be silent — no announce() call for the auto-expansion.
+    expect(mockAnnounce).not.toHaveBeenCalled()
+  })
+})
