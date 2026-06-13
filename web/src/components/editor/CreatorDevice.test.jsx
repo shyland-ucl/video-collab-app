@@ -400,22 +400,55 @@ describe('CreatorDevice — colour sync (helper grade reaches the creator video)
   // The bug: the creator's pinned <video> rendered with no filter/transform, so
   // the helper's colour grade synced into state.colour but never showed. The fix
   // renders the SAME filter/transform the helper preview does, keyed on the
-  // active scene's rootSegmentId.
-  it('the active scene video carries a non-empty CSS filter when state.colour is set', () => {
-    // Active clip is s1 (currentClipIndex 0). Grade s1.
+  // active scene's rootSegmentId — and ONLY on the active (visible) source's
+  // video, so the active-scene keying is explicit and testable.
+
+  // The active source is the one shown (display: block); inactive sources are
+  // display: none. engineMock.activeSourceId === 'v1' by default.
+  function activeVideo(container) {
+    return [...container.querySelectorAll('video')].find(
+      (v) => v.style.display === 'block'
+    )
+  }
+  function inactiveVideos(container) {
+    return [...container.querySelectorAll('video')].filter(
+      (v) => v.style.display === 'none'
+    )
+  }
+
+  it('the ACTIVE (visible) scene video carries a non-empty CSS filter when state.colour is set', () => {
+    // Active clip is s1 (currentClipIndex 0, source v1). Grade s1.
     const { container } = renderDevice({
       state: { ...STATE, colour: { s1: { brightness: 40 } } },
     })
-    const filtered = container.querySelector('video[style*="brightness"]')
-    expect(filtered).not.toBeNull()
+    const active = activeVideo(container)
+    expect(active).toBeTruthy()
+    expect(active.style.filter).toMatch(/brightness/)
   })
 
-  it('a zoom grade carries a scale() transform on the active scene video', () => {
+  it('does NOT put the filter on non-active videos (grade keyed to the active source only)', () => {
+    // STATE spans v1 (s1,s2) and v2 (s3); v1 is active. The v2 <video> is
+    // inactive and must carry no filter even while v1 is graded.
+    const { container } = renderDevice({
+      state: { ...STATE, colour: { s1: { brightness: 40 } } },
+    })
+    const inactive = inactiveVideos(container)
+    expect(inactive.length).toBeGreaterThan(0)
+    inactive.forEach((v) => {
+      expect(v.style.filter).toBe('')
+      expect(v.style.transform).toBe('')
+    })
+    // And no inactive video matched the filter selector.
+    expect(container.querySelector('video[style*="brightness"]').style.display).toBe('block')
+  })
+
+  it('a zoom grade carries a scale() transform on the ACTIVE scene video only', () => {
     const { container } = renderDevice({
       state: { ...STATE, colour: { s1: { zoom: 130 } } },
     })
-    const scaled = container.querySelector('video[style*="scale"]')
-    expect(scaled).not.toBeNull()
+    const active = activeVideo(container)
+    expect(active.style.transform).toMatch(/scale/)
+    inactiveVideos(container).forEach((v) => expect(v.style.transform).toBe(''))
   })
 
   it('renders NO filter when the active scene has no colour grade', () => {
@@ -424,7 +457,7 @@ describe('CreatorDevice — colour sync (helper grade reaches the creator video)
     expect(container.querySelector('video[style*="scale"]')).toBeNull()
   })
 
-  it('reads colour by ROOT segment id so a split half inherits the root grade', () => {
+  it('reads colour by ROOT segment id so a split half inherits the root grade (on the active video)', () => {
     const SPLIT_STATE = {
       clips: [
         { id: 's1', sourceId: 'v1', name: 'Scene 1', startTime: 0, endTime: 3, trimStart: 0, trimEnd: 0, color: '#E74C3C' },
@@ -433,10 +466,11 @@ describe('CreatorDevice — colour sync (helper grade reaches the creator video)
       captions: [], textOverlays: [],
       colour: { s1: { brightness: 50 } }, // graded on the root scene
     }
-    // Second split half active — same root colour still applies.
+    // Second split half active — same root colour still applies, on source v1.
     engineMock.currentClipIndex = 1
     const { container } = renderDevice({ state: SPLIT_STATE })
-    expect(container.querySelector('video[style*="brightness"]')).not.toBeNull()
+    const active = activeVideo(container)
+    expect(active.style.filter).toMatch(/brightness/)
   })
 })
 

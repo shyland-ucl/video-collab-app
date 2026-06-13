@@ -318,11 +318,14 @@ export default function CreatorDevice({
                 className="w-full h-full object-contain absolute inset-0"
                 style={{
                   display: isActive ? 'block' : 'none',
-                  // The active scene's grade applies to whichever source is
-                  // visible; only the active source is shown, so applying to all
-                  // is harmless. Mirrors EditorVideoPlayer's helper preview.
-                  filter: videoFilter || undefined,
-                  transform: videoTransform || undefined,
+                  // The grade belongs to the ACTIVE scene, so key it on the
+                  // active (visible) source only: non-active <video>s carry no
+                  // filter/transform. Same visual result as gating display alone
+                  // (only the active source shows), but the active-scene keying
+                  // is now explicit and testable. Mirrors EditorVideoPlayer's
+                  // helper preview.
+                  filter: isActive ? videoFilter || undefined : undefined,
+                  transform: isActive ? videoTransform || undefined : undefined,
                   transformOrigin: 'center center',
                   transition: 'transform 0.2s ease-out',
                 }}

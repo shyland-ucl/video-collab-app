@@ -609,16 +609,24 @@ export function summarizeEditStateChange(prevState, nextState, actorLabel = 'Col
         // so a real clip/caption/sound/overlay edit always wins.
         const colourChange = findColourChange(prevColour, nextColour);
         if (colourChange) {
+          if (colourChange.property) {
+            // A single moved property — announce it through the SAME helper that
+            // the helper device uses as its applyAndSave done-text
+            // (EditorTimeline → summarizeVisualAdjustment(property, value,
+            // 'Helper').announcement). Reusing it here means the two devices
+            // describe the identical colour edit with identical wording (e.g.
+            // "changed brightness +15. Review the video frame to confirm the
+            // visual change."), and it matches the probe. Per the probe we do
+            // NOT append "on scene N" — the helper's done-text carries no scene
+            // number, so neither does the creator's announcement.
+            return summarizeVisualAdjustment(colourChange.property, colourChange.value, actorLabel);
+          }
+          // Rare multi-property grade (a reset, or an AI fix touching several at
+          // once) — summarizeVisualAdjustment names a single property, so fall
+          // back to a generic, scene-anchored phrasing here.
           const idx = findColourSceneIndex(colourChange.sceneId, nextClips);
           const label = idx >= 0 ? sceneLabel(idx) : 'a scene';
-          if (colourChange.property) {
-            // describeEditOp gives "Brightness +15" / "Zoom 120%" — lower-case
-            // just the property word for the in-sentence phrasing.
-            const propWord = describeEditOp(colourChange.property).split(' ')[0].toLowerCase();
-            actionText = `adjusted the ${propWord} on ${label}`;
-          } else {
-            actionText = `adjusted the look of ${label}`;
-          }
+          actionText = `adjusted the look of ${label}`;
           promptText = 'Check the video to see the change.';
         }
       }

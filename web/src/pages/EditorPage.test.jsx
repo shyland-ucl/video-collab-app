@@ -312,6 +312,61 @@ describe('EditorPage', () => {
     })
   })
 
+  it('end-to-end: a REMOTE colour insert announces on the creator using the REAL summarizer (colour branch + announce gate)', async () => {
+    // Every other test stubs summarizeEditStateChange via mockSummarize, so the
+    // real colour branch and the page's `if (summary.announcement)` gate are
+    // never exercised together. Here we delegate the mock to the REAL impl so
+    // the full path runs: colour diff → summarizeVisualAdjustment wording →
+    // announce(). vi.importActual bypasses the module mock for the real fn.
+    const actual = await vi.importActual('../lib/editor/projectOverview')
+    mockSummarize.mockImplementation(actual.summarizeEditStateChange)
+
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    // Colour-only diff: prev colour {} → next colour { s1: { brightness: 30 } },
+    // clips otherwise identical. updated_by is the OTHER user so it is not an
+    // own-echo. (s1 is the rootSegmentId of clip s1.)
+    const COLOUR_STATE = { ...STATE_V1, colour: { s1: { brightness: 30 } } }
+    act(() => {
+      channelOpts().onStateInsert({ version: 2, state: COLOUR_STATE, updated_by: 'u2' })
+    })
+
+    // The real summarizer announced the colour change with the helper/probe
+    // wording (matching summarizeVisualAdjustment): brightness + the review prompt.
+    const expected = actual.summarizeVisualAdjustment('brightness', 30, 'Your collaborator')
+    expect(announce).toHaveBeenCalledWith(expected.announcement)
+    expect(announce).toHaveBeenCalledWith(
+      expect.stringMatching(/brightness/i)
+    )
+    expect(announce).toHaveBeenCalledWith(
+      expect.stringMatching(/review the video frame to confirm the visual change/i)
+    )
+    await waitFor(() => expect(captured.creator.state).toEqual(COLOUR_STATE))
+  })
+
+  it('end-to-end: a colour insert echoed from the current user is NOT announced (own-echo)', async () => {
+    const actual = await vi.importActual('../lib/editor/projectOverview')
+    mockSummarize.mockImplementation(actual.summarizeEditStateChange)
+
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    const COLOUR_STATE = { ...STATE_V1, colour: { s1: { brightness: 30 } } }
+    act(() => {
+      // updated_by === current user (u1) — the creator must not announce its own
+      // colour grade; only the helper's remote change is announced.
+      channelOpts().onStateInsert({ version: 2, state: COLOUR_STATE, updated_by: 'u1' })
+    })
+
+    expect(mockSummarize).not.toHaveBeenCalled()
+    expect(announce).not.toHaveBeenCalled()
+    expect(captured.creator.state).toEqual(STATE_V1)
+    expect(captured.creator.version).toBe(1)
+  })
+
   it('ignores its own echo', async () => {
     renderPage()
     await screen.findByText('creator device')

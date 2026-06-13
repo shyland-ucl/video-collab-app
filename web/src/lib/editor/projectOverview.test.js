@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   summarizeEditStateChange,
+  summarizeVisualAdjustment,
   formatDuration,
   getTimelineDuration,
   getEffectiveClipDuration,
@@ -155,18 +156,39 @@ describe('summarizeEditStateChange', () => {
   })
 
   // ---- Colour grade announcement (helper colour → BLV creator) ----
-  it('announces a colour-only change naming the scene and the property', () => {
+  // A single-property colour change must announce with the SAME wording the
+  // helper device speaks (EditorTimeline → summarizeVisualAdjustment(property,
+  // value, 'Helper')) so both devices — and the probe — describe the identical
+  // edit identically. Per the probe, the wording carries NO scene number.
+  it('announces a single-property colour change with the helper/probe wording (no scene number)', () => {
     const prev = { clips: [clip1, clip2], captions: [], textOverlays: [], colour: {} }
     const next = {
       clips: [clip1, clip2], captions: [], textOverlays: [],
-      colour: { b: { brightness: 30 } }, // 'b' is clip2 → scene 2
+      colour: { b: { brightness: 30 } }, // 'b' is clip2
     }
     const summary = summarizeEditStateChange(prev, next, 'Helper')
-    expect(summary.actionText).toMatch(/adjusted the brightness on scene 2/i)
-    expect(summary.shortText).toMatch(/Helper adjusted the brightness on scene 2/i)
-    expect(summary.announcement).toBeTruthy()
-    expect(summary.announcement).toMatch(/check the video/i)
-    expect(summary.promptText).toBeTruthy()
+    // Identical to summarizeVisualAdjustment('brightness', 30, 'Helper').
+    const expected = summarizeVisualAdjustment('brightness', 30, 'Helper')
+    expect(summary).toEqual(expected)
+    expect(summary.actionText).toBe('changed brightness +30')
+    expect(summary.announcement).toBe(
+      'Helper changed brightness +30. Review the video frame to confirm the visual change.'
+    )
+    // Faithful to the helper + probe: no "on scene N" appended.
+    expect(summary.announcement).not.toMatch(/scene/i)
+  })
+
+  it('uses the passed actorLabel as the colour-announcement prefix (creator hears its own label)', () => {
+    const prev = { clips: [clip1], captions: [], textOverlays: [], colour: {} }
+    const next = {
+      clips: [clip1], captions: [], textOverlays: [],
+      colour: { a: { brightness: 15 } },
+    }
+    // The creator-side EditorPage passes roleLabel(otherRole), e.g. "Your helper".
+    const summary = summarizeEditStateChange(prev, next, 'Your helper')
+    expect(summary.announcement).toBe(
+      'Your helper changed brightness +15. Review the video frame to confirm the visual change.'
+    )
   })
 
   it('announces a multi-property colour change as "adjusted the look of" the scene', () => {
@@ -180,15 +202,16 @@ describe('summarizeEditStateChange', () => {
     expect(summary.announcement).toBeTruthy()
   })
 
-  it('keys colour scenes by root segment id (a split half grades the root scene)', () => {
+  it('keys colour scenes by root segment id (a split half grades the root scene) — single property uses helper wording', () => {
     const splitHalf = { id: 'a-split-123-x', name: 'Scene 1', startTime: 2.5, endTime: 5, trimStart: 0, trimEnd: 0 }
     const prev = { clips: [clip1, splitHalf, clip2], captions: [], textOverlays: [], colour: {} }
     const next = {
       clips: [clip1, splitHalf, clip2], captions: [], textOverlays: [],
-      colour: { a: { zoom: 120 } }, // root 'a' → scene 1 (block index 0)
+      colour: { a: { zoom: 120 } }, // root 'a' grade
     }
     const summary = summarizeEditStateChange(prev, next, 'Helper')
-    expect(summary.actionText).toMatch(/adjusted the zoom on scene 1/i)
+    expect(summary.actionText).toBe('changed zoom 120%')
+    expect(summary.announcement).toMatch(/changed zoom 120%/i)
   })
 
   it('stays empty when the colour map is unchanged (no spurious announcement)', () => {
