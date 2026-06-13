@@ -9,6 +9,7 @@ import EditorTimeline from './EditorTimeline'
 import SegmentMarkerPanel from './SegmentMarkerPanel'
 import ActivityFeed from './ActivityFeed'
 import TextOverlaySettings from './TextOverlaySettings'
+import AIAnalysisTriggerCard from './AIAnalysisTriggerCard'
 
 /**
  * Helper device — the sighted collaborator's editing surface.
@@ -70,6 +71,7 @@ export default function HelperDevice({
   state,
   sources,
   tasks,
+  suggestions = [],
   applyAndSave,
   channel,
   remote,
@@ -222,8 +224,17 @@ export default function HelperDevice({
         </div>
       </div>
 
-      {/* Scrollable: activity feed + editor tools */}
+      {/* Scrollable: AI suggestions (read-only) + activity feed + editor tools */}
       <div className="flex-1 min-h-0 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+        {/* Phase 3b — the creator's AI suggestions, READ-ONLY. The helper sees
+            what was found + live resolution badges, but only the creator routes.
+            Renders nothing until an analysis has produced suggestions. */}
+        <AIAnalysisTriggerCard
+          status={suggestions.length > 0 ? 'done' : 'idle'}
+          role="helper"
+          suggestions={suggestions}
+        />
+
         {/* Creator Intent Banner — most recent unfinished task from the feed */}
         {(() => {
           const activeTask = [...tasks].reverse().find((t) => !t.status || t.status === 'pending' || t.status === 'sent')

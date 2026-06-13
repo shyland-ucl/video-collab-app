@@ -64,6 +64,10 @@ export default function SceneBlock({
   // creator hears the change without having to expand or replay.
   editSummary = null,
   descriptionOverride = null,
+  // Phase 3b: when true, this scene carries an AI suggestion — render a "✨ AI"
+  // pill in the header and add a spoken hint to the collapsed aria-label so a
+  // TalkBack creator knows which scenes have one without expanding each.
+  hasSuggestion = false,
 }) {
   const actionsRef = useRef(null);
   const headerButtonRef = useRef(null);
@@ -150,6 +154,7 @@ export default function SceneBlock({
             ? `Scene ${index + 1} of ${total}: ${scene.name}. Playing. Double tap to pause and hear this scene description.`
             : `Scene ${index + 1} of ${total}: ${scene.name}. ${formatDuration(duration)}. ` +
               (isRemoved ? 'Removed from edit. ' : '') +
+              (hasSuggestion ? 'Has an AI suggestion. ' : '') +
               (editSummary ? `Edited: ${editSummary.text}. ` : '') +
               (description ? `${description} ` : '') +
               (isExpanded ? 'Tap to close actions.' : 'Tap to open actions.')
@@ -179,6 +184,15 @@ export default function SceneBlock({
                 title={editSummary.text}
               >
                 Edited
+              </span>
+            )}
+            {hasSuggestion && !isRemoved && (
+              <span
+                className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-[#ece1f5] text-[#6b3f86] flex-shrink-0"
+                aria-hidden="true"
+                title="Has an AI suggestion"
+              >
+                ✨ AI
               </span>
             )}
             {isRemoved && (

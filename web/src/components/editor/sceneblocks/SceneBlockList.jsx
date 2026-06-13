@@ -112,6 +112,9 @@ export default function SceneBlockList({
   // video's first scene and passes it here. We expand + scroll to it ONCE on
   // mount, then behave exactly as today. null/undefined → nothing auto-expanded.
   initialExpandedIndex = null,
+  // Phase 3b: Set of scene (clip) ids that carry an AI suggestion. Drives the
+  // "✨ AI" indicator + aria hint on the collapsed scene block.
+  sceneIdsWithSuggestions = new Set(),
 }) {
   const [expandedIndex, setExpandedIndex] = useState(null);
   // Where the latest expansion came from. Drives focus behavior in SceneBlock:
@@ -656,6 +659,7 @@ export default function SceneBlockList({
                 onPausePlayback={onPause}
                 accentColor={accentColor}
                 isRemoved={false}
+                hasSuggestion={sceneIdsWithSuggestions.has(scene.id)}
                 headerRef={(el) => { headerRefs.current[i] = el; }}
                 editSummary={editedScenes[scene.id] || null}
                 descriptionOverride={getSceneDescription(scene, currentLevel)}

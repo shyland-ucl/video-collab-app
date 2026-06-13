@@ -311,6 +311,13 @@ export default function CreatorDevice({
     () => suggestions.filter((s) => s.video_id === analyseVideoId),
     [suggestions, analyseVideoId]
   )
+  // Clip ids that carry a suggestion — drives the "✨ AI" indicator on the
+  // collapsed scene block so a BLV creator knows which scenes have one without
+  // expanding each.
+  const sceneIdsWithSuggestions = useMemo(
+    () => new Set(videoSuggestions.map((s) => suggestionClip(s, clips)?.id).filter(Boolean)),
+    [videoSuggestions, clips]
+  )
   const [analysisStatus, setAnalysisStatus] = useState('idle')
   const effectiveStatus =
     analysisStatus === 'analysing'
@@ -538,6 +545,7 @@ export default function CreatorDevice({
         editedScenes={editedScenes}
         editState={state}
         initialExpandedIndex={initialExpandedIndex}
+        sceneIdsWithSuggestions={sceneIdsWithSuggestions}
         renderSceneActions={renderSceneActions}
       />
 
