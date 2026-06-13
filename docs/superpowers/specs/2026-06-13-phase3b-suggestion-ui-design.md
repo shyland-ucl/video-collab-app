@@ -149,6 +149,39 @@ One row per curated suggestion. The resolution is mutable columns on the same ro
 - Rate limiting on `/suggest` (still inherited-absent; flagged in the spike spec — add before heavy use).
 - A "mark my self-fix done" completion signal (self routes stay `pending`, as in the probe).
 
+## Adversarial review outcome (2026-06-13)
+
+A 3-lens adversarial review (security/RLS, correctness/realtime, accessibility) +
+a verify pass ran over the full diff. 0 true criticals; 8 important findings
+confirmed and **all fixed** (commit "fix(p3b): address adversarial review"):
+
+- **RLS**: `suggestions` UPDATE was column-wide → migration `0011` scopes the
+  member UPDATE grant to the resolution columns only (+ explicit `WITH CHECK`).
+- **persistSuggestions** is now insert-then-delete-old (no data-loss window, no
+  realtime "vanish" gap) and checks the query/delete errors.
+- **Ask-AI** now awaits `applyAndSave` and marks `applied`/`failed` by the real
+  save outcome (was unconditionally `applied`).
+- Scene labels in `SuggestionItem` + the helper list use the clip's **real
+  timeline name**, not the per-video `related_scene` index.
+- Count + spoken total use only **routable** suggestions (orphaned ones, whose
+  scene was deleted, no longer inflate the total).
+- Removed the `role="status"` double-announce on the done card (visual-only now;
+  the analysing card stays an `aria-live` region).
+- Focus moves to the **resolution badge** after the helper and AI routes (was
+  stranded on `<body>`).
+- `task_id` is cleared when re-routing a suggestion away from the helper.
+
+Accepted / deferred minors (documented decisions, not oversights):
+
+- Routing authority is **member-level**, not creator-only, at the RLS layer —
+  same trust model as the `tasks` table (a within-project, two-collaborator
+  prototype). The helper UI is read-only; a helper *could* forge a routing via
+  a hand-crafted call, accepted as out-of-threat-model.
+- `resolved_by` is best-effort client-supplied attribution (not an authz key).
+- No rate limiting on `/suggest` (see the spike spec — add before heavy use).
+- The helper read-only list isn't grouped by video (per-video labels resolved to
+  timeline names; multi-video grouping deferred).
+
 ## Constraints (non-negotiable, carried from the project)
 
 - `scripts/diag-smtp.mjs` never staged/committed; probe repo read-only; `gemini-2.5-flash` via injected model; commit messages end `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`; `npx supabase db push --yes` = LIVE (migration 0010 is additive — a new table + policies, no destructive change).
