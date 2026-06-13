@@ -1,0 +1,93 @@
+================================================================
+TASK: THREE PROTOTYPE-FEASIBLE VIDEO IMPROVEMENT SUGGESTIONS
+================================================================
+
+You are given a full short video plus the refined segment descriptions.
+Analyse the full video again and produce exactly three improvement
+suggestions for a blind or low-vision creator.
+
+Every suggestion must be doable in the current prototype. Do not suggest
+anything outside these capabilities.
+
+CURRENT PROTOTYPE CAPABILITIES
+
+AI-fixable actions, if the observation can be handled by one direct
+template:
+
+- brightness: value -100 to 100
+- contrast: value -100 to 100
+- saturation: value -100 to 100
+- zoom: value 100 to 250
+- rotate: value -180 to 180
+- mute: value true
+- unmute: value false
+
+When a suggestion is AI-fixable, include `fix_template` with exactly:
+
+{
+  "action": "brightness" | "contrast" | "saturation" | "zoom" | "rotate" | "mute" | "unmute",
+  "value": number | true | false,
+  "label": "short label shown on the Ask AI button"
+}
+
+Creator/helper actions that are doable but not direct AI templates:
+
+- trim_start
+- trim_end
+- split
+- delete
+- reorder
+- move_earlier
+- move_later
+- add_caption
+- add_sound
+- remove_sound
+
+Do not suggest stabilization, noise reduction, face blurring, object
+removal, generated cutaways, advanced color grading, or any effect that
+cannot be represented by the actions above.
+
+================================================================
+WRITING RULES
+================================================================
+
+1. Produce exactly three suggestions.
+2. Each suggestion is one concise sentence, 12 to 30 words.
+3. Each suggestion must name a specific scene via `relatedScene`, using
+   zero-based scene indices from the provided segments list.
+4. Use three different `relatedScene` values unless the video has fewer
+   than three scenes.
+5. Use observations grounded in the video. Do not invent text, brands,
+   locations, identities, dialogue, lyrics, or creator intent.
+6. Prefer suggestions that are concrete and useful in the study:
+   technical issue, pacing/structure, and creative polish.
+7. If the action is a visual slider or mute/unmute, include a
+   `fix_template`. If the suggestion is better handled by the creator or
+   helper, omit `fix_template` and set `prototype_action` to the closest
+   supported action.
+
+================================================================
+OUTPUT FORMAT
+================================================================
+
+Respond with valid JSON only, matching this schema exactly:
+
+{
+  "suggestions": [
+    {
+      "id": "sug_001",
+      "category": "issue" | "structural" | "creative",
+      "text": "string",
+      "relatedScene": 0,
+      "prototype_action": "brightness" | "contrast" | "saturation" | "zoom" | "rotate" | "mute" | "unmute" | "trim_start" | "trim_end" | "split" | "delete" | "reorder" | "move_earlier" | "move_later" | "add_caption" | "add_sound" | "remove_sound",
+      "fix_template": {
+        "action": "brightness" | "contrast" | "saturation" | "zoom" | "rotate" | "mute" | "unmute",
+        "value": number | true | false,
+        "label": "string"
+      }
+    }
+  ]
+}
+
+For non-AI-fixable suggestions, omit `fix_template`.
+No markdown fences. No explanation outside the JSON.
