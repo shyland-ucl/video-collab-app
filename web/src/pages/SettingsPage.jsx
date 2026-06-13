@@ -25,6 +25,7 @@ export default function SettingsPage() {
 
   function handleTextSize(value) {
     setTextSize(value)
+    announce(`Text size ${value}`)
   }
 
   function handleToggleAudio() {
@@ -92,19 +93,20 @@ export default function SettingsPage() {
         <label htmlFor="speech-rate" className="mb-2 block font-semibold">
           Speech rate: {speechRate}
         </label>
-        <input
-          id="speech-rate"
-          type="range"
-          min={0.5}
-          max={2}
-          step={0.1}
-          value={speechRate}
-          onChange={handleRateChange}
-          className="min-h-12 w-full"
-        />
+        <div className="min-h-12 flex items-center">
+          <input
+            id="speech-rate"
+            type="range"
+            min={0.5}
+            max={2}
+            step={0.1}
+            value={speechRate}
+            onChange={handleRateChange}
+            className="w-full"
+          />
+        </div>
       </div>
 
-      <div role="status" aria-live="polite" className="sr-only" />
     </main>
   )
 }

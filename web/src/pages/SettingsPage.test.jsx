@@ -77,6 +77,12 @@ describe('SettingsPage', () => {
     expect(mockA11y.setTextSize).toHaveBeenCalledWith('large')
   })
 
+  it('selecting Large announces the new text size', async () => {
+    renderPage()
+    await userEvent.click(screen.getByRole('radio', { name: 'Large' }))
+    expect(announce).toHaveBeenCalledWith(expect.stringMatching(/text size large/i))
+  })
+
   it('toggling spoken descriptions calls toggleAudio and announces the new state', async () => {
     renderPage()
     await userEvent.click(screen.getByRole('checkbox', { name: /spoken descriptions/i }))
