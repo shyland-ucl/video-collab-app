@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { rootSegmentId } from '../../lib/editor/stateStore'
-import { summarizeEditStateChange } from '../../lib/editor/projectOverview'
+import { buildEditChangeSceneStamp } from '../../lib/editor/editChangeStamp'
 import usePlaybackEngine, { computeClipLayout } from '../../hooks/usePlaybackEngine'
 import SceneBlockList from './sceneblocks/SceneBlockList'
 import SceneActions from './SceneActions'
@@ -198,13 +198,15 @@ export default function CreatorDevice({
   //
   // Approach: a single state-diff watcher. Whenever the `state` prop changes
   // (local applyAndSave optimistic apply OR a remote insert landing via
-  // EditorPage), diff the previous clips against the next and stamp the one
-  // scene that changed using summarizeEditStateChange (the same summarizer
-  // EditorPage announces with). This is deliberately simple and covers both
-  // sources of change with one code path: we don't try to attribute actor
-  // precisely (local edits stamp 'You'), the goal is the badge + change line
-  // appearing on freshly-edited scenes. Stamps are short-lived in the map and
-  // overwrite per scene id.
+  // EditorPage), diff the previous state against the next with the purpose-built
+  // `buildEditChangeSceneStamp` (ported from the study probe). It resolves the
+  // edited scene id and the "what changed" text TOGETHER from one diff, so the
+  // badge text and the scene it lands on can never disagree (the old approach
+  // derived text and scene id from two separate helpers, which could drift —
+  // e.g. on delete the text said one scene while the id pointed at another).
+  // We don't attribute actor precisely (local edits stamp 'You'); the goal is
+  // the badge + change line appearing on the freshly-edited scene. Stamps
+  // overwrite per scene id in the map.
   // ---------------------------------------------------------------------------
   const [editedScenes, setEditedScenes] = useState({})
   const prevStateForStampRef = useRef(state)
@@ -212,18 +214,15 @@ export default function CreatorDevice({
     const prev = prevStateForStampRef.current
     prevStateForStampRef.current = state
     if (!prev || prev === state) return
-    const summary = summarizeEditStateChange(prev, state, 'You')
-    if (!summary.actionText) return
-    // Resolve which scene the change landed on. summarizeEditStateChange names
-    // scenes as "scene N" (1-based) inside actionText; map that back to the
-    // affected clip id from whichever clip set still holds it.
-    const sceneId = resolveChangedSceneId(prev, state)
-    if (!sceneId) return
+    const stamp = buildEditChangeSceneStamp(prev, state, {
+      fallbackSceneId: activeClip?.id,
+    })
+    if (!stamp?.sceneId) return
     setEditedScenes((cur) => ({
       ...cur,
-      [sceneId]: { text: capitalize(summary.actionText), actor: 'You', timestamp: Date.now() },
+      [stamp.sceneId]: { text: stamp.text, actor: 'You', timestamp: Date.now() },
     }))
-  }, [state])
+  }, [state, activeClip?.id])
 
   // ---------------------------------------------------------------------------
   // Scene shape SceneBlockList consumes (snake_case + level_N descriptions),
@@ -362,73 +361,4 @@ export default function CreatorDevice({
       )}
     </div>
   )
-}
-
-function capitalize(text) {
-  if (!text) return text
-  return text.charAt(0).toUpperCase() + text.slice(1)
-}
-
-// Resolve the clip id a structural edit landed on, by diffing prev vs next
-// clips. Covers the edits the scene-block creator can produce: delete (removed
-// id), split (the new -split- piece's root is the original), reorder (the moved
-// id), caption (the caption's sceneId), and per-clip mutations (trim/volume/
-// mute — the id whose fields changed). Falls back to null when it can't tell,
-// so the watcher simply doesn't stamp.
-function resolveChangedSceneId(prevState, nextState) {
-  const prev = prevState?.clips ?? []
-  const next = nextState?.clips ?? []
-  const prevIds = new Set(prev.map((c) => c.id))
-  const nextIds = new Set(next.map((c) => c.id))
-
-  // Deleted clip.
-  const deleted = prev.find((c) => !nextIds.has(c.id))
-  if (deleted) {
-    // After a delete, the deleted scene is gone from the list; stamp the
-    // clip now occupying its slot (the next scene) so the user still sees a
-    // change marker on a live scene. If it was the last, stamp the new last.
-    const deletedIdx = prev.findIndex((c) => c.id === deleted.id)
-    const survivor = next[Math.min(deletedIdx, next.length - 1)]
-    return survivor?.id ?? null
-  }
-
-  // Added clip (split). The new piece's id ends in -split-…; its root segment
-  // id is the original scene, which is still present and is what we stamp.
-  const added = next.find((c) => !prevIds.has(c.id))
-  if (added) return rootSegmentId(added.id)
-
-  // Caption change — stamp the captioned scene.
-  const prevCaps = prevState?.captions ?? []
-  const nextCaps = nextState?.captions ?? []
-  if (nextCaps.length !== prevCaps.length) {
-    const prevCapIds = new Set(prevCaps.map((c) => c.id))
-    const nextCapIds = new Set(nextCaps.map((c) => c.id))
-    const changed =
-      nextCaps.find((c) => !prevCapIds.has(c.id)) ||
-      prevCaps.find((c) => !nextCapIds.has(c.id))
-    if (changed?.sceneId) return changed.sceneId
-  }
-
-  // Same ids: reorder or per-clip mutation. Find the first clip whose id moved
-  // position or whose fields changed.
-  for (let i = 0; i < next.length; i += 1) {
-    if (prev[i]?.id !== next[i]?.id) {
-      // Reorder — stamp the clip that is now at the first differing slot.
-      return next[i]?.id ?? null
-    }
-  }
-  for (let i = 0; i < next.length; i += 1) {
-    const a = prev[i]
-    const b = next[i]
-    if (!a || !b) continue
-    if (
-      a.trimStart !== b.trimStart ||
-      a.trimEnd !== b.trimEnd ||
-      a.muted !== b.muted ||
-      a.volume !== b.volume
-    ) {
-      return b.id
-    }
-  }
-  return null
 }

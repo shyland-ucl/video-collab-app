@@ -202,6 +202,89 @@ describe('CreatorDevice — edit by myself (delete round-trip)', () => {
   })
 })
 
+describe('CreatorDevice — edit stamps (buildEditChangeSceneStamp)', () => {
+  // The riskiest previously-untested path: after a real edit lands through
+  // applyAndSave AND the device re-renders with the new state, the state-diff
+  // watcher must stamp the amber "Edited" badge + "What changed" line on the
+  // scene the ported buildEditChangeSceneStamp targets — and ONLY that scene.
+  //
+  // We re-render the SAME instance with the post-edit state (mirroring how
+  // EditorPage feeds applyAndSave's result back down as the `state` prop), so
+  // the watcher's prev→next diff fires.
+  function trackingApplyAndSave(tracked) {
+    return vi.fn((opFn) => {
+      tracked.state = opFn(tracked.state)
+      return Promise.resolve()
+    })
+  }
+
+  // Locate a scene header by its 0-based block index (SceneBlock tags the
+  // collapsed header button with data-scene-index).
+  function headerForIndex(n) {
+    return document.querySelector(`button[data-scene-index="${n}"]`)
+  }
+
+  it('split stamps "Edited" + "Split scene" on the ROOT scene block (scene 1), not the new piece, and leaves others unstamped', async () => {
+    const tracked = { state: STATE }
+    const applyAndSave = trackingApplyAndSave(tracked)
+    const props = makeProps({ applyAndSave })
+    let view
+    await act(async () => { view = render(<CreatorDevice {...props} />) })
+
+    // Split Scene 1 via the real Edit-by-Myself panel.
+    const region = await expandScene(1, 'Scene 1')
+    await userEvent.click(region.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(region.getByRole('button', { name: /split this clip/i }))
+    // The split landed in tracked state: s1 → s1 + s1-split-…
+    expect(tracked.state.clips.length).toBe(4)
+    expect(tracked.state.clips[1].id).toMatch(/^s1-split-/)
+
+    // Feed the post-edit state back down (EditorPage-style) so the watcher fires.
+    await act(async () => {
+      view.rerender(<CreatorDevice {...makeProps({ applyAndSave, state: tracked.state })} />)
+    })
+
+    // Scene 1 (block index 0, the ROOT segment the split derives from) is stamped.
+    const stamped = headerForIndex(0)
+    expect(within(stamped).getByText('Edited')).toBeInTheDocument()
+    expect(within(stamped).getByText(/what changed:/i)).toBeInTheDocument()
+    expect(within(stamped).getAllByText(/Split scene/i).length).toBeGreaterThan(0)
+
+    // The other scene blocks carry no "Edited" badge.
+    expect(within(headerForIndex(1)).queryByText('Edited')).not.toBeInTheDocument()
+    expect(within(headerForIndex(2)).queryByText('Edited')).not.toBeInTheDocument()
+    expect(within(headerForIndex(3)).queryByText('Edited')).not.toBeInTheDocument()
+  })
+
+  it('caption stamps "Edited" + "Caption added: …" on the captioned scene block (scene 2)', async () => {
+    const tracked = { state: STATE }
+    const applyAndSave = trackingApplyAndSave(tracked)
+    const props = makeProps({ applyAndSave })
+    let view
+    await act(async () => { view = render(<CreatorDevice {...props} />) })
+
+    // Add a caption to Scene 2 via the real Edit-by-Myself panel.
+    const region = await expandScene(2, 'Scene 2')
+    await userEvent.click(region.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(region.getByRole('button', { name: /add a caption to this scene/i }))
+    const capInput = region.getByRole('textbox', { name: /caption text/i })
+    await userEvent.type(capInput, 'They taste it')
+    await userEvent.click(region.getByRole('button', { name: /save caption/i }))
+    expect(tracked.state.captions.length).toBe(1)
+
+    await act(async () => {
+      view.rerender(<CreatorDevice {...makeProps({ applyAndSave, state: tracked.state })} />)
+    })
+
+    // Scene 2 (block index 1) is the captioned scene → stamped.
+    const stamped = headerForIndex(1)
+    expect(within(stamped).getByText('Edited')).toBeInTheDocument()
+    expect(within(stamped).getAllByText(/Caption added: They taste it/i).length).toBeGreaterThan(0)
+    expect(within(headerForIndex(0)).queryByText('Edited')).not.toBeInTheDocument()
+    expect(within(headerForIndex(2)).queryByText('Edited')).not.toBeInTheDocument()
+  })
+})
+
 describe('CreatorDevice — ask helper', () => {
   it('Ask helper → onCreateTask with the scene name, then closes the panel', async () => {
     const props = makeProps()
