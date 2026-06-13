@@ -109,13 +109,95 @@ test('creator and helper collaborate live; state survives refresh', async ({ bro
   // (realtime UPDATE propagation — same cross-internet timing allowance).
   await expect(creator.getByText(/helper:\s*done/i)).toBeVisible({ timeout: 30_000 })
 
-  // (d) Refresh both -> the deleted scene stays gone, the task stays done.
+  // (c2) Colour sync: the helper grades the first clip's brightness and the
+  // adjustment must reach the BLV creator's pinned video as a CSS `filter`.
+  //
+  // Wiring (honest against EditorTimeline.jsx + CreatorDevice.jsx):
+  //   - The "Visual" toolbar button (aria-label "Show visual adjustments")
+  //     reveals the colour sliders. The sliders target `activeToolClip` =
+  //     the SELECTED clip, else the clip under the playhead, else clips[0].
+  //     We select clip 0 explicitly so the grade is deterministic.
+  //   - The Brightness control is <input type="range"> whose accessible name
+  //     starts "Brightness:". It commits on pointerup OR keyup-of-an-Arrow
+  //     (EditorTimeline commitColour → applyAndSave persists
+  //     state.colour[rootSegmentId(clip.id)].brightness). We reproduce a real
+  //     drag-then-release: set the value through the native setter, dispatch
+  //     `input` (React onChange → pendingColour tracks the thumb) then
+  //     `pointerup` (React onPointerUp → commitColour reads e.target.value and
+  //     persists). A single deterministic commit avoids racing the async
+  //     applyAndSave re-render (which clears pendingColour) against
+  //     back-to-back key presses.
+  //   - The creator's playback engine resets to clip index 0 on the delete's
+  //     structural change, so the creator's ACTIVE scene is the SAME clips[0]
+  //     the helper just graded. colourValuesToFilter(brightness:50) →
+  //     "brightness(1.250) contrast(1.000) saturate(1.000)", which
+  //     CreatorDevice applies as style.filter on the active (display:block)
+  //     <video>. With brightness 0 the helper writes nothing renderable
+  //     (filter is undefined), so a non-zero value is required for the grade
+  //     to be observable at all — this is NOT a weakened assertion.
+  //
+  // Open the visual panel and select the first clip on the helper timeline.
+  await helper.getByRole('button', { name: /show visual adjustments/i }).click()
+  await helper.getByTestId('timeline-clip').first().click()
+
+  // The brightness slider (accessible name "Brightness: <n>") only renders
+  // once a clip is active in the visual panel.
+  const brightness = helper.getByRole('slider', { name: /^brightness:/i })
+  await expect(brightness).toBeVisible({ timeout: 10_000 })
+  // Drag the brightness to a clear +50 and release. Using the native value
+  // setter + React-observed `input`/`pointerup` mirrors a real pointer drag:
+  // onChange records the pending value, pointerup commits it through
+  // applyAndSave (one durable write that rides project_state → Realtime).
+  // brightness 0 yields no renderable filter, so a non-zero grade is required
+  // for the change to be observable at all — this is not a weakened assertion.
+  await brightness.evaluate((el) => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value'
+    ).set
+    setter.call(el, '50')
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+    el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))
+  })
+  // The committed grade is reflected locally (slider value + a11y name).
+  await expect(brightness).toHaveValue('50')
+
+  // The creator is on scene 1 (engine index 0) by default after the delete, so
+  // the graded scene is the active one. Assert — with a GENEROUS realtime
+  // timeout — that the creator's active/visible <video> carries the synced
+  // brightness grade as a CSS filter. This rides a Supabase Realtime INSERT
+  // over the public internet (same cross-internet timing allowance as the
+  // delete/task steps), so allow up to 30s; the assertion itself is exact
+  // (the filter MUST contain "brightness(").
+  await expect
+    .poll(
+      async () =>
+        creator.locator('video').evaluateAll((els) =>
+          els.map((e) => e.style.filter).filter(Boolean)
+        ),
+      { timeout: 30_000 }
+    )
+    .toEqual(expect.arrayContaining([expect.stringContaining('brightness(')]))
+
+  // (d) Refresh both -> the deleted scene stays gone, the task stays done, and
+  // the graded brightness survives (it persisted into project_state.colour).
   await creator.reload()
   await helper.reload()
 
   await expect(helper.getByTestId('timeline-clip').first()).toBeVisible({ timeout: 30_000 })
   await expect(helper.getByTestId('timeline-clip')).toHaveCount(sceneCountBefore - 1)
   await expect(creator.getByText(/helper:\s*done/i)).toBeVisible({ timeout: 30_000 })
+  // The brightness grade is durable: after reload the creator's active video
+  // re-derives the filter from the persisted state.colour map.
+  await expect
+    .poll(
+      async () =>
+        creator.locator('video').evaluateAll((els) =>
+          els.map((e) => e.style.filter).filter(Boolean)
+        ),
+      { timeout: 30_000 }
+    )
+    .toEqual(expect.arrayContaining([expect.stringContaining('brightness(')]))
 
   await creatorCtx.close()
   await helperCtx.close()
