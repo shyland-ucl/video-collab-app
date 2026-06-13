@@ -13,6 +13,7 @@ import {
   updateSuggestionOutcome,
 } from '../lib/editor/suggestionsApi'
 import { taskStatusToOutcome, suggestionClip } from '../lib/editor/suggestionRouting'
+import { requestRender, latestRender, renderDownloadUrl } from '../lib/editor/rendersApi'
 import { summarizeEditStateChange } from '../lib/editor/projectOverview'
 import { buildHelperTaskStatusUpdate } from '../lib/editor/taskFeedback'
 import CreatorDevice from '../components/editor/CreatorDevice'
@@ -91,6 +92,7 @@ export default function EditorPage() {
   const [descriptions, setDescriptions] = useState({})
   const [tasks, setTasks] = useState([])
   const [suggestions, setSuggestions] = useState([])
+  const [render, setRender] = useState(null) // latest renders row: { status, output_path, ... }
   const [remote, setRemote] = useState({ playhead: null, transport: null, activity: null })
   const [syncDown, setSyncDown] = useState(false)
   const [toast, setToast] = useState(null)
@@ -103,6 +105,7 @@ export default function EditorPage() {
   const tasksRef = useRef([])
   const suggestionsRef = useRef([])
   const lastSuggestionAnnounceRef = useRef(0)
+  const renderRef = useRef(null)
   const roleRef = useRef(null)
   const otherRoleRef = useRef(null)
   const otherOnlineRef = useRef(false)
@@ -125,6 +128,11 @@ export default function EditorPage() {
   const applySuggestions = useCallback((updater) => {
     suggestionsRef.current = typeof updater === 'function' ? updater(suggestionsRef.current) : updater
     setSuggestions(suggestionsRef.current)
+  }, [])
+
+  const applyRender = useCallback((row) => {
+    renderRef.current = row
+    setRender(row)
   }, [])
 
   const showToast = useCallback((text) => {
@@ -280,6 +288,15 @@ export default function EditorPage() {
         } catch {
           /* non-fatal */
         }
+
+        // Phase 4: the latest render (so a returning creator sees a ready
+        // download or an in-flight render). Non-fatal.
+        try {
+          const r = await latestRender(supabase, projectId)
+          if (!cancelled) applyRender(r)
+        } catch {
+          /* non-fatal */
+        }
       } catch {
         if (!cancelled) fail()
         return
@@ -363,6 +380,18 @@ export default function EditorPage() {
             }
           }
         },
+        onRenderChange: ({ eventType, render: row }) => {
+          if (!row?.id || eventType === 'DELETE') return
+          const prev = renderRef.current
+          // Keep the newest render (don't let a stale row overwrite a newer one).
+          if (prev && row.id !== prev.id && String(row.created_at) < String(prev.created_at)) return
+          const prevStatus = prev?.id === row.id ? prev.status : null
+          applyRender(row)
+          if (row.status !== prevStatus) {
+            if (row.status === 'ready') announce('Your exported video is ready to download.', { assertive: true })
+            else if (row.status === 'failed') announce('The export failed — try again.', { assertive: true })
+          }
+        },
         onPresence: (presenceState) => {
           const others = Object.entries(presenceState ?? {})
             .filter(([key]) => key !== userId)
@@ -388,6 +417,8 @@ export default function EditorPage() {
             applyTasks(taskRows)
             const sugRows = await listProjectSuggestions(supabase, projectId)
             applySuggestions(sugRows)
+            const r = await latestRender(supabase, projectId)
+            applyRender(r)
           } catch {
             // Transient refetch failure — the next state insert or reconnect catches us up.
           }
@@ -548,6 +579,27 @@ export default function EditorPage() {
     [projectId, applySuggestions]
   )
 
+  // Phase 4 — trigger a render of the current EDL. The server validates + runs
+  // it async; the renders realtime channel drives the panel + announcements.
+  const onExport = useCallback(async () => {
+    announce('Rendering your video — this can take a moment.')
+    // Optimistic 'rendering' so the panel flips immediately; realtime confirms.
+    applyRender({ id: 'pending', status: 'rendering', output_path: null, created_at: new Date().toISOString() })
+    try {
+      await requestRender(projectId)
+    } catch (err) {
+      if (String(err?.message).includes('already_rendering')) {
+        announce('A render is already in progress.', { assertive: true })
+        // leave the optimistic 'rendering' — realtime will deliver the real row
+      } else {
+        applyRender(renderRef.current?.id === 'pending' ? null : renderRef.current)
+        announce("Couldn't start the export — try again.", { assertive: true })
+      }
+    }
+  }, [projectId, applyRender])
+
+  const getDownloadUrl = useCallback((outputPath) => renderDownloadUrl(supabase, outputPath), [])
+
   // Record a routing decision on a suggestion (creator only). Optimistic local
   // update; the DB write re-broadcasts as a suggestion UPDATE to both devices.
   const onResolveSuggestion = useCallback(
@@ -637,6 +689,9 @@ export default function EditorPage() {
         onSetTaskStatus={onSetTaskStatus}
         onAnalyse={onAnalyse}
         onResolveSuggestion={onResolveSuggestion}
+        render={render}
+        onExport={onExport}
+        getDownloadUrl={getDownloadUrl}
         syncDown={syncDown}
       />
       </div>

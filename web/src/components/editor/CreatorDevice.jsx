@@ -11,6 +11,7 @@ import SceneBlockList from './sceneblocks/SceneBlockList'
 import SceneActions from './SceneActions'
 import AIAnalysisTriggerCard from './AIAnalysisTriggerCard'
 import SuggestionItem from './SuggestionItem'
+import ExportPanel from './ExportPanel'
 import ConfirmEditDialog from './ConfirmEditDialog'
 import { describeProposal, proposalToOpFn } from './ConfirmAiEditDialog'
 import TextOverlay from './TextOverlay'
@@ -72,6 +73,9 @@ export default function CreatorDevice({
   onCreateTask,
   onAnalyse,
   onResolveSuggestion = () => {},
+  render = null,
+  onExport,
+  getDownloadUrl,
   initialVideoId = null,
 }) {
   const clips = useMemo(() => state?.clips ?? [], [state])
@@ -572,6 +576,13 @@ export default function CreatorDevice({
         sceneIdsWithSuggestions={sceneIdsWithSuggestions}
         renderSceneActions={renderSceneActions}
       />
+
+      {/* Phase 4 — Export/Download the finished video (project-level action). */}
+      {onExport && (
+        <div className="flex-shrink-0 mt-3">
+          <ExportPanel render={render} onExport={onExport} getDownloadUrl={getDownloadUrl} />
+        </div>
+      )}
 
       {/* Recent Tasks — rendered from the tasks prop; status-change
           announcements happen in EditorPage, not here. */}
