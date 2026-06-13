@@ -463,27 +463,35 @@ export default function EditorPage() {
   const Device = role === 'creator' ? CreatorDevice : HelperDevice
 
   return (
-    <main id="main" tabIndex={-1} className="p-4">
+    // Full-height flex column so the Device fills the viewport and ITS inner
+    // regions scroll — not the page. Without this height constraint the whole
+    // page scrolls, so the creator's pinned video drifts and the helper's
+    // inner scroll region can't size. Matches the probe's editor shell
+    // (Probe3Page `fixed inset-0 … flex flex-col overflow-hidden`). `fixed
+    // inset-0` is safe here: the skip-link/announcer regions live in App.jsx
+    // outside the route, and `#main` stays in the DOM as the skip target.
+    <main id="main" tabIndex={-1} className="fixed inset-0 bg-white flex flex-col overflow-hidden p-4">
       {syncDown && (
-        <p role="alert" className="mb-3 rounded border border-red-700 bg-red-50 p-3 text-red-700">
+        <p role="alert" className="flex-shrink-0 mb-3 rounded border border-red-700 bg-red-50 p-3 text-red-700">
           {SYNC_DOWN_TEXT}
         </p>
       )}
       {newScenes && (
-        <p role="status" className="mb-3 rounded border border-gray-300 p-3 text-lg">
+        <p role="status" className="flex-shrink-0 mb-3 rounded border border-gray-300 p-3 text-lg">
           {NEW_SCENES_TEXT}
         </p>
       )}
       {noScenes && (
-        <p role="status" className="mb-3 rounded border border-gray-300 p-3 text-lg">
+        <p role="status" className="flex-shrink-0 mb-3 rounded border border-gray-300 p-3 text-lg">
           {NO_SCENES_TEXT}
         </p>
       )}
       {toast && (
-        <p role="status" className="mb-3 rounded border border-gray-300 bg-gray-50 p-3">
+        <p role="status" className="flex-shrink-0 mb-3 rounded border border-gray-300 bg-gray-50 p-3">
           {toast}
         </p>
       )}
+      <div className="flex-1 min-h-0 flex flex-col">
       <Device
         role={role}
         projectId={projectId}
@@ -500,6 +508,7 @@ export default function EditorPage() {
         onSetTaskStatus={onSetTaskStatus}
         syncDown={syncDown}
       />
+      </div>
     </main>
   )
 }

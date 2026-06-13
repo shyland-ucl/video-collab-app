@@ -242,6 +242,21 @@ describe('EditorPage', () => {
     expect(channelApi.leave).toHaveBeenCalled()
   })
 
+  it('renders the editor main as a full-height flex column so the device scrolls, not the page', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+
+    // The pinned-video/scroll behaviour depends on the editor <main> being a
+    // height-constrained flex column (the device fills it; ITS inner regions
+    // scroll). Guard the layout so it can't silently regress to `p-4` only.
+    const main = document.getElementById('main')
+    expect(main).toBeTruthy()
+    expect(main.className).toContain('flex')
+    expect(main.className).toContain('flex-col')
+    expect(main.className).toContain('overflow-hidden')
+    expect(main.className).toMatch(/fixed|h-screen|h-full/)
+  })
+
   it('renders the helper device for helpers', async () => {
     mockMemberMaybeSingle.mockResolvedValue({ data: { role: 'helper' }, error: null })
 
