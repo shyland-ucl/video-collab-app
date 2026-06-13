@@ -130,13 +130,22 @@ describe('proposeSuggestions', () => {
 })
 
 describe('persistSuggestions', () => {
-  function makeFake() {
-    const calls = { deleted: null, inserted: null }
+  // Fake supports the insert-then-delete-old sequence:
+  //   select('id').eq().eq()  → prior rows
+  //   insert(rows).select()   → new rows
+  //   delete().in('id', ids)  → remove old
+  function makeFake({ prior = [{ id: 'old-1' }], insertError = null } = {}) {
+    const calls = { inserted: null, deletedIds: null }
     return {
       calls,
       from: () => ({
-        delete: () => ({ eq: (c1, v1) => ({ eq: async (c2, v2) => { calls.deleted = { [c1]: v1, [c2]: v2 }; return { error: null } } }) }),
-        insert: (rows) => ({ select: async () => { calls.inserted = rows; return { data: rows.map((r, i) => ({ id: `row-${i}`, ...r })), error: null } } }),
+        select: () => ({ eq: () => ({ eq: async () => ({ data: prior, error: null }) }) }),
+        insert: (rows) => ({ select: async () => {
+          calls.inserted = rows
+          if (insertError) return { data: null, error: { message: insertError } }
+          return { data: rows.map((r, i) => ({ id: `row-${i}`, ...r })), error: null }
+        } }),
+        delete: () => ({ in: async (_c, ids) => { calls.deletedIds = ids; return { error: null } } }),
       }),
     }
   }
@@ -144,36 +153,32 @@ describe('persistSuggestions', () => {
     { segmentId: 'seg-0' }, { segmentId: 'seg-1' }, { segmentId: 'seg-2' },
   ]
 
-  it('replaces the prior set and inserts rows with segment_id resolved from relatedScene', async () => {
-    const fake = makeFake()
+  it('inserts the new rows (segment_id resolved) then deletes the prior set', async () => {
+    const fake = makeFake({ prior: [{ id: 'old-1' }, { id: 'old-2' }] })
     const suggestions = [
       { id: 'sug_001', category: 'issue', text: 'too dark here', relatedScene: 0, prototype_action: 'brightness', fix_template: { action: 'brightness', value: 30, label: 'Brighten' } },
       { id: 'sug_002', category: 'creative', text: 'caption scene two', relatedScene: 1, prototype_action: 'add_caption' },
     ]
     const rows = await persistSuggestions(fake, 'p1', 'v1', suggestions, SCENES_WITH_IDS)
-    expect(fake.calls.deleted).toEqual({ project_id: 'p1', video_id: 'v1' })
     expect(fake.calls.inserted[0]).toMatchObject({ project_id: 'p1', video_id: 'v1', related_scene: 0, segment_id: 'seg-0', model_suggestion_id: 'sug_001' })
     expect(fake.calls.inserted[1]).toMatchObject({ related_scene: 1, segment_id: 'seg-1', fix_template: null })
+    expect(fake.calls.deletedIds).toEqual(['old-1', 'old-2']) // prior set removed AFTER insert
     expect(rows).toHaveLength(2)
     expect(rows[0].id).toBe('row-0')
   })
 
-  it('clears the set and inserts nothing when there are no suggestions', async () => {
-    const fake = makeFake()
+  it('clears the prior set and inserts nothing when there are no suggestions', async () => {
+    const fake = makeFake({ prior: [{ id: 'old-1' }] })
     const rows = await persistSuggestions(fake, 'p1', 'v1', [], SCENES_WITH_IDS)
-    expect(fake.calls.deleted).toEqual({ project_id: 'p1', video_id: 'v1' })
     expect(fake.calls.inserted).toBeNull()
+    expect(fake.calls.deletedIds).toEqual(['old-1'])
     expect(rows).toEqual([])
   })
 
-  it('returns null when the insert errors (route falls back to the generated set)', async () => {
-    const fake = {
-      from: () => ({
-        delete: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }),
-        insert: () => ({ select: async () => ({ data: null, error: { message: 'boom' } }) }),
-      }),
-    }
+  it('returns null and does NOT delete the old set when the insert errors (no data loss)', async () => {
+    const fake = makeFake({ prior: [{ id: 'old-1' }], insertError: 'boom' })
     const rows = await persistSuggestions(fake, 'p1', 'v1', [{ id: 'x', category: 'issue', text: 'too dark here', relatedScene: 0, prototype_action: 'brightness' }], SCENES_WITH_IDS)
     expect(rows).toBeNull()
+    expect(fake.calls.deletedIds).toBeNull() // old set preserved
   })
 })

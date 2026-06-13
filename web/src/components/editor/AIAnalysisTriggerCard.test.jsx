@@ -17,21 +17,27 @@ describe('AIAnalysisTriggerCard', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('analysing: shows a polite live-region progress card', () => {
+  it('analysing: announces via aria-live WITHOUT role="status" (no role-name chatter)', () => {
     render(<AIAnalysisTriggerCard status="analysing" role="creator" />)
-    const card = screen.getByRole('status')
-    expect(card).toHaveAttribute('aria-live', 'polite')
-    expect(card).toHaveTextContent(/analysing/i)
+    const msg = screen.getByText(/analysing/i)
+    // It is a live region (announced) but carries no role="status" (which would
+    // make VoiceOver speak the literal word "status").
+    const liveRegion = msg.closest('[aria-live="polite"]')
+    expect(liveRegion).not.toBeNull()
+    expect(screen.queryByRole('status')).toBeNull()
   })
 
-  it('done (creator): summarises the suggestion count', () => {
+  it('done (creator): summarises the count as a visual, non-live summary (no double-announce)', () => {
     render(<AIAnalysisTriggerCard status="done" role="creator" suggestionCount={3} />)
-    expect(screen.getByRole('status')).toHaveTextContent(/3 suggestions now showing/i)
+    expect(screen.getByText(/3 suggestions now showing/i)).toBeInTheDocument()
+    // The done card is NOT a live region — the completion is announced once by
+    // EditorPage, so this must not be role="status".
+    expect(screen.queryByRole('status')).toBeNull()
   })
 
   it('done (creator): singular count reads "1 suggestion"', () => {
     render(<AIAnalysisTriggerCard status="done" role="creator" suggestionCount={1} />)
-    expect(screen.getByRole('status')).toHaveTextContent(/1 suggestion now showing/i)
+    expect(screen.getByText(/1 suggestion now showing/i)).toBeInTheDocument()
   })
 
   it('done (helper): renders a read-only list of the suggestions', () => {

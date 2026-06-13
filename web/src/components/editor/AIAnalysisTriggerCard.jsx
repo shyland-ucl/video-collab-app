@@ -32,9 +32,11 @@ export default function AIAnalysisTriggerCard({
   suggestions = [],
 }) {
   if (status === 'analysing') {
+    // aria-live (NOT role="status") so the "analysing" message is announced
+    // without VoiceOver speaking the literal role name — this card is the only
+    // announcement of the analysing state.
     return (
       <div
-        role="status"
         aria-live="polite"
         className="rounded-xl border-2 border-[#9B59B6]/40 bg-[#f5eefa] px-4 py-3 mb-3 flex items-center gap-3"
       >
@@ -69,7 +71,7 @@ export default function AIAnalysisTriggerCard({
                     <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-[#ece1f5] text-[#6b3f86]">
                       {CATEGORY_LABEL[s.category] ?? s.category}
                     </span>
-                    <span className="text-xs text-gray-500">Scene {(s.related_scene ?? 0) + 1}</span>
+                    <span className="text-xs text-gray-500">{s.sceneLabel || `Scene ${(s.related_scene ?? 0) + 1}`}</span>
                   </span>
                   <span>{s.text}</span>
                 </li>
@@ -79,11 +81,12 @@ export default function AIAnalysisTriggerCard({
         </div>
       )
     }
+    // Visual-only summary (NOT a live region): the completion is announced once
+    // by EditorPage.onAnalyse via the shared announcer, so a role="status" here
+    // would double-announce — and re-announce on every reload of a project that
+    // already has suggestions.
     return (
-      <div
-        className="rounded-xl border border-[#9B59B6]/30 bg-[#faf6fd] px-4 py-3 mb-3"
-        role="status"
-      >
+      <div className="rounded-xl border border-[#9B59B6]/30 bg-[#faf6fd] px-4 py-3 mb-3">
         <p className="text-sm font-medium text-[#6b3f86]">
           AI analysis complete. {suggestionCount} suggestion{suggestionCount === 1 ? '' : 's'} now showing in your scenes.
         </p>

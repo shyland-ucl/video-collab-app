@@ -202,3 +202,57 @@ test('creator and helper collaborate live; state survives refresh', async ({ bro
   await creatorCtx.close()
   await helperCtx.close()
 })
+
+// Phase 3b — the creator runs AI analysis, a per-scene suggestion appears, gets
+// routed, and the routing PERSISTS across reload (the suggestions table). This
+// rides LIVE Gemini (the /suggest endpoint) + the suggestions Realtime channel,
+// so timeouts are generous. The suggestion prompt is instructed to return three
+// suggestions across distinct scenes, so at least one scene gains a suggestion.
+test('creator runs AI analysis; a suggestion appears, routes, and persists', async ({ browser }) => {
+  const creatorCtx = await browser.newContext()
+  const creator = await creatorCtx.newPage()
+  await signIn(creator, state.creatorEmail, state.password)
+  await creator.goto(`/projects/${state.projectId}/edit`)
+  await expect(sceneHeader(creator, 1)).toBeVisible({ timeout: 30_000 })
+
+  // Trigger analysis if it hasn't run yet. Suggestions PERSIST, so on a retry
+  // (Playwright reuses the same project) the card is already in its 'done'
+  // state and the idle "Trigger" button is gone — that's correct, so only click
+  // when the idle button is present.
+  const analyseBtn = creator.getByRole('button', { name: /trigger ai analysis of this video/i })
+  if (await analyseBtn.isVisible().catch(() => false)) {
+    await analyseBtn.click()
+  }
+  // Analysis completed (live Gemini) → the trigger card shows its summary and
+  // the suggestions persisted.
+  await expect(creator.getByText(/ai analysis complete/i)).toBeVisible({ timeout: 90_000 })
+
+  // A suggested scene's collapsed header gains "Has an AI suggestion" in its
+  // accessible name (the ✨ AI pill). Expand it (only if collapsed) to reveal
+  // the SuggestionItem.
+  const suggestedHeader = creator.getByRole('button', { name: /has an ai suggestion/i }).first()
+  await expect(suggestedHeader).toBeVisible({ timeout: 15_000 })
+  if (/tap to open actions/i.test((await suggestedHeader.getAttribute('aria-label')) || '')) {
+    await suggestedHeader.click()
+  }
+
+  // Route to self if not already routed (idempotent across retries). The three
+  // route buttons collapse into a terse "Doing it myself. pending." badge.
+  const selfBtn = creator.getByRole('button', { name: /^i'll fix it$/i }).first()
+  if (await selfBtn.isVisible().catch(() => false)) {
+    await selfBtn.click()
+  }
+  await expect(creator.getByLabel(/doing it myself\. pending\./i).first()).toBeVisible({ timeout: 10_000 })
+
+  // Reload → the suggestion AND its resolution survive (persisted to Supabase).
+  await creator.reload()
+  await expect(creator.getByText(/ai analysis complete/i)).toBeVisible({ timeout: 30_000 })
+  const stillSuggested = creator.getByRole('button', { name: /has an ai suggestion/i }).first()
+  await expect(stillSuggested).toBeVisible({ timeout: 15_000 })
+  if (/tap to open actions/i.test((await stillSuggested.getAttribute('aria-label')) || '')) {
+    await stillSuggested.click()
+  }
+  await expect(creator.getByLabel(/doing it myself\. pending\./i).first()).toBeVisible({ timeout: 10_000 })
+
+  await creatorCtx.close()
+})

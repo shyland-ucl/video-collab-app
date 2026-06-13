@@ -311,12 +311,19 @@ export default function CreatorDevice({
     () => suggestions.filter((s) => s.video_id === analyseVideoId),
     [suggestions, analyseVideoId]
   )
+  // Only suggestions that map to a CURRENT scene are shown/routable — one whose
+  // scene was deleted persists but can't be rendered. Count + the trigger-card
+  // summary use the routable subset so the spoken/visible total matches reality.
+  const routableSuggestions = useMemo(
+    () => videoSuggestions.filter((s) => suggestionClip(s, clips)),
+    [videoSuggestions, clips]
+  )
   // Clip ids that carry a suggestion — drives the "✨ AI" indicator on the
   // collapsed scene block so a BLV creator knows which scenes have one without
   // expanding each.
   const sceneIdsWithSuggestions = useMemo(
-    () => new Set(videoSuggestions.map((s) => suggestionClip(s, clips)?.id).filter(Boolean)),
-    [videoSuggestions, clips]
+    () => new Set(routableSuggestions.map((s) => suggestionClip(s, clips)?.id).filter(Boolean)),
+    [routableSuggestions, clips]
   )
   const [analysisStatus, setAnalysisStatus] = useState('idle')
   const effectiveStatus =
@@ -387,12 +394,20 @@ export default function CreatorDevice({
     [projectId, clips]
   )
 
-  const handleAiConfirmYes = useCallback(() => {
+  const handleAiConfirmYes = useCallback(async () => {
     const c = aiConfirm
     setAiConfirm(null)
     if (!c) return
-    applyAndSave(c.opFn, c.done)
-    onResolveSuggestion(c.suggestionId, { routedTo: 'ai', outcomeStatus: 'applied' })
+    // Gate the outcome on whether the edit actually persisted — a save
+    // conflict/failure must NOT report 'applied' (the timeline didn't change).
+    const ok = await applyAndSave(c.opFn, c.done)
+    await onResolveSuggestion(c.suggestionId, { routedTo: 'ai', outcomeStatus: ok ? 'applied' : 'failed' })
+    // The routing buttons just unmounted (replaced by the resolution badge); the
+    // dialog's restoreFocus targets the now-gone button, so move focus to the
+    // badge ourselves or focus falls to <body>.
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-suggestion-resolution="${c.suggestionId}"]`)?.focus?.()
+    })
   }, [aiConfirm, applyAndSave, onResolveSuggestion])
 
   const handleAiConfirmNo = useCallback(() => {
@@ -414,6 +429,10 @@ export default function CreatorDevice({
             <SuggestionItem
               key={s.id}
               suggestion={s}
+              // Show the clip's REAL timeline scene name (matches the SceneBlock
+              // header) — related_scene is a per-video index that disagrees on a
+              // multi-video timeline.
+              sceneLabel={clip.name}
               resolution={s.routed_to ? { routedTo: s.routed_to, outcomeStatus: s.outcome_status } : null}
               onRouteSelf={() => {
                 onResolveSuggestion(s.id, { routedTo: 'self', outcomeStatus: 'pending' })
@@ -427,6 +446,11 @@ export default function CreatorDevice({
                   const task = await onCreateTask({ text: s.text, segmentLabel: clip.name })
                   await onResolveSuggestion(s.id, { routedTo: 'helper', outcomeStatus: 'pending', taskId: task?.id })
                   announce('Sent to your helper.')
+                  // The buttons just unmounted into the resolution badge — move
+                  // focus to it so the creator isn't dumped to <body>.
+                  requestAnimationFrame(() => {
+                    document.querySelector(`[data-suggestion-resolution="${s.id}"]`)?.focus?.()
+                  })
                 } catch {
                   /* EditorPage announces the failure assertively */
                 }
@@ -524,7 +548,7 @@ export default function CreatorDevice({
       <div className="flex-shrink-0">
         <AIAnalysisTriggerCard
           status={effectiveStatus}
-          suggestionCount={videoSuggestions.length}
+          suggestionCount={routableSuggestions.length}
           onTrigger={handleAnalyse}
           role="creator"
         />

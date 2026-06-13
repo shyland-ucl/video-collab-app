@@ -34,6 +34,10 @@ const OUTCOME_CLS = { pending: 'bg-amber-100 text-amber-800', applied: 'bg-green
 export default function SuggestionItem({
   suggestion,
   helperName = 'helper',
+  // The scene's REAL timeline name (e.g. "Scene 6"), so the spoken/visible scene
+  // matches the SceneBlock header. Falls back to the per-video index + 1 only
+  // when a caller can't resolve the clip.
+  sceneLabel,
   resolution = null,
   onRouteSelf,
   onRouteHelper,
@@ -41,9 +45,11 @@ export default function SuggestionItem({
 }) {
   if (!suggestion) return null
   const cat = CATEGORY[suggestion.category] ?? { label: suggestion.category, cls: 'bg-gray-100 text-gray-700' }
-  const sceneNo = (suggestion.related_scene ?? 0) + 1
+  const sceneName = sceneLabel || `Scene ${(suggestion.related_scene ?? 0) + 1}`
 
-  // Routed → resolution badge (buttons gone). Terse aria-label only.
+  // Routed → resolution badge (buttons gone). Terse aria-label only. The
+  // data-suggestion-resolution hook lets the parent move focus here after
+  // routing (the buttons unmount), so focus isn't dropped to <body>.
   if (resolution?.routedTo) {
     const routedText =
       resolution.routedTo === 'helper' ? `Routed to ${helperName}` : ROUTED_LABEL[resolution.routedTo]
@@ -51,6 +57,7 @@ export default function SuggestionItem({
     return (
       <div
         tabIndex={-1}
+        data-suggestion-resolution={suggestion.id}
         aria-label={`${routedText}. ${outcome}.`}
         className="rounded-lg border border-[#9B59B6]/30 bg-[#faf6fd] px-3 py-2 mb-2"
       >
@@ -71,14 +78,14 @@ export default function SuggestionItem({
   return (
     <div
       role="group"
-      aria-label={`AI suggestion for scene ${sceneNo}`}
+      aria-label={`AI suggestion for ${sceneName}`}
       className="rounded-lg border-2 border-[#9B59B6]/40 bg-white px-3 py-3 mb-2 flex flex-col gap-2"
     >
       <div className="flex items-center gap-2" aria-hidden="true">
         <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${cat.cls}`}>
           {cat.label}
         </span>
-        <span className="text-xs text-gray-500">Scene {sceneNo}</span>
+        <span className="text-xs text-gray-500">{sceneName}</span>
       </div>
       <p className="text-sm font-medium text-gray-900">{suggestion.text}</p>
       <button

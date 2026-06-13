@@ -12,7 +12,7 @@ import {
   setSuggestionResolution,
   updateSuggestionOutcome,
 } from '../lib/editor/suggestionsApi'
-import { taskStatusToOutcome } from '../lib/editor/suggestionRouting'
+import { taskStatusToOutcome, suggestionClip } from '../lib/editor/suggestionRouting'
 import { summarizeEditStateChange } from '../lib/editor/projectOverview'
 import { buildHelperTaskStatusUpdate } from '../lib/editor/taskFeedback'
 import CreatorDevice from '../components/editor/CreatorDevice'
@@ -435,8 +435,10 @@ export default function EditorPage() {
     async (opFn, announceText, options = {}) => {
       // A newer remote insert can land while the save is in flight — every
       // applySnapshot below is gated so an older result never overwrites it.
+      // Returns true only when the change actually persisted (callers that need
+      // to gate a follow-up — e.g. marking a suggestion 'applied' — await it).
       const before = snapshotRef.current
-      if (!before) return
+      if (!before) return false
       const next = opFn(before.state)
       // Optimistic local apply.
       const optimistic = { version: before.version, state: next }
@@ -459,7 +461,7 @@ export default function EditorPage() {
           applySnapshot({ version: result.version, state: savedState })
         }
         if (announceText) announce(announceText)
-        return
+        return true
       }
       if (result.conflict) {
         try {
@@ -469,12 +471,13 @@ export default function EditorPage() {
           // Keep the current state; realtime will deliver the winner.
         }
         announce(CONFLICT_TEXT, { assertive: true })
-        return
+        return false
       }
       // Plain failure — revert the optimistic apply, but only if it is still
       // what's showing; a newer remote state that landed meanwhile stays.
       if (snapshotRef.current === optimistic) applySnapshot(before)
       announce(SAVE_FAILED_TEXT, { assertive: true })
+      return false
     },
     [projectId, userId, applySnapshot]
   )
@@ -526,10 +529,15 @@ export default function EditorPage() {
       try {
         const rows = await requestSuggestions(projectId, videoId)
         applySuggestions((cur) => [...cur.filter((s) => s.video_id !== videoId), ...rows])
+        // Announce only the count that maps to a CURRENT scene (a suggestion for
+        // a since-deleted scene persists but can't be shown/routed), so the
+        // spoken total matches what the creator can actually act on.
+        const clips = snapshotRef.current?.state?.clips ?? []
+        const routable = rows.filter((r) => suggestionClip(r, clips))
         announce(
-          rows.length
-            ? `AI analysis complete. ${rows.length} suggestion${rows.length === 1 ? '' : 's'} ready.`
-            : 'AI analysis finished — no suggestions this time.'
+          routable.length
+            ? `AI analysis complete. ${routable.length} suggestion${routable.length === 1 ? '' : 's'} ready in your scenes.`
+            : 'AI analysis finished — no suggestions for the current scenes.'
         )
         return rows
       } catch {
@@ -544,10 +552,13 @@ export default function EditorPage() {
   // update; the DB write re-broadcasts as a suggestion UPDATE to both devices.
   const onResolveSuggestion = useCallback(
     async (id, patch) => {
+      // Only a helper route carries a task_id; clear it on a self/AI route so a
+      // later UPDATE on a previously-linked task can't clobber the new outcome.
+      const nextTaskId = patch.routedTo === 'helper' ? (patch.taskId ?? null) : null
       applySuggestions((cur) =>
         cur.map((s) =>
           s.id === id
-            ? { ...s, routed_to: patch.routedTo, outcome_status: patch.outcomeStatus, task_id: patch.taskId ?? s.task_id ?? null }
+            ? { ...s, routed_to: patch.routedTo, outcome_status: patch.outcomeStatus, task_id: nextTaskId }
             : s
         )
       )

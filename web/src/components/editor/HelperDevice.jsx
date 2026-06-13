@@ -82,6 +82,18 @@ export default function HelperDevice({
   const textOverlaysState = state?.textOverlays ?? []
   const colour = state?.colour ?? {}
 
+  // Resolve each suggestion's scene to the clip's REAL timeline name (e.g.
+  // "Scene 6"), so the read-only list's scene labels match the helper's own
+  // timeline ordering rather than the per-video related_scene index.
+  const enrichedSuggestions = useMemo(
+    () =>
+      suggestions.map((s) => {
+        const clip = clips.find((c) => rootSegmentId(c.id) === s.segment_id)
+        return clip ? { ...s, sceneLabel: clip.name } : s
+      }),
+    [suggestions, clips]
+  )
+
   // ---- Playback engine: one hidden <video> per source, EDL-sequenced ----
   const videoRefsMapRef = useRef({})
   const videoRefs = useMemo(() => {
@@ -230,9 +242,9 @@ export default function HelperDevice({
             what was found + live resolution badges, but only the creator routes.
             Renders nothing until an analysis has produced suggestions. */}
         <AIAnalysisTriggerCard
-          status={suggestions.length > 0 ? 'done' : 'idle'}
+          status={enrichedSuggestions.length > 0 ? 'done' : 'idle'}
           role="helper"
-          suggestions={suggestions}
+          suggestions={enrichedSuggestions}
         />
 
         {/* Creator Intent Banner — most recent unfinished task from the feed */}

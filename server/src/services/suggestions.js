@@ -133,29 +133,52 @@ export async function proposeSuggestions(model, scenes, keyframesBase64, deps = 
   return { suggestions: curateSuggestions(cleaned, 3), dropped: raw.length - cleaned.length }
 }
 
-// Persist the curated suggestions for a (project, video): replace any prior set
-// (re-analysing a video supersedes the old suggestions), then insert one row per
-// suggestion with related_scene resolved to a stable segment_id. Service-role
-// only (the route uses the admin client, which bypasses RLS). Returns the
-// inserted rows so the client gets their db ids.
+// Persist the curated suggestions for a (project, video): re-analysing a video
+// supersedes the old set. We INSERT the new rows FIRST, then delete the prior
+// rows — so an insert failure leaves the old set intact (no data-loss window),
+// and a connected peer sees the new INSERTs before the old DELETEs (no transient
+// "suggestions vanished" gap). Service-role only (the route's admin client
+// bypasses RLS). Returns the inserted rows, or null on insert failure.
 export async function persistSuggestions(supabase, projectId, videoId, suggestions, scenes) {
-  await supabase.from('suggestions').delete().eq('project_id', projectId).eq('video_id', videoId)
-  if (!suggestions.length) return []
-  const rows = suggestions.map((s) => ({
-    project_id: projectId,
-    video_id: videoId,
-    model_suggestion_id: s.id ?? null,
-    category: s.category,
-    text: s.text,
-    related_scene: Array.isArray(s.relatedScene) ? s.relatedScene[0] : s.relatedScene,
-    segment_id: scenes[Array.isArray(s.relatedScene) ? s.relatedScene[0] : s.relatedScene]?.segmentId ?? null,
-    prototype_action: s.prototype_action,
-    fix_template: s.fix_template ?? null,
-  }))
-  const { data, error } = await supabase.from('suggestions').insert(rows).select()
-  if (error) {
-    console.error('persistSuggestions: insert failed:', error.message)
+  // Snapshot the prior rows up front so we can delete exactly them afterwards.
+  const { data: prior, error: priorErr } = await supabase
+    .from('suggestions').select('id').eq('project_id', projectId).eq('video_id', videoId)
+  if (priorErr) {
+    console.error('persistSuggestions: prior-rows query failed:', priorErr.message)
     return null
   }
-  return data ?? []
+  const priorIds = (prior ?? []).map((r) => r.id)
+
+  let inserted = []
+  if (suggestions.length) {
+    const rows = suggestions.map((s) => {
+      const idx = Array.isArray(s.relatedScene) ? s.relatedScene[0] : s.relatedScene
+      return {
+        project_id: projectId,
+        video_id: videoId,
+        model_suggestion_id: s.id ?? null,
+        category: s.category,
+        text: s.text,
+        related_scene: idx,
+        segment_id: scenes[idx]?.segmentId ?? null,
+        prototype_action: s.prototype_action,
+        fix_template: s.fix_template ?? null,
+      }
+    })
+    const { data, error } = await supabase.from('suggestions').insert(rows).select()
+    if (error) {
+      // Old set is still intact (we haven't deleted yet) — surface the failure.
+      console.error('persistSuggestions: insert failed:', error.message)
+      return null
+    }
+    inserted = data ?? []
+  }
+
+  // New set committed (or empty) → remove the prior set. A delete failure here
+  // is non-fatal: the new rows are live; stale old rows are tidied on next run.
+  if (priorIds.length) {
+    const { error: delErr } = await supabase.from('suggestions').delete().in('id', priorIds)
+    if (delErr) console.error('persistSuggestions: stale-row delete failed:', delErr.message)
+  }
+  return inserted
 }
