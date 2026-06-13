@@ -10,3 +10,6 @@ supabase/.temp/
 supabase/.branches/
 Thumbs.db
 .DS_Store
+e2e/.state.json
+test-results/
+playwright-report/

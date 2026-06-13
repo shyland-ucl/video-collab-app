@@ -2,14 +2,19 @@
   "name": "video-collab-app",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["web", "server"],
+  "workspaces": [
+    "web",
+    "server"
+  ],
   "scripts": {
     "dev:web": "npm run dev -w web",
     "dev:server": "npm run dev -w server",
     "test": "npm run test -w web --if-present -- --run --passWithNoTests && npm run test -w server --if-present",
-    "build": "npm run build -w web"
+    "build": "npm run build -w web",
+    "e2e": "playwright test -c e2e/playwright.config.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "supabase": "^2.0.0"
   }
 }
