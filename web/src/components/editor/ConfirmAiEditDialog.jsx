@@ -1,10 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react'
-import { createPortal } from 'react-dom'
-import { announce } from '../../utils/announcer'
-import ttsService from '../../services/ttsService'
-import { useRootInert } from '../../hooks/useRootInert'
-import { useAccessibility } from '../../contexts/AccessibilityContext'
 import { applyOperation } from '../../lib/editor/sceneEditOps'
+import ConfirmEditDialog from './ConfirmEditDialog'
 
 /**
  * Confirm-first dialog for AI-proposed edits (phase 1c, Task 9).
@@ -76,77 +71,17 @@ export function describeProposal(proposal, clips) {
 }
 
 export default function ConfirmAiEditDialog({ proposal, clips, onConfirm, onCancel }) {
-  const { audioEnabled, speechRate } = useAccessibility()
-  const confirmRef = useRef(null)
-  const preFocusRef = useRef(typeof document !== 'undefined' ? document.activeElement : null)
-
+  // Compose the deterministic sentence from the op + clip name, then defer to
+  // the shared presentational dialog. Returns null when the proposal can't be
+  // described (caller must not have opened the dialog).
   const described = describeProposal(proposal, clips)
-  const question = described?.question ?? null
-
-  const getInitialFocus = useCallback(() => confirmRef.current, [])
-  const getRestoreFocus = useCallback(() => preFocusRef.current, [])
-  useRootInert(Boolean(question), {
-    initialFocus: getInitialFocus,
-    restoreFocus: getRestoreFocus,
-    focusDelay: 100,
-  })
-
-  // Speak + announce the DETERMINISTIC sentence the moment the dialog opens.
-  useEffect(() => {
-    if (!question) return
-    announce(question, { assertive: true })
-    if (audioEnabled) ttsService.speak(question, { rate: speechRate })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [question])
-
   if (!described) return null
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="confirm-ai-edit-question"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          onCancel()
-        }
-      }}
-    >
-      <div className="w-full max-w-lg bg-white rounded-t-2xl shadow-2xl">
-        <div className="px-4 py-3 border-b border-gray-200">
-          <h3 className="font-bold text-sm text-gray-900">Confirm AI edit</h3>
-        </div>
-        <div className="p-4 flex flex-col gap-3">
-          <p id="confirm-ai-edit-question" className="text-lg font-semibold text-gray-900">
-            {described.question}
-          </p>
-          {proposal.summary && <p className="text-sm text-gray-500">{proposal.summary}</p>}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              ref={confirmRef}
-              onClick={onConfirm}
-              className="flex-1 py-3 rounded-lg bg-[#2B579A] text-sm font-bold text-white hover:bg-[#1e3f6f] focus:outline-none focus:ring-2 focus:ring-[#2B579A] focus:ring-offset-1"
-              style={{ minHeight: '48px' }}
-              aria-label={`Confirm: ${described.question}`}
-            >
-              Confirm
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 py-3 rounded-lg bg-gray-100 text-sm font-semibold text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1"
-              style={{ minHeight: '48px' }}
-              aria-label="Cancel — make no change"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body
+  return (
+    <ConfirmEditDialog
+      question={described.question}
+      summary={proposal.summary}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   )
 }

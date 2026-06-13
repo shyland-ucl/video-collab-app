@@ -1,10 +1,18 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { rootSegmentId } from '../../lib/editor/stateStore'
 import { buildEditChangeSceneStamp } from '../../lib/editor/editChangeStamp'
+import { suggestionClip, fixTemplateToOpFn, describeFixTemplate } from '../../lib/editor/suggestionRouting'
+import { serverPost } from '../../lib/serverApi'
+import { announce } from '../../utils/announcer'
+import { playEarcon } from '../../utils/earcon'
 import usePlaybackEngine, { computeClipLayout } from '../../hooks/usePlaybackEngine'
 import { colourValuesToFilter, colourValuesToTransform } from './HelperDevice'
 import SceneBlockList from './sceneblocks/SceneBlockList'
 import SceneActions from './SceneActions'
+import AIAnalysisTriggerCard from './AIAnalysisTriggerCard'
+import SuggestionItem from './SuggestionItem'
+import ConfirmEditDialog from './ConfirmEditDialog'
+import { describeProposal, proposalToOpFn } from './ConfirmAiEditDialog'
 import TextOverlay from './TextOverlay'
 
 /**
@@ -58,9 +66,12 @@ export default function CreatorDevice({
   sources,
   descriptions,
   tasks,
+  suggestions = [],
   applyAndSave,
   channel,
   onCreateTask,
+  onAnalyse,
+  onResolveSuggestion = () => {},
   initialVideoId = null,
 }) {
   const clips = useMemo(() => state?.clips ?? [], [state])
@@ -288,6 +299,100 @@ export default function CreatorDevice({
     [clips, descriptions]
   )
 
+  // ---------------------------------------------------------------------------
+  // Phase 3b — AI suggestions. The trigger analyses the focused video (the one
+  // the library picker opened, else the first source). Suggestions persist +
+  // arrive via realtime as the `suggestions` prop; each renders inside its
+  // scene block (resolved by stable segment_id). Routing reuses the existing
+  // applyAndSave / onCreateTask / confirm-first dialog seams.
+  // ---------------------------------------------------------------------------
+  const analyseVideoId = initialVideoId ?? sources[0]?.id ?? null
+  const videoSuggestions = useMemo(
+    () => suggestions.filter((s) => s.video_id === analyseVideoId),
+    [suggestions, analyseVideoId]
+  )
+  const [analysisStatus, setAnalysisStatus] = useState('idle')
+  const effectiveStatus =
+    analysisStatus === 'analysing'
+      ? 'analysing'
+      : analysisStatus === 'done' || videoSuggestions.length > 0
+        ? 'done'
+        : 'idle'
+
+  // The confirm-first AI dialog for a routed-to-AI suggestion:
+  // { question, summary?, done, opFn, suggestionId }.
+  const [aiConfirm, setAiConfirm] = useState(null)
+
+  const handleAnalyse = useCallback(async () => {
+    if (!analyseVideoId || analysisStatus === 'analysing' || !onAnalyse) return
+    setAnalysisStatus('analysing')
+    const rows = await onAnalyse(analyseVideoId)
+    setAnalysisStatus('done')
+    playEarcon(880, 200)
+    // Move focus to the first suggested scene's collapsed header (probe parity)
+    // so a BLV creator lands on a scene that has a suggestion.
+    const first = (rows ?? []).map((r) => suggestionClip(r, clips)).find(Boolean)
+    if (first) {
+      const idx = clips.findIndex((c) => c.id === first.id)
+      if (idx !== -1) {
+        requestAnimationFrame(() => {
+          document.querySelector(`[data-scene-index="${idx}"]`)?.focus?.()
+        })
+      }
+    }
+  }, [analyseVideoId, analysisStatus, onAnalyse, clips])
+
+  // "Ask AI to fix it" — confirm-first. A fix_template (colour/zoom/mute) builds
+  // the op directly; otherwise re-run the AI-edit endpoint with the suggestion
+  // text to get a concrete, describable op. Both converge on ConfirmEditDialog.
+  const routeSuggestionToAI = useCallback(
+    async (s, clip) => {
+      if (s.fix_template) {
+        const described = describeFixTemplate(s.fix_template, clip.name)
+        if (!described) return
+        setAiConfirm({ question: described.question, done: described.done, opFn: fixTemplateToOpFn(s.fix_template, clip.id), suggestionId: s.id })
+        return
+      }
+      try {
+        const proposal = await serverPost(`/api/projects/${projectId}/ai-edit`, {
+          request: s.text,
+          focused_clip_id: clip.id,
+          clips: clips.map((c) => ({
+            id: c.id,
+            name: c.name,
+            duration_seconds: c.endTime - (c.trimEnd || 0) - (c.startTime + (c.trimStart || 0)),
+          })),
+        })
+        if (proposal?.clarification) {
+          announce(proposal.clarification)
+          return
+        }
+        const described = describeProposal(proposal, clips)
+        if (!described) {
+          announce("The AI couldn't turn that into an edit — try Ask AI to Edit.", { assertive: true })
+          return
+        }
+        setAiConfirm({ question: described.question, summary: proposal.summary, done: described.done, opFn: proposalToOpFn(proposal), suggestionId: s.id })
+      } catch {
+        announce('The AI request failed — try again', { assertive: true })
+      }
+    },
+    [projectId, clips]
+  )
+
+  const handleAiConfirmYes = useCallback(() => {
+    const c = aiConfirm
+    setAiConfirm(null)
+    if (!c) return
+    applyAndSave(c.opFn, c.done)
+    onResolveSuggestion(c.suggestionId, { routedTo: 'ai', outcomeStatus: 'applied' })
+  }, [aiConfirm, applyAndSave, onResolveSuggestion])
+
+  const handleAiConfirmNo = useCallback(() => {
+    setAiConfirm(null)
+    announce('Cancelled — no change was made.')
+  }, [])
+
   const renderSceneActions = useCallback(
     (args) => {
       const { scene, index, currentLevel, onLevelChange, isPlaying: ip, currentTime: ct } = args
@@ -295,26 +400,53 @@ export default function CreatorDevice({
       if (!clip) return null
       const isActiveScene =
         ip && ct >= scene.start_time && ct < scene.end_time
+      const sceneSuggestions = videoSuggestions.filter((s) => suggestionClip(s, clips)?.id === clip.id)
       return (
-        <SceneActions
-          clip={clip}
-          index={index}
-          allClips={clips}
-          projectId={projectId}
-          level={currentLevel}
-          onLevelChange={onLevelChange}
-          descriptions={descriptions}
-          isPlaying={ip}
-          isActiveScene={isActiveScene}
-          onPlayScene={playScene}
-          onPlayFromHere={playFromHere}
-          onPause={pause}
-          applyAndSave={applyAndSave}
-          onCreateTask={onCreateTask}
-        />
+        <>
+          {sceneSuggestions.map((s) => (
+            <SuggestionItem
+              key={s.id}
+              suggestion={s}
+              resolution={s.routed_to ? { routedTo: s.routed_to, outcomeStatus: s.outcome_status } : null}
+              onRouteSelf={() => {
+                onResolveSuggestion(s.id, { routedTo: 'self', outcomeStatus: 'pending' })
+                announce(`Edit by myself opened for ${clip.name}.`)
+                requestAnimationFrame(() => {
+                  document.querySelector(`[data-edit-self-toggle="${clip.id}"]`)?.focus?.()
+                })
+              }}
+              onRouteHelper={async () => {
+                try {
+                  const task = await onCreateTask({ text: s.text, segmentLabel: clip.name })
+                  await onResolveSuggestion(s.id, { routedTo: 'helper', outcomeStatus: 'pending', taskId: task?.id })
+                  announce('Sent to your helper.')
+                } catch {
+                  /* EditorPage announces the failure assertively */
+                }
+              }}
+              onRouteAI={() => routeSuggestionToAI(s, clip)}
+            />
+          ))}
+          <SceneActions
+            clip={clip}
+            index={index}
+            allClips={clips}
+            projectId={projectId}
+            level={currentLevel}
+            onLevelChange={onLevelChange}
+            descriptions={descriptions}
+            isPlaying={ip}
+            isActiveScene={isActiveScene}
+            onPlayScene={playScene}
+            onPlayFromHere={playFromHere}
+            onPause={pause}
+            applyAndSave={applyAndSave}
+            onCreateTask={onCreateTask}
+          />
+        </>
       )
     },
-    [clipsById, clips, projectId, descriptions, playScene, playFromHere, pause, applyAndSave, onCreateTask]
+    [clipsById, clips, projectId, descriptions, playScene, playFromHere, pause, applyAndSave, onCreateTask, videoSuggestions, onResolveSuggestion, routeSuggestionToAI]
   )
 
   return (
@@ -380,6 +512,17 @@ export default function CreatorDevice({
         </div>
       </div>
 
+      {/* Phase 3b — AI analysis trigger (creator-initiated). Sits between the
+          pinned video and the scene list, exactly like the probe. */}
+      <div className="flex-shrink-0">
+        <AIAnalysisTriggerCard
+          status={effectiveStatus}
+          suggestionCount={videoSuggestions.length}
+          onTrigger={handleAnalyse}
+          role="creator"
+        />
+      </div>
+
       {/* Probe 3 scene-block list — the accessible scene-by-scene surface.
           It owns its own keyboard model (expand/collapse/detail/auto-follow). */}
       <SceneBlockList
@@ -423,6 +566,18 @@ export default function CreatorDevice({
             ))}
           </div>
         </div>
+      )}
+
+      {/* Confirm-first dialog for a routed-to-AI suggestion (fix_template or a
+          re-run AI-edit proposal). Same deterministic-sentence dialog the
+          Ask-AI-to-Edit panel uses. */}
+      {aiConfirm && (
+        <ConfirmEditDialog
+          question={aiConfirm.question}
+          summary={aiConfirm.summary}
+          onConfirm={handleAiConfirmYes}
+          onCancel={handleAiConfirmNo}
+        />
       )}
     </div>
   )
