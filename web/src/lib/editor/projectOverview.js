@@ -1,4 +1,5 @@
 import { buildAllSegments, getTotalDuration } from './buildInitialSources.js';
+import { rootSegmentId } from './stateStore.js';
 
 export function formatDuration(seconds) {
   const totalSeconds = Math.max(0, Math.round(seconds || 0));
@@ -367,6 +368,47 @@ function findVolumeChange(prevClips, nextClips) {
   return null;
 }
 
+// The colour map is keyed on rootSegmentId (the helper grades via
+// applyAndSave → state.colour[rootSegmentId(sceneId)]). Compare the prev/next
+// maps to find the first scene whose grade changed and, where unambiguous,
+// which single property (brightness / contrast / saturation / zoom) moved.
+const COLOUR_PROPS = ['brightness', 'contrast', 'saturation', 'zoom'];
+
+function colourValueFor(entry, prop) {
+  const fallback = prop === 'zoom' ? 100 : 0;
+  const value = entry?.[prop];
+  return typeof value === 'number' ? value : fallback;
+}
+
+function findColourChange(prevColour, nextColour) {
+  const prev = prevColour || {};
+  const next = nextColour || {};
+  const sceneIds = new Set([...Object.keys(prev), ...Object.keys(next)]);
+  for (const sceneId of sceneIds) {
+    const prevEntry = prev[sceneId];
+    const nextEntry = next[sceneId];
+    const changedProps = COLOUR_PROPS.filter(
+      (prop) => colourValueFor(prevEntry, prop) !== colourValueFor(nextEntry, prop),
+    );
+    if (changedProps.length === 0) continue;
+    return {
+      sceneId,
+      // A single moved property lets us name it ("brightness"); a multi-property
+      // grade (e.g. a reset, or an AI fix touching several at once) stays generic.
+      property: changedProps.length === 1 ? changedProps[0] : null,
+      value: changedProps.length === 1 ? colourValueFor(nextEntry, changedProps[0]) : null,
+    };
+  }
+  return null;
+}
+
+// Map a colour-map scene id (rootSegmentId) back to its position in the clip
+// list. Clips may be split, so we compare on the root segment id.
+function findColourSceneIndex(sceneId, clips) {
+  if (!sceneId) return -1;
+  return clips.findIndex((clip) => clip?.id && rootSegmentId(clip.id) === sceneId);
+}
+
 function sceneLabel(index) {
   return `scene ${index + 1}`;
 }
@@ -467,6 +509,8 @@ export function summarizeEditStateChange(prevState, nextState, actorLabel = 'Col
   const nextSources = nextState?.sources || [];
   const prevTextOverlays = prevState?.textOverlays || [];
   const nextTextOverlays = nextState?.textOverlays || [];
+  const prevColour = prevState?.colour || {};
+  const nextColour = nextState?.colour || {};
 
   // Start empty so we can tell "I detected a real change" apart from "nothing
   // changed but I have to return something". The participant pages key the
@@ -558,6 +602,25 @@ export function summarizeEditStateChange(prevState, nextState, actorLabel = 'Col
       } else if (overlayChange?.type === 'reordered') {
         actionText = 'reordered the text overlays';
         promptText = 'Check the video to review the overlay order.';
+      } else {
+        // Colour grade — the helper's brightness/contrast/saturation/zoom rides
+        // state.colour but never surfaced to the BLV creator before (the diff
+        // ignored it entirely → empty summary → no announcement). Detect it last
+        // so a real clip/caption/sound/overlay edit always wins.
+        const colourChange = findColourChange(prevColour, nextColour);
+        if (colourChange) {
+          const idx = findColourSceneIndex(colourChange.sceneId, nextClips);
+          const label = idx >= 0 ? sceneLabel(idx) : 'a scene';
+          if (colourChange.property) {
+            // describeEditOp gives "Brightness +15" / "Zoom 120%" — lower-case
+            // just the property word for the in-sentence phrasing.
+            const propWord = describeEditOp(colourChange.property).split(' ')[0].toLowerCase();
+            actionText = `adjusted the ${propWord} on ${label}`;
+          } else {
+            actionText = `adjusted the look of ${label}`;
+          }
+          promptText = 'Check the video to see the change.';
+        }
       }
     }
   }

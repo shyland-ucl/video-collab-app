@@ -396,6 +396,50 @@ describe('CreatorDevice — open from a chosen video (initialVideoId jump)', () 
   })
 })
 
+describe('CreatorDevice — colour sync (helper grade reaches the creator video)', () => {
+  // The bug: the creator's pinned <video> rendered with no filter/transform, so
+  // the helper's colour grade synced into state.colour but never showed. The fix
+  // renders the SAME filter/transform the helper preview does, keyed on the
+  // active scene's rootSegmentId.
+  it('the active scene video carries a non-empty CSS filter when state.colour is set', () => {
+    // Active clip is s1 (currentClipIndex 0). Grade s1.
+    const { container } = renderDevice({
+      state: { ...STATE, colour: { s1: { brightness: 40 } } },
+    })
+    const filtered = container.querySelector('video[style*="brightness"]')
+    expect(filtered).not.toBeNull()
+  })
+
+  it('a zoom grade carries a scale() transform on the active scene video', () => {
+    const { container } = renderDevice({
+      state: { ...STATE, colour: { s1: { zoom: 130 } } },
+    })
+    const scaled = container.querySelector('video[style*="scale"]')
+    expect(scaled).not.toBeNull()
+  })
+
+  it('renders NO filter when the active scene has no colour grade', () => {
+    const { container } = renderDevice({ state: { ...STATE, colour: {} } })
+    expect(container.querySelector('video[style*="brightness"]')).toBeNull()
+    expect(container.querySelector('video[style*="scale"]')).toBeNull()
+  })
+
+  it('reads colour by ROOT segment id so a split half inherits the root grade', () => {
+    const SPLIT_STATE = {
+      clips: [
+        { id: 's1', sourceId: 'v1', name: 'Scene 1', startTime: 0, endTime: 3, trimStart: 0, trimEnd: 0, color: '#E74C3C' },
+        { id: 's1-split-123-a', sourceId: 'v1', name: 'Scene 1', startTime: 3, endTime: 6, trimStart: 0, trimEnd: 0, color: '#E74C3C' },
+      ],
+      captions: [], textOverlays: [],
+      colour: { s1: { brightness: 50 } }, // graded on the root scene
+    }
+    // Second split half active — same root colour still applies.
+    engineMock.currentClipIndex = 1
+    const { container } = renderDevice({ state: SPLIT_STATE })
+    expect(container.querySelector('video[style*="brightness"]')).not.toBeNull()
+  })
+})
+
 describe('CreatorDevice — playback (bounded vs unbounded)', () => {
   it('Play this scene is BOUNDED: seeks to the scene start, plays, and pauses at the scene boundary', async () => {
     const props = makeProps()

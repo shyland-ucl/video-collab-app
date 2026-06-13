@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { rootSegmentId } from '../../lib/editor/stateStore'
 import { buildEditChangeSceneStamp } from '../../lib/editor/editChangeStamp'
 import usePlaybackEngine, { computeClipLayout } from '../../hooks/usePlaybackEngine'
+import { colourValuesToFilter, colourValuesToTransform } from './HelperDevice'
 import SceneBlockList from './sceneblocks/SceneBlockList'
 import SceneActions from './SceneActions'
 
@@ -102,6 +103,18 @@ export default function CreatorDevice({
   const [playingSegmentEnd, setPlayingSegmentEnd] = useState(null)
 
   const activeClip = clips[engine.currentClipIndex] ?? null
+
+  // ---- Colour → CSS for the active scene (helper colour sync) ----
+  // The helper grades colour into state.colour[rootSegmentId(sceneId)]; that map
+  // rides the same project_state → realtime → state path the creator already
+  // consumes. We render the SAME filter/transform the helper preview does (via
+  // the shared colourValuesToFilter/Transform) so the BLV creator's pinned
+  // video reflects the adjustment — previously this <video> had no filter at all
+  // and the colour change reached the creator invisibly.
+  const colour = state?.colour ?? {}
+  const activeColour = activeClip ? colour?.[rootSegmentId(activeClip.id)] : null
+  const videoFilter = useMemo(() => colourValuesToFilter(activeColour), [activeColour])
+  const videoTransform = useMemo(() => colourValuesToTransform(activeColour), [activeColour])
 
   // Refs so the broadcast effects/interval + the boundary watcher read fresh
   // values without re-running.
@@ -303,7 +316,16 @@ export default function CreatorDevice({
                 }}
                 src={source.src ?? undefined}
                 className="w-full h-full object-contain absolute inset-0"
-                style={{ display: isActive ? 'block' : 'none' }}
+                style={{
+                  display: isActive ? 'block' : 'none',
+                  // The active scene's grade applies to whichever source is
+                  // visible; only the active source is shown, so applying to all
+                  // is harmless. Mirrors EditorVideoPlayer's helper preview.
+                  filter: videoFilter || undefined,
+                  transform: videoTransform || undefined,
+                  transformOrigin: 'center center',
+                  transition: 'transform 0.2s ease-out',
+                }}
                 preload="metadata"
                 playsInline
                 aria-hidden="true"

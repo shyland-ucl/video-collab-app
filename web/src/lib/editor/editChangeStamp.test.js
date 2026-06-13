@@ -76,4 +76,27 @@ describe('buildEditChangeSceneStamp', () => {
     const next = baseState();
     expect(buildEditChangeSceneStamp(prev, next, { fallbackSceneId: 'seg1' })).toBeNull();
   });
+
+  it('colour: stamps the graded scene (root segment id) with the property + value', () => {
+    const prev = { ...baseState(), colour: {} };
+    const next = { ...baseState(), colour: { seg2: { brightness: 15 } } };
+    const stamp = buildEditChangeSceneStamp(prev, next, { fallbackSceneId: 'seg1' });
+    expect(stamp).toEqual({ sceneId: 'seg2', text: 'Brightness +15' });
+  });
+
+  it('colour: a multi-property grade stamps a generic "Colour adjusted"', () => {
+    const prev = { ...baseState(), colour: {} };
+    const next = { ...baseState(), colour: { seg3: { brightness: 10, zoom: 130 } } };
+    const stamp = buildEditChangeSceneStamp(prev, next, { fallbackSceneId: 'seg1' });
+    expect(stamp).toEqual({ sceneId: 'seg3', text: 'Colour adjusted' });
+  });
+
+  it('colour: a clip/caption change still wins over a colour change', () => {
+    const prev = { ...baseState(), colour: {} };
+    // delete seg2 AND grade seg3 in the same diff — the clip change is stamped.
+    const withColour = { ...baseState(), colour: { seg3: { zoom: 120 } } };
+    const next = deleteClip(withColour, 'seg2');
+    const stamp = buildEditChangeSceneStamp(prev, next, { fallbackSceneId: 'seg1' });
+    expect(stamp).toEqual({ sceneId: 'seg2', text: 'Removed from edit' });
+  });
 });

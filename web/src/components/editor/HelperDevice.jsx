@@ -45,7 +45,11 @@ import TextOverlaySettings from './TextOverlaySettings'
 
 // brightness/contrast/saturation sliders are -100..100 (0 neutral); zoom is
 // 100..250%. Port of probe editStateView.colourValuesToFilter/Transform.
-function colourValuesToFilter(values) {
+//
+// Exported so the creator preview (CreatorDevice) renders the SAME filter /
+// transform from the SAME state.colour map the helper grades into — one source
+// of truth, no re-derivation, so the two devices can never drift.
+export function colourValuesToFilter(values) {
   if (!values) return undefined
   const { brightness = 0, contrast = 0, saturation = 0 } = values
   if (brightness === 0 && contrast === 0 && saturation === 0) return undefined
@@ -54,7 +58,7 @@ function colourValuesToFilter(values) {
   const s = (1 + saturation / 100).toFixed(3)
   return `brightness(${b}) contrast(${c}) saturate(${s})`
 }
-function colourValuesToTransform(values) {
+export function colourValuesToTransform(values) {
   if (!values) return undefined
   const { zoom = 100 } = values
   if (zoom === 100) return undefined

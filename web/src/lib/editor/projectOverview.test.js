@@ -153,6 +153,53 @@ describe('summarizeEditStateChange', () => {
     // next has 1 clip — overview should say "1 clip"
     expect(summary.overviewText).toMatch(/1 clip/)
   })
+
+  // ---- Colour grade announcement (helper colour → BLV creator) ----
+  it('announces a colour-only change naming the scene and the property', () => {
+    const prev = { clips: [clip1, clip2], captions: [], textOverlays: [], colour: {} }
+    const next = {
+      clips: [clip1, clip2], captions: [], textOverlays: [],
+      colour: { b: { brightness: 30 } }, // 'b' is clip2 → scene 2
+    }
+    const summary = summarizeEditStateChange(prev, next, 'Helper')
+    expect(summary.actionText).toMatch(/adjusted the brightness on scene 2/i)
+    expect(summary.shortText).toMatch(/Helper adjusted the brightness on scene 2/i)
+    expect(summary.announcement).toBeTruthy()
+    expect(summary.announcement).toMatch(/check the video/i)
+    expect(summary.promptText).toBeTruthy()
+  })
+
+  it('announces a multi-property colour change as "adjusted the look of" the scene', () => {
+    const prev = { clips: [clip1], captions: [], textOverlays: [], colour: {} }
+    const next = {
+      clips: [clip1], captions: [], textOverlays: [],
+      colour: { a: { brightness: 20, contrast: 10 } }, // 'a' is clip1 → scene 1
+    }
+    const summary = summarizeEditStateChange(prev, next, 'Helper')
+    expect(summary.actionText).toMatch(/adjusted the look of scene 1/i)
+    expect(summary.announcement).toBeTruthy()
+  })
+
+  it('keys colour scenes by root segment id (a split half grades the root scene)', () => {
+    const splitHalf = { id: 'a-split-123-x', name: 'Scene 1', startTime: 2.5, endTime: 5, trimStart: 0, trimEnd: 0 }
+    const prev = { clips: [clip1, splitHalf, clip2], captions: [], textOverlays: [], colour: {} }
+    const next = {
+      clips: [clip1, splitHalf, clip2], captions: [], textOverlays: [],
+      colour: { a: { zoom: 120 } }, // root 'a' → scene 1 (block index 0)
+    }
+    const summary = summarizeEditStateChange(prev, next, 'Helper')
+    expect(summary.actionText).toMatch(/adjusted the zoom on scene 1/i)
+  })
+
+  it('stays empty when the colour map is unchanged (no spurious announcement)', () => {
+    const state = {
+      clips: [clip1], captions: [], textOverlays: [],
+      colour: { a: { brightness: 30 } },
+    }
+    const summary = summarizeEditStateChange(state, state, 'Helper')
+    expect(summary.actionText).toBe('')
+    expect(summary.announcement).toBe('')
+  })
 })
 
 // ---------------------------------------------------------------------------

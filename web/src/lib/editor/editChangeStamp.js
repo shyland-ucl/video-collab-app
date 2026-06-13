@@ -199,6 +199,54 @@ function findTextOverlayStamp(prevOverlays = [], nextOverlays = [], fallbackScen
   return null;
 }
 
+// Colour grade. The colour map is keyed on the root segment id (the helper
+// commits state.colour[rootSegmentId(sceneId)]), which is exactly the scene id
+// the rendered list still holds — so the stamp lands on the present clip with
+// no further mapping. Detects the first scene whose grade changed and, when one
+// property moved, names it; a multi-property change stays generic.
+const COLOUR_STAMP_PROPS = ['brightness', 'contrast', 'saturation', 'zoom'];
+
+function colourPropValue(entry, prop) {
+  const fallback = prop === 'zoom' ? 100 : 0;
+  const value = entry?.[prop];
+  return typeof value === 'number' ? value : fallback;
+}
+
+function colourPropLabel(prop, value) {
+  switch (prop) {
+    case 'brightness':
+      return `Brightness ${value >= 0 ? '+' : ''}${value}`;
+    case 'contrast':
+      return `Contrast ${value >= 0 ? '+' : ''}${value}`;
+    case 'saturation':
+      return `Saturation ${value >= 0 ? '+' : ''}${value}`;
+    case 'zoom':
+      return `Zoom ${value}%`;
+    default:
+      return 'Colour adjusted';
+  }
+}
+
+function findColourStamp(prevColour = {}, nextColour = {}) {
+  const prev = prevColour || {};
+  const next = nextColour || {};
+  const sceneIds = new Set([...Object.keys(prev), ...Object.keys(next)]);
+  for (const sceneId of sceneIds) {
+    const prevEntry = prev[sceneId];
+    const nextEntry = next[sceneId];
+    const changedProps = COLOUR_STAMP_PROPS.filter(
+      (prop) => colourPropValue(prevEntry, prop) !== colourPropValue(nextEntry, prop),
+    );
+    if (changedProps.length === 0) continue;
+    const text = changedProps.length === 1
+      ? colourPropLabel(changedProps[0], colourPropValue(nextEntry, changedProps[0]))
+      : 'Colour adjusted';
+    // sceneId is already the root segment id the rendered list holds.
+    return { sceneId: baseSceneId(sceneId), text };
+  }
+  return null;
+}
+
 export function buildEditChangeSceneStamp(prevState, nextState, options = {}) {
   if (!prevState || !nextState) return null;
   const fallbackSceneId = options.fallbackSceneId || null;
@@ -218,6 +266,9 @@ export function buildEditChangeSceneStamp(prevState, nextState, options = {}) {
 
   const clipStamp = findFirstClipChange(prevState.clips || [], nextClips);
   if (clipStamp?.sceneId) return clipStamp;
+
+  const colourStamp = findColourStamp(prevState.colour || {}, nextState.colour || {});
+  if (colourStamp?.sceneId) return colourStamp;
 
   return null;
 }
