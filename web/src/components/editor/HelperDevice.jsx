@@ -162,7 +162,7 @@ export default function HelperDevice({
   }, [remote?.activity])
 
   // ---- Colour → CSS for the active scene ----
-  const activeColour = activeClip ? colour?.[rootSegmentId(activeClip.id)] || colour?.[activeClip.id] : null
+  const activeColour = activeClip ? colour?.[rootSegmentId(activeClip.id)] : null
   const videoFilter = useMemo(() => colourValuesToFilter(activeColour), [activeColour])
   const videoTransform = useMemo(() => colourValuesToTransform(activeColour), [activeColour])
 

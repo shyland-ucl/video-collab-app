@@ -1,4 +1,5 @@
 import TextOverlay from './TextOverlay'
+import { rootSegmentId } from '../../lib/editor/stateStore'
 
 // Ported from probe src/components/shared/VideoPlayer.jsx (Task 10), reduced to
 // the helper-preview surface.
@@ -16,12 +17,10 @@ import TextOverlay from './TextOverlay'
 // elements aria-hidden + tabIndex=-1 (the AT surface is the activity feed +
 // timeline), the CSS filter/transform colour mapping, the visible-overlay
 // filter by active scene, and the bottom caption band.
-
-function clipBaseSceneId(id) {
-  if (typeof id !== 'string') return id
-  const idx = id.lastIndexOf('-split-')
-  return idx >= 0 ? id.slice(0, idx) : id
-}
+//
+// Scene identity (overlay visibility + colour) is keyed on rootSegmentId so a
+// split's halves resolve to the original scene — the same convention used by
+// EditorTimeline (colour persist/read) and HelperDevice (active-colour read).
 
 export default function EditorVideoPlayer({
   sources = [],
@@ -37,9 +36,9 @@ export default function EditorVideoPlayer({
   editingOverlayId = null,
   onOverlayMove,
 }) {
-  const activeSceneId = clipBaseSceneId(activeClip?.id || null)
+  const activeSceneId = activeClip?.id ? rootSegmentId(activeClip.id) : null
   const visibleTextOverlays = textOverlays.filter((overlay) => (
-    !overlay.sceneId || (activeSceneId && clipBaseSceneId(overlay.sceneId) === activeSceneId)
+    !overlay.sceneId || (activeSceneId && rootSegmentId(overlay.sceneId) === activeSceneId)
   ))
 
   return (

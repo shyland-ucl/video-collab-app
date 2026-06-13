@@ -29,6 +29,7 @@ vi.mock('../../hooks/usePlaybackEngine', async (importOriginal) => ({
 }))
 
 import HelperDevice from './HelperDevice'
+import { makeTrimOp } from './EditorTimeline'
 
 const STATE = {
   clips: [
@@ -177,6 +178,108 @@ describe('HelperDevice — colour (persistent)', () => {
     renderDevice()
     await userEvent.click(screen.getByRole('button', { name: /visual adjustments/i }))
     expect(screen.getByText(/preview only until export/i)).toBeInTheDocument()
+  })
+
+  it('committing colour on a split clip keys state.colour under the ROOT scene id', async () => {
+    // A split timeline: g1 split into g1 (first half) + g1-split-123-a (second).
+    const SPLIT_STATE = {
+      clips: [
+        { id: 'g1', sourceId: 'v1', name: 'Scene 1', startTime: 0, endTime: 3, trimStart: 0, trimEnd: 0, color: '#E74C3C' },
+        { id: 'g1-split-123-a', sourceId: 'v1', name: 'Scene 1', startTime: 3, endTime: 6, trimStart: 0, trimEnd: 0, color: '#E74C3C' },
+        { id: 's2', sourceId: 'v1', name: 'Scene 2', startTime: 6, endTime: 12, trimStart: 0, trimEnd: 0, color: '#3498DB' },
+      ],
+      captions: [], textOverlays: [], colour: {},
+    }
+    // Select the SECOND split half so the colour tool targets 'g1-split-123-a'.
+    engineMock.currentClipIndex = 1
+    const { props } = renderDevice({ state: SPLIT_STATE })
+
+    await userEvent.click(screen.getByRole('button', { name: /visual adjustments/i }))
+    // Select the second split half on the timeline (its label is "Scene 1").
+    await userEvent.click(screen.getAllByRole('option', { name: /Scene 1/i })[1])
+    const slider = screen.getByRole('slider', { name: /brightness/i })
+    fireEvent.change(slider, { target: { value: '25' } })
+    fireEvent.pointerUp(slider)
+
+    expect(props.applyAndSave).toHaveBeenCalled()
+    const [opFn] = props.applyAndSave.mock.calls[0]
+    const next = opFn(SPLIT_STATE)
+    // Keyed under the ROOT 'g1', not the raw split id.
+    expect(next.colour.g1).toEqual({ brightness: 25 })
+    expect(next.colour['g1-split-123-a']).toBeUndefined()
+  })
+
+  it('HelperDevice reads active colour by root scene id for EITHER split half', () => {
+    const SPLIT_STATE = {
+      clips: [
+        { id: 'g1', sourceId: 'v1', name: 'Scene 1', startTime: 0, endTime: 3, trimStart: 0, trimEnd: 0, color: '#E74C3C' },
+        { id: 'g1-split-123-a', sourceId: 'v1', name: 'Scene 1', startTime: 3, endTime: 6, trimStart: 0, trimEnd: 0, color: '#E74C3C' },
+      ],
+      captions: [], textOverlays: [],
+      // Colour graded on the root scene — both halves should inherit it.
+      colour: { g1: { brightness: 100 } },
+    }
+    // First half active.
+    engineMock.currentClipIndex = 0
+    const { container, rerender, props } = renderDevice({ state: SPLIT_STATE })
+    const firstHalfVideo = container.querySelector('video[style*="brightness"]')
+    expect(firstHalfVideo).not.toBeNull()
+
+    // Second half active — same root colour still applies.
+    engineMock.currentClipIndex = 1
+    rerender(<HelperDevice {...{ ...props, state: SPLIT_STATE }} />)
+    const secondHalfVideo = container.querySelector('video[style*="brightness"]')
+    expect(secondHalfVideo).not.toBeNull()
+  })
+})
+
+describe('EditorTimeline — trim opFn (makeTrimOp factory)', () => {
+  // The trim opFn is keyboard/pointer-driven on slider handles inside the
+  // selected clip (pointer capture is not reliable in jsdom), so the component
+  // delegates to this exported pure factory and we exercise the real maths here.
+  const fixture = () => ({
+    clips: [
+      { id: 'a', sourceId: 'v1', name: 'A', startTime: 0, endTime: 6, trimStart: 0, trimEnd: 0, color: '#000' },
+      { id: 'b', sourceId: 'v1', name: 'B', startTime: 6, endTime: 12, trimStart: 0, trimEnd: 0, color: '#111' },
+    ],
+    captions: [], textOverlays: [], colour: {},
+  })
+
+  it('(a) targets the clip by id regardless of clip order', () => {
+    const op = makeTrimOp('b', 'left', +1)
+    // A reordered/rebased state where b is now first — id targeting must still hit b.
+    const reordered = fixture()
+    reordered.clips = [reordered.clips[1], reordered.clips[0]]
+    const next = op(reordered)
+    expect(next.clips.find((c) => c.id === 'b').trimStart).toBe(0.5)
+    expect(next.clips.find((c) => c.id === 'a').trimStart).toBe(0)
+  })
+
+  it('(b) applies the 0.5s step on each edge', () => {
+    const s = fixture()
+    const afterLeft = makeTrimOp('a', 'left', +1)(s)
+    expect(afterLeft.clips[0].trimStart).toBe(0.5)
+    const afterRight = makeTrimOp('a', 'right', +1)(afterLeft)
+    expect(afterRight.clips[0].trimEnd).toBe(0.5)
+  })
+
+  it('(b) clamps to a 0 floor — untrimming past 0 cannot go negative', () => {
+    const s = fixture()
+    const next = makeTrimOp('a', 'left', -1)(s) // trimStart already 0
+    expect(next.clips[0].trimStart).toBe(0)
+  })
+
+  it('leaves at least 0.5s of clip — trimStart cannot eat the whole 6s clip', () => {
+    let s = fixture() // clip a is 6s long
+    const op = makeTrimOp('a', 'left', +1)
+    for (let i = 0; i < 20; i++) s = op(s) // try to trim 10s off a 6s clip
+    // dur - trimEnd - 0.5 = 6 - 0 - 0.5 = 5.5 is the ceiling.
+    expect(s.clips[0].trimStart).toBe(5.5)
+  })
+
+  it('is a no-op (returns state unchanged) when the id is gone', () => {
+    const s = fixture()
+    expect(makeTrimOp('missing', 'left', +1)(s)).toBe(s)
   })
 })
 

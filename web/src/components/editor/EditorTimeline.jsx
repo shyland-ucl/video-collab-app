@@ -4,6 +4,7 @@ import {
   splitClip, deleteClip, moveClip, addCaption, getClipForScene,
 } from '../../lib/editor/sceneEditOps'
 import { summarizeVisualAdjustment } from '../../lib/editor/projectOverview'
+import { rootSegmentId } from '../../lib/editor/stateStore'
 
 // Adapted port of probe src/components/shared/MockEditorVisual.jsx (Task 10).
 //
@@ -38,6 +39,28 @@ const TRIM_STEP = 0.5
 
 function effectiveDuration(clip) {
   return Math.max(0.5, (clip.endTime - clip.trimEnd) - (clip.startTime + clip.trimStart))
+}
+
+// Trim opFn factory. Returns a pure (state) => state op that targets the clip
+// BY ID (so it re-derives correctly on a rebased remote state whose clip order
+// differs) and adjusts one trim edge by `direction * TRIM_STEP`, clamped to a 0
+// floor and leaving at least 0.5s of clip. `edge` is 'left' (trimStart) or
+// 'right' (trimEnd); `direction` is +1 (trim more) or -1 (recover).
+// Exported so the clamp/step maths can be unit-tested without a jsdom pointer.
+export function makeTrimOp(clipId, edge, direction) {
+  const delta = direction * TRIM_STEP
+  return (s) => {
+    const target = getClipForScene(s, clipId)
+    if (!target) return s
+    const dur = target.endTime - target.startTime
+    const next = { ...target }
+    if (edge === 'left') {
+      next.trimStart = Math.max(0, Math.min((target.trimStart || 0) + delta, dur - (target.trimEnd || 0) - 0.5))
+    } else {
+      next.trimEnd = Math.max(0, Math.min((target.trimEnd || 0) + delta, dur - (target.trimStart || 0) - 0.5))
+    }
+    return { ...s, clips: s.clips.map((c) => (c.id === clipId ? next : c)) }
+  }
 }
 
 export default function EditorTimeline({
@@ -135,21 +158,10 @@ export default function EditorTimeline({
     applyAndSave((s) => moveClip(s, id, dir), `Moved ${clip.name} ${dir === 'up' ? 'earlier' : 'later'}`)
   }, [selectedClipIndex, clips, applyAndSave])
 
-  const handleTrim = useCallback((clipId, side, delta) => {
+  const handleTrim = useCallback((clipId, edge, direction) => {
     const clip = clips.find((c) => c.id === clipId)
     if (!clip) return
-    applyAndSave((s) => {
-      const target = getClipForScene(s, clipId)
-      if (!target) return s
-      const dur = target.endTime - target.startTime
-      const next = { ...target }
-      if (side === 'left') {
-        next.trimStart = Math.max(0, Math.min((target.trimStart || 0) + delta, dur - (target.trimEnd || 0) - 0.5))
-      } else {
-        next.trimEnd = Math.max(0, Math.min((target.trimEnd || 0) + delta, dur - (target.trimStart || 0) - 0.5))
-      }
-      return { ...s, clips: s.clips.map((c) => (c.id === clipId ? next : c)) }
-    }, `Trimmed ${clip.name}`)
+    applyAndSave(makeTrimOp(clipId, edge, direction), `Trimmed ${clip.name}`)
   }, [clips, applyAndSave])
 
   const handleAddCaption = useCallback(() => {
@@ -164,7 +176,7 @@ export default function EditorTimeline({
 
   // ---- Colour: commit (slider release / change-end), persists per scene ----
   const colourValues = useMemo(() => {
-    const sceneId = activeToolClip?.id ?? null
+    const sceneId = activeToolClip ? rootSegmentId(activeToolClip.id) : null
     return { ...COLOUR_DEFAULTS, ...(sceneId ? colour?.[sceneId] : null) }
   }, [activeToolClip, colour])
   // Live (uncommitted) slider value so the thumb tracks the drag before commit.
@@ -173,7 +185,7 @@ export default function EditorTimeline({
   const commitColour = useCallback((property, value) => {
     const clip = activeToolClip
     if (!clip) return
-    const sceneId = clip.id
+    const sceneId = rootSegmentId(clip.id)
     const numVal = Number(value)
     setPendingColour((p) => {
       const { [property]: _omit, ...rest } = p
@@ -349,10 +361,10 @@ export default function EditorTimeline({
                     onKeyDown={(e) => {
                       if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
                         e.preventDefault(); e.stopPropagation()
-                        handleTrim(clip.id, 'left', TRIM_STEP)
+                        handleTrim(clip.id, 'left', +1)
                       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
                         e.preventDefault(); e.stopPropagation()
-                        handleTrim(clip.id, 'left', -TRIM_STEP)
+                        handleTrim(clip.id, 'left', -1)
                       }
                     }}
                     className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize z-10 flex items-center justify-center"
@@ -371,10 +383,10 @@ export default function EditorTimeline({
                     onKeyDown={(e) => {
                       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
                         e.preventDefault(); e.stopPropagation()
-                        handleTrim(clip.id, 'right', TRIM_STEP)
+                        handleTrim(clip.id, 'right', +1)
                       } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
                         e.preventDefault(); e.stopPropagation()
-                        handleTrim(clip.id, 'right', -TRIM_STEP)
+                        handleTrim(clip.id, 'right', -1)
                       }
                     }}
                     className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize z-10 flex items-center justify-center"
