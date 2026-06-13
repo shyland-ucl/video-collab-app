@@ -49,6 +49,13 @@ describe('ProjectsPage', () => {
     expect(await screen.findByText(/No projects yet/)).toBeInTheDocument()
   })
 
+  it('shows a Settings link in the header', async () => {
+    mockOrder.mockResolvedValue({ data: [], error: null })
+    renderPage()
+    await screen.findByText(/No projects yet/)
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
+  })
+
   it('lists projects as links to their pages', async () => {
     mockOrder.mockResolvedValue({
       data: [{ id: 'p1', title: 'My film', status: 'active', created_at: '2026-01-01', owner_id: 'u1' }],

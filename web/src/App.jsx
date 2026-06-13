@@ -7,6 +7,7 @@ import ProjectsPage from './pages/ProjectsPage'
 import ProjectPage from './pages/ProjectPage'
 import VideoPage from './pages/VideoPage'
 import EditorPage from './pages/EditorPage'
+import SettingsPage from './pages/SettingsPage'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
       <Routes>
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/" element={<RequireAuth><ProjectsPage /></RequireAuth>} />
+        <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
         <Route path="/projects/:id" element={<RequireAuth><ProjectPage /></RequireAuth>} />
         <Route path="/projects/:projectId/videos/:videoId" element={<RequireAuth><VideoPage /></RequireAuth>} />
         <Route path="/projects/:projectId/edit" element={<RequireAuth><EditorPage /></RequireAuth>} />

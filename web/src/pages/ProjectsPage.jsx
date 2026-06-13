@@ -88,9 +88,17 @@ export default function ProjectsPage() {
     <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Your projects</h1>
-        <button onClick={signOut} className="min-h-12 rounded border border-gray-400 px-3">
-          Sign out
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/settings"
+            className="flex min-h-12 items-center rounded border border-gray-400 px-3"
+          >
+            Settings
+          </Link>
+          <button onClick={signOut} className="min-h-12 rounded border border-gray-400 px-3">
+            Sign out
+          </button>
+        </div>
       </div>
 
       <form onSubmit={handleCreate} className="mb-6">
