@@ -4,6 +4,7 @@ import { makeRequireAuth } from './middleware/requireAuth.js'
 import { makeVideoRoutes } from './routes/videos.js'
 import { makeAiEditRoutes } from './routes/aiEdit.js'
 import { makeSuggestRoutes } from './routes/suggest.js'
+import { makeRenderRoutes } from './routes/render.js'
 
 export function makeApp(supabaseClient, videoDeps = {}) {
   const app = express()
@@ -32,6 +33,7 @@ export function makeApp(supabaseClient, videoDeps = {}) {
   // No videoDeps: the suggest route's injectable `propose` would otherwise
   // collide with ai-edit's in the shared bag. Its tests mount it directly.
   app.use(makeSuggestRoutes(supabaseClient))
+  app.use(makeRenderRoutes(supabaseClient))
 
   return app
 }

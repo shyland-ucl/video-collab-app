@@ -106,4 +106,15 @@ export async function recoverInterrupted(supabase, log = console.log) {
     .select('id')
   if (error) log(`stale-processing sweep failed: ${error.message}`)
   else if (data?.length) log(`marked ${data.length} interrupted video(s) failed`)
+
+  // Same single-instance guarantee for interrupted render jobs (Phase 4): a
+  // restart mid-render would otherwise strand the 'rendering' row + 409-block
+  // the next render.
+  const { data: r, error: rErr } = await supabase
+    .from('renders')
+    .update({ status: 'failed', error: 'interrupted_by_restart' })
+    .eq('status', 'rendering')
+    .select('id')
+  if (rErr) log(`stale-render sweep failed: ${rErr.message}`)
+  else if (r?.length) log(`marked ${r.length} interrupted render(s) failed`)
 }

@@ -114,15 +114,15 @@ describe('processVideo', () => {
 })
 
 describe('recoverInterrupted', () => {
-  it('marks stale processing rows failed at boot', async () => {
+  it('marks stale processing AND rendering rows failed at boot', async () => {
     const calls = []
     const supabase = {
-      from: () => ({
+      from: (table) => ({
         update: (patch) => ({
           eq: (col, val) => ({
             select: async () => {
-              calls.push({ patch, col, val })
-              return { data: [{ id: 'v1' }], error: null }
+              calls.push({ table, patch, col, val })
+              return { data: [{ id: 'x1' }], error: null }
             },
           }),
         }),
@@ -130,11 +130,8 @@ describe('recoverInterrupted', () => {
     }
     await recoverInterrupted(supabase, () => {})
     expect(calls).toEqual([
-      {
-        patch: { status: 'failed', error: 'interrupted_by_restart' },
-        col: 'status',
-        val: 'processing',
-      },
+      { table: 'videos', patch: { status: 'failed', error: 'interrupted_by_restart' }, col: 'status', val: 'processing' },
+      { table: 'renders', patch: { status: 'failed', error: 'interrupted_by_restart' }, col: 'status', val: 'rendering' },
     ])
   })
 })
