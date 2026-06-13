@@ -7,7 +7,6 @@ import { SCENE_COLORS, buildInitialState, loadLatestState, rootSegmentId, saveSt
 import { joinProjectChannel } from '../lib/editor/projectChannel'
 import { createTask, listTasks, setTaskStatus } from '../lib/editor/tasksApi'
 import { summarizeEditStateChange } from '../lib/editor/projectOverview'
-import { AccessibilityProvider } from '../contexts/AccessibilityContext'
 import CreatorDevice from '../components/editor/CreatorDevice'
 import HelperDevice from '../components/editor/HelperDevice'
 
@@ -464,7 +463,6 @@ export default function EditorPage() {
   const Device = role === 'creator' ? CreatorDevice : HelperDevice
 
   return (
-    <AccessibilityProvider>
     <main id="main" tabIndex={-1} className="p-4">
       {syncDown && (
         <p role="alert" className="mb-3 rounded border border-red-700 bg-red-50 p-3 text-red-700">
@@ -503,6 +501,5 @@ export default function EditorPage() {
         syncDown={syncDown}
       />
     </main>
-    </AccessibilityProvider>
   )
 }

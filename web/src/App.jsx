@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
+import { AccessibilityProvider } from './contexts/AccessibilityContext'
 import RequireAuth from './components/RequireAuth'
 import SignInPage from './pages/SignInPage'
 import ProjectsPage from './pages/ProjectsPage'
@@ -10,6 +11,7 @@ import EditorPage from './pages/EditorPage'
 export default function App() {
   return (
     <AuthProvider>
+      <AccessibilityProvider>
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:p-2"
@@ -25,6 +27,7 @@ export default function App() {
       </Routes>
       <div id="sr-announcer" role="status" aria-live="polite" aria-atomic="true" className="sr-only" />
       <div id="sr-announcer-assertive" role="alert" aria-live="assertive" aria-atomic="true" className="sr-only" />
+      </AccessibilityProvider>
     </AuthProvider>
   )
 }

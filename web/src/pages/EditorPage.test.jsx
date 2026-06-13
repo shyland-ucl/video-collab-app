@@ -107,6 +107,7 @@ vi.mock('../components/editor/HelperDevice', () => ({
 }))
 
 import EditorPage from './EditorPage'
+import { AccessibilityProvider } from '../contexts/AccessibilityContext'
 import { announce } from '../utils/announcer'
 
 const VIDEOS = [
@@ -174,11 +175,13 @@ const SUMMARY = {
 
 function renderPage(projectId = 'p1') {
   return render(
-    <MemoryRouter initialEntries={[`/projects/${projectId}/edit`]}>
-      <Routes>
-        <Route path="/projects/:projectId/edit" element={<EditorPage />} />
-      </Routes>
-    </MemoryRouter>
+    <AccessibilityProvider>
+      <MemoryRouter initialEntries={[`/projects/${projectId}/edit`]}>
+        <Routes>
+          <Route path="/projects/:projectId/edit" element={<EditorPage />} />
+        </Routes>
+      </MemoryRouter>
+    </AccessibilityProvider>
   )
 }
 
