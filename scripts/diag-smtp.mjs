@@ -39,6 +39,22 @@ console.log('user:', await talk(sec, Buffer.from(user).toString('base64')))
 console.log('pass:', await talk(sec, Buffer.from(pass).toString('base64')))
 console.log('MAIL FROM:', await talk(sec, `MAIL FROM:<${from}>`))
 console.log('RCPT TO:', await talk(sec, `RCPT TO:<${to}>`))
+
+if (process.argv[5] === 'send') {
+  console.log('DATA:', await talk(sec, 'DATA'))
+  const msg = [
+    `From: Video Collab <${from}>`,
+    `To: <${to}>`,
+    'Subject: Direct SMTP delivery test',
+    `Date: ${new Date().toUTCString()}`,
+    `Message-ID: <diag-${Date.now()}@video-collab-app>`,
+    '',
+    'This message was sent directly via Brevo SMTP, bypassing Supabase.',
+    'If you received it, Brevo -> your inbox delivery works.',
+    '.',
+  ].join('\r\n')
+  console.log('send:', await talk(sec, msg))
+}
 await talk(sec, 'QUIT').catch(() => {})
 sec.end()
 process.exit(0)
