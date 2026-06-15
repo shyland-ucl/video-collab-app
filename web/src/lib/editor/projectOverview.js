@@ -389,8 +389,11 @@ function findMuteChange(prevClips, nextClips) {
 // The colour map is keyed on rootSegmentId (the helper grades via
 // applyAndSave → state.colour[rootSegmentId(sceneId)]). Compare the prev/next
 // maps to find the first scene whose grade changed and, where unambiguous,
-// which single property (brightness / contrast / saturation / zoom) moved.
-const COLOUR_PROPS = ['brightness', 'contrast', 'saturation', 'zoom'];
+// which single property (brightness / contrast / saturation / zoom / rotate)
+// moved. NOTE: rotate MUST be here — it's the 5th visual slider (EditorTimeline
+// COLOUR_SLIDERS); omitting it left a helper's rotate change silent on the
+// creator's device (no synced announcement at all).
+const COLOUR_PROPS = ['brightness', 'contrast', 'saturation', 'zoom', 'rotate'];
 
 function colourValueFor(entry, prop) {
   const fallback = prop === 'zoom' ? 100 : 0;
@@ -508,7 +511,10 @@ export function describeEditOp(operation, options = {}) {
     case 'zoom':
       return num != null ? `Zoom ${num}%` : 'Zoom changed';
     case 'rotate':
-      return num != null ? `Rotated ${num}°` : 'Rotation changed';
+      // Noun phrase ("Rotation 30°") so it reads cleanly both standalone in the
+      // "what changed" line AND inside "changed rotation 30°" (matches the
+      // Brightness/Zoom siblings; "changed rotated 30°" was ungrammatical).
+      return num != null ? `Rotation ${num}°` : 'Rotation changed';
     case 'success':
     case 'researcher_response':
     case 'visual_adjust':

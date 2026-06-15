@@ -178,6 +178,21 @@ describe('summarizeEditStateChange', () => {
     expect(summary.announcement).not.toMatch(/scene/i)
   })
 
+  it('announces a rotate-only colour change (regression: rotate was missing from COLOUR_PROPS, so it was silent on the creator)', () => {
+    const prev = { clips: [clip1], captions: [], textOverlays: [], colour: {} }
+    const next = {
+      clips: [clip1], captions: [], textOverlays: [],
+      colour: { a: { rotate: 30 } }, // 'a' is clip1
+    }
+    const summary = summarizeEditStateChange(prev, next, 'Your helper')
+    expect(summary).toEqual(summarizeVisualAdjustment('rotate', 30, 'Your helper'))
+    expect(summary.actionText).toBe('changed rotation 30°')
+    expect(summary.announcement).toBe(
+      'Your helper changed rotation 30°. Review the video frame to confirm the visual change.'
+    )
+    expect(summary.announcement).not.toMatch(/scene/i)
+  })
+
   it('uses the passed actorLabel as the colour-announcement prefix (creator hears its own label)', () => {
     const prev = { clips: [clip1], captions: [], textOverlays: [], colour: {} }
     const next = {
