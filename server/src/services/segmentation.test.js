@@ -5,7 +5,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import ffmpegPath from 'ffmpeg-static'
-import { planSegments, cutSegment } from './segmentation.js'
+import { planSegments, cutSegment, buildSegmentArgs } from './segmentation.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -44,6 +44,25 @@ describe('planSegments', () => {
     expect(() => planSegments(0, 5)).toThrow()
     expect(() => planSegments(10, 0)).toThrow()
     expect(() => planSegments(NaN, 5)).toThrow()
+  })
+})
+
+describe('buildSegmentArgs', () => {
+  it('caps encoder threads so a real HD source cannot OOM-kill the container', () => {
+    const [plan] = planSegments(10, 5)
+    const args = buildSegmentArgs('/in.mp4', '/out/seg_001.mp4', plan)
+    const i = args.indexOf('-threads')
+    expect(i).toBeGreaterThanOrEqual(0)
+    expect(Number(args[i + 1])).toBeLessThanOrEqual(8)
+    expect(args.join(' ')).toContain('lookahead-threads=1')
+  })
+
+  it('keeps the correct command shape (libx264, input, output last)', () => {
+    const [plan] = planSegments(10, 5)
+    const args = buildSegmentArgs('/in.mp4', '/out/seg_001.mp4', plan)
+    expect(args).toContain('libx264')
+    expect(args[args.indexOf('-i') + 1]).toBe('/in.mp4')
+    expect(args[args.length - 1]).toBe('/out/seg_001.mp4')
   })
 })
 

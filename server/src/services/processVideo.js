@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { getVideoMeta } from './videoMeta.js'
 import { planSegments, cutSegment } from './segmentation.js'
+import { formatExecError } from './ffmpegRun.js'
 import { describeKeyframe, loadDescriptionPrompt, DESCRIPTION_MODEL } from './descriptions.js'
 
 export async function processVideo({ supabase, model, videoId, log = () => {} }, deps = {}) {
@@ -85,8 +86,11 @@ export async function processVideo({ supabase, model, videoId, log = () => {} },
     const done = await supabase.from('videos').update({ status: 'ready' }).eq('id', videoId)
     if (done.error) throw new Error(`status_update_failed: ${done.error.message}`)
   } catch (err) {
+    // formatExecError preserves err.signal/err.code/err.killed so a killed
+    // ffmpeg (e.g. container OOM = signal SIGKILL) is diagnosable from the row,
+    // not masked as a bare "Command failed".
     const failed = await supabase.from('videos')
-      .update({ status: 'failed', error: String(err?.message ?? err) })
+      .update({ status: 'failed', error: formatExecError(err) })
       .eq('id', videoId)
     if (failed.error) log(`could not record failure for ${videoId}: ${failed.error.message}`)
     throw err

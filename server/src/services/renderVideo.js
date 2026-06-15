@@ -1,16 +1,10 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-import ffmpegPath from 'ffmpeg-static'
 import { buildRenderPlan, clipFfmpegArgs } from './renderPlan.js'
+import { runFfmpeg as defaultRunFfmpeg, formatExecError } from './ffmpegRun.js'
 import { loadLatestState } from './stateStore.js'
 import { loadProjectSources } from './renderData.js'
-
-const execFileAsync = promisify(execFile)
-const EXEC_OPTS = { maxBuffer: 10 * 1024 * 1024 }
-const defaultRunFfmpeg = (args) => execFileAsync(ffmpegPath, args, EXEC_OPTS)
 
 /**
  * Render a project's EDL into one MP4 and upload it. Mirrors processVideo.js:
@@ -78,7 +72,7 @@ export async function renderVideo(opts) {
     await setRender({ status: 'ready', output_path: outputPath })
     log(`render ${renderId} ready at ${outputPath}`)
   } catch (err) {
-    await setRender({ status: 'failed', error: String(err?.message ?? err) })
+    await setRender({ status: 'failed', error: formatExecError(err) })
     throw err
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {})

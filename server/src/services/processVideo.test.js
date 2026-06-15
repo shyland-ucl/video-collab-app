@@ -111,6 +111,26 @@ describe('processVideo', () => {
     expect(last.patch.status).toBe('failed')
     expect(last.patch.error).toMatch(/gemini_down/)
   })
+
+  it('records the exit signal when ffmpeg is killed (the OOM diagnostic that was missing)', async () => {
+    const supabase = makeFakeSupabase()
+    const deps = makeDeps()
+    deps.cut = vi.fn(async () => {
+      const e = new Error('Command failed: ffmpeg ... seg_001.mp4')
+      e.signal = 'SIGKILL'
+      e.killed = false // OS/OOM kill, not our timeout
+      throw e
+    })
+
+    await expect(
+      processVideo({ supabase, model: {}, videoId: 'vid-1' }, deps)
+    ).rejects.toThrow()
+
+    const last = supabase.updates[supabase.updates.length - 1]
+    expect(last.patch.status).toBe('failed')
+    expect(last.patch.error).toMatch(/signal=SIGKILL/)
+    expect(last.patch.error).toMatch(/OOM/i)
+  })
 })
 
 describe('recoverInterrupted', () => {

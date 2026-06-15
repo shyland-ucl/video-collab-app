@@ -1,10 +1,5 @@
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import path from 'node:path'
-import ffmpegPath from 'ffmpeg-static'
-
-const execFileAsync = promisify(execFile)
-const EXEC_OPTS = { maxBuffer: 10 * 1024 * 1024 }
+import { runFfmpeg, x264ThreadArgs } from './ffmpegRun.js'
 
 export function planSegments(totalDuration, segmentLength) {
   if (!Number.isFinite(totalDuration) || totalDuration <= 0) throw new Error('bad_duration')
@@ -26,24 +21,34 @@ export function planSegments(totalDuration, segmentLength) {
 }
 
 // Re-encode (not stream-copy) so segment boundaries are frame-accurate:
-// phone videos often have keyframes 5-10s apart.
-export async function cutSegment(sourceFile, outDir, plan) {
-  const segFile = path.join(outDir, `${plan.id}.mp4`)
-  const kfFile = path.join(outDir, `${plan.id}_kf.jpg`)
-
-  await execFileAsync(ffmpegPath, [
+// phone videos often have keyframes 5-10s apart. x264ThreadArgs() caps the
+// thread pool so a real HD source can't OOM-kill the encode on a small
+// container (the 320x240 test clip never surfaced this).
+export function buildSegmentArgs(sourceFile, segFile, plan) {
+  return [
     '-y', '-ss', String(plan.start_seconds), '-to', String(plan.end_seconds),
     '-i', sourceFile,
-    '-c:v', 'libx264', '-c:a', 'aac', '-preset', 'fast',
+    '-c:v', 'libx264', '-c:a', 'aac', '-preset', 'fast', ...x264ThreadArgs(),
     segFile,
-  ], EXEC_OPTS)
+  ]
+}
 
-  await execFileAsync(ffmpegPath, [
+// Single-frame extract: mjpeg, no x264 threading, so no thread cap needed.
+export function buildKeyframeArgs(sourceFile, kfFile, plan) {
+  return [
     '-y', '-ss', String(plan.midpoint),
     '-i', sourceFile,
     '-frames:v', '1', '-q:v', '2',
     kfFile,
-  ], EXEC_OPTS)
+  ]
+}
+
+export async function cutSegment(sourceFile, outDir, plan) {
+  const segFile = path.join(outDir, `${plan.id}.mp4`)
+  const kfFile = path.join(outDir, `${plan.id}_kf.jpg`)
+
+  await runFfmpeg(buildSegmentArgs(sourceFile, segFile, plan))
+  await runFfmpeg(buildKeyframeArgs(sourceFile, kfFile, plan))
 
   return { segFile, kfFile }
 }

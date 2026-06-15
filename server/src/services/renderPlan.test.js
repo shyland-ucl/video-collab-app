@@ -134,4 +134,13 @@ describe('clipFfmpegArgs', () => {
     expect(args.join(' ')).toMatch(/force_original_aspect_ratio=decrease/)
     expect(args.join(' ')).toMatch(/pad=1280:720/)
   })
+
+  it('caps encoder threads so a real HD source cannot OOM-kill the container', () => {
+    const args = clipFfmpegArgs({ sourcePath: '/s', effStart: 0, effEnd: 5, colour: null, muted: false, volume: 100 }, '/clip.mp4')
+    const i = args.indexOf('-threads')
+    expect(i).toBeGreaterThanOrEqual(0)
+    expect(Number(args[i + 1])).toBeLessThanOrEqual(8)
+    expect(args.join(' ')).toContain('lookahead-threads=1')
+    expect(args[args.length - 1]).toBe('/clip.mp4') // output still last
+  })
 })

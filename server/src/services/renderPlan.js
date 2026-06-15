@@ -1,11 +1,13 @@
-// Pure EDL → render plan + ffmpeg arg/filter builders. No ffmpeg, no IO — the
-// testable core of the render. Keep rootSegmentId + the colour math in sync with
-// web stateStore.rootSegmentId and HelperDevice.colourValuesToFilter/Transform.
+// Pure EDL → render plan + ffmpeg arg/filter builders (no ffmpeg spawn, no IO —
+// the only import is the pure x264ThreadArgs helper). The testable core of the
+// render. Keep rootSegmentId + the colour math in sync with web
+// stateStore.rootSegmentId and HelperDevice.colourValuesToFilter/Transform.
 //
 // SECURITY: project_state JSONB is opaque + member-writable (no DB shape check),
 // so EVERY value reaching an ffmpeg arg/filtergraph here is treated as hostile —
 // coerced to a finite number and range-clamped. A non-numeric value (e.g. a
 // crafted `rotate` string) can NEVER reach the -vf string and inject filters.
+import { x264ThreadArgs } from './ffmpegRun.js'
 
 export const OUTPUT = { w: 1280, h: 720, fps: 30 }
 // Bound in-process work: a hostile EDL could otherwise queue thousands of
@@ -113,7 +115,7 @@ export function clipFfmpegArgs(entry, outFile, out = OUTPUT) {
     '-y', '-ss', String(entry.effStart), '-to', String(entry.effEnd), '-i', entry.sourcePath,
     '-vf', vf,
     '-af', `volume=${n3(vol)}`,
-    '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p', '-r', String(out.fps),
+    '-c:v', 'libx264', '-preset', 'fast', ...x264ThreadArgs(), '-pix_fmt', 'yuv420p', '-r', String(out.fps),
     '-c:a', 'aac', '-ar', '48000', '-ac', '2',
     outFile,
   ]
