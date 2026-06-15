@@ -52,13 +52,6 @@ import TextOverlay from './TextOverlay'
 const PLAYHEAD_INTERVAL_MS = 2000
 const SEGMENT_END_EPSILON = 0.05
 
-const TASK_STATUS_TEXT = {
-  pending: 'Sent to helper',
-  done: 'Helper: Done',
-  needs_discussion: 'Helper: Needs discussion',
-  cant_do: "Helper: Can't do",
-}
-
 const ACCENT = '#9B59B6' // Probe 3 creator primary (purple)
 
 export default function CreatorDevice({
@@ -66,7 +59,6 @@ export default function CreatorDevice({
   state,
   sources,
   descriptions,
-  tasks,
   suggestions = [],
   applyAndSave,
   channel,
@@ -581,33 +573,6 @@ export default function CreatorDevice({
       {onExport && (
         <div className="flex-shrink-0 mt-3">
           <ExportPanel render={render} onExport={onExport} getDownloadUrl={getDownloadUrl} />
-        </div>
-      )}
-
-      {/* Recent Tasks — rendered from the tasks prop; status-change
-          announcements happen in EditorPage, not here. */}
-      {tasks.length > 0 && (
-        <div role="region" aria-label="Recent tasks" className="flex-shrink-0 border-2 border-[#64748b] rounded-xl overflow-hidden bg-white mt-3">
-          <div className="bg-[#f1f5f9] px-3 py-2.5 border-b border-[#cbd5e1]">
-            <span className="text-xs font-bold tracking-wide text-[#475569] uppercase">
-              Recent Tasks ({tasks.length})
-            </span>
-          </div>
-          <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto">
-            {tasks.slice(0, 10).map((task) => (
-              <div key={task.id} className="px-4 py-2.5 flex items-start gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-800 truncate">{task.text}</p>
-                  {task.segment_label && (
-                    <p className="text-xs text-gray-500 mt-0.5">{task.segment_label}</p>
-                  )}
-                  <p className="text-xs text-gray-600 mt-0.5">
-                    {TASK_STATUS_TEXT[task.status] ?? task.status}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 

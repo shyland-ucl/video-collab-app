@@ -137,18 +137,17 @@ describe('CreatorDevice — scene list', () => {
     expect(region.getByRole('button', { name: /ask helper to edit/i })).toBeInTheDocument()
   })
 
-  it('renders the recent-tasks panel from the tasks prop with status labels', () => {
+  it('does NOT render a recent-tasks panel on the creator side, even with tasks present', () => {
+    // The creator UI omits the visual task list (helper task updates still reach
+    // the creator as screen-reader announcements from EditorPage).
     renderDevice({
       tasks: [
         { id: 't1', text: 'Fix the colour', segment_label: 'Scene 2', status: 'pending', created_by: 'u1', created_at: '2026-06-13' },
         { id: 't2', text: 'Add music', segment_label: null, status: 'done', created_by: 'u1', created_at: '2026-06-13' },
       ],
     })
-    const panel = screen.getByRole('region', { name: /recent tasks/i })
-    expect(panel).toHaveTextContent('Fix the colour')
-    expect(panel).toHaveTextContent('Scene 2')
-    expect(panel).toHaveTextContent('Sent to helper')
-    expect(panel).toHaveTextContent('Helper: Done')
+    expect(screen.queryByRole('region', { name: /recent tasks/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('Fix the colour')).not.toBeInTheDocument()
   })
 })
 
