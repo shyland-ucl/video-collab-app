@@ -312,6 +312,27 @@ describe('EditorPage', () => {
     })
   })
 
+  it('renders the helper-edit toast as a visual-only echo (not a 2nd SR live region) so it is not read twice', async () => {
+    // Regression: the toast used to be role="status". With the edit ALSO spoken
+    // via announce(), a blind creator heard every helper edit twice with the
+    // "status" role spoken in between. The global #sr-announcer is the single
+    // SR channel; the visible toast must be aria-hidden.
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    act(() => {
+      channelOpts().onStateInsert({ version: 2, state: STATE_V2, updated_by: 'u2' })
+    })
+
+    // Spoken exactly once, through the announcer.
+    expect(announce).toHaveBeenCalledWith(SUMMARY.announcement)
+    // The visible toast carries the text but is OUT of the AT tree.
+    const toast = await screen.findByText(SUMMARY.shortText)
+    expect(toast).toHaveAttribute('aria-hidden', 'true')
+    expect(toast).not.toHaveAttribute('role')
+  })
+
   it('end-to-end: a REMOTE colour insert announces on the creator using the REAL summarizer (colour branch + announce gate)', async () => {
     // Every other test stubs summarizeEditStateChange via mockSummarize, so the
     // real colour branch and the page's `if (summary.announcement)` gate are

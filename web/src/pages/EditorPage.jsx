@@ -664,8 +664,13 @@ export default function EditorPage() {
           {SYNC_DOWN_TEXT}
         </p>
       )}
+      {/* Also spoken via announce(NEW_SCENES_TEXT) — utils/announcer.js's
+          #sr-announcer is the SINGLE screen-reader channel. Keep this banner
+          aria-hidden so AT doesn't read it a SECOND time and speak the "status"
+          role between the two reads. (noScenes below has NO backing announce(),
+          so it stays a role="status" live region.) */}
       {newScenes && (
-        <p role="status" className="flex-shrink-0 mb-3 rounded border border-gray-300 p-3 text-lg">
+        <p aria-hidden="true" className="flex-shrink-0 mb-3 rounded border border-gray-300 p-3 text-lg">
           {NEW_SCENES_TEXT}
         </p>
       )}
@@ -674,8 +679,12 @@ export default function EditorPage() {
           {NO_SCENES_TEXT}
         </p>
       )}
+      {/* Helper-edit feedback is spoken via announce(summary.announcement)
+          (onStateInsert). This toast is the VISUAL echo only — aria-hidden so a
+          blind creator doesn't hear every helper edit TWICE with the "status"
+          role spoken in between (the global announcer is the single SR channel). */}
       {toast && (
-        <p role="status" className="flex-shrink-0 mb-3 rounded border border-gray-300 bg-gray-50 p-3">
+        <p aria-hidden="true" className="flex-shrink-0 mb-3 rounded border border-gray-300 bg-gray-50 p-3">
           {toast}
         </p>
       )}
