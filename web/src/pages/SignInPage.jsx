@@ -67,69 +67,71 @@ export default function SignInPage() {
   }
 
   const heading = mode === 'create' ? 'Create your password' : 'Sign in'
+  const subtitle =
+    mode === 'create'
+      ? 'Set a password to get started.'
+      : 'Welcome back. Sign in to reach your projects.'
 
   return (
-    <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
-      <h1 className="mb-4 text-2xl font-bold">{heading}</h1>
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="email" className="mb-2 block text-lg">
-          Email address
-        </label>
-        <input
-          id="email"
-          ref={emailRef}
-          type="email"
-          required
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="mb-4 block w-full rounded border border-gray-400 p-3 text-lg"
-        />
-        <label htmlFor="password" className="mb-2 block text-lg">
-          Password
-        </label>
-        <input
-          id="password"
-          type="password"
-          required
-          minLength={6}
-          autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="mb-4 block w-full rounded border border-gray-400 p-3 text-lg"
-        />
-        <button
-          type="submit"
-          disabled={busy}
-          className="min-h-12 w-full rounded bg-blue-700 px-4 py-3 text-lg font-semibold text-white disabled:opacity-50"
-        >
-          {mode === 'create'
-            ? busy
-              ? 'Creating…'
-              : 'Create password and sign in'
-            : busy
-              ? 'Signing in…'
-              : 'Sign in'}
-        </button>
-        {error && <p className="mt-3 text-red-700">{error}</p>}
-      </form>
-      {mode === 'create' ? (
-        <button
-          type="button"
-          onClick={() => switchMode('signin')}
-          className="mt-4 min-h-12 underline"
-        >
-          Already have a password? Sign in
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => switchMode('create')}
-          className="mt-4 min-h-12 underline"
-        >
-          First time here? Create your password
-        </button>
-      )}
+    <main id="main" tabIndex={-1} className="page flex min-h-screen flex-col justify-center">
+      <header className="mb-7 text-center">
+        <p className="eyebrow">Video Collab</p>
+        <h1 className="page-title mt-2">{heading}</h1>
+        <p className="muted mt-1.5">{subtitle}</p>
+      </header>
+
+      <div className="card p-6">
+        <form onSubmit={handleSubmit}>
+          <label htmlFor="email" className="label">
+            Email address
+          </label>
+          <input
+            id="email"
+            ref={emailRef}
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="input mb-4"
+          />
+          <label htmlFor="password" className="label">
+            Password
+          </label>
+          <input
+            id="password"
+            type="password"
+            required
+            minLength={6}
+            autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="input mb-5"
+          />
+          <button type="submit" disabled={busy} className="btn btn-primary btn-block">
+            {mode === 'create'
+              ? busy
+                ? 'Creating…'
+                : 'Create password and sign in'
+              : busy
+                ? 'Signing in…'
+                : 'Sign in'}
+          </button>
+          {error && <p className="alert-error mt-4">{error}</p>}
+        </form>
+      </div>
+
+      <p className="mt-6 text-center">
+        {mode === 'create' ? (
+          <button type="button" onClick={() => switchMode('signin')} className="link min-h-11">
+            Already have a password? Sign in
+          </button>
+        ) : (
+          <button type="button" onClick={() => switchMode('create')} className="link min-h-11">
+            First time here? Create your password
+          </button>
+        )}
+      </p>
     </main>
   )
 }

@@ -45,20 +45,18 @@ export default function SettingsPage() {
     <main
       id="main"
       tabIndex={-1}
-      className={`mx-auto max-w-lg p-4 ${TEXT_SIZE_CLASS[textSize] ?? TEXT_SIZE_CLASS.medium}`}
+      className={`page ${TEXT_SIZE_CLASS[textSize] ?? TEXT_SIZE_CLASS.medium}`}
     >
-      <Link to="/" className="inline-block min-h-12 underline">
-        Back to projects
-      </Link>
-      <h1 className="mb-6 mt-2 text-2xl font-bold">Settings</h1>
+      <Link to="/" className="link-back mb-3">← Back to projects</Link>
+      <h1 className="page-title mb-7">Settings</h1>
 
-      <fieldset className="mb-8 border-0 p-0">
-        <legend className="mb-2 block font-semibold">Text size</legend>
-        <div className="space-y-2">
+      <fieldset className="mb-7 border-0 p-0">
+        <legend className="label mb-2.5">Text size</legend>
+        <div className="space-y-2.5">
           {TEXT_SIZE_OPTIONS.map((opt) => (
             <label
               key={opt.value}
-              className="flex min-h-12 items-center gap-3 rounded border border-gray-300 px-3"
+              className="flex min-h-12 cursor-pointer items-center gap-3 rounded-field border border-line bg-surface px-4 shadow-card transition-colors hover:bg-sunken has-[:checked]:border-brand has-[:checked]:bg-brand-soft"
             >
               <input
                 type="radio"
@@ -66,34 +64,34 @@ export default function SettingsPage() {
                 value={opt.value}
                 checked={textSize === opt.value}
                 onChange={() => handleTextSize(opt.value)}
-                className="h-5 w-5"
+                className="h-5 w-5 accent-brand"
               />
-              <span>{opt.label}</span>
+              <span className="font-semibold">{opt.label}</span>
             </label>
           ))}
         </div>
       </fieldset>
 
-      <div className="mb-8">
-        <label className="flex min-h-12 items-center gap-3 rounded border border-gray-300 px-3">
+      <div className="mb-7">
+        <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-field border border-line bg-surface px-4 shadow-card transition-colors hover:bg-sunken has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
           <input
             type="checkbox"
             checked={audioEnabled}
             onChange={handleToggleAudio}
-            className="h-5 w-5"
+            className="h-5 w-5 accent-brand"
           />
           <span className="font-semibold">Spoken descriptions</span>
         </label>
-        <p className="mt-1 text-sm text-gray-600">
+        <p className="muted mt-1.5 text-sm">
           Read scene descriptions aloud while you work.
         </p>
       </div>
 
-      <div className="mb-8">
-        <label htmlFor="speech-rate" className="mb-2 block font-semibold">
+      <div className="mb-7">
+        <label htmlFor="speech-rate" className="label">
           Speech rate: {speechRate}
         </label>
-        <div className="min-h-12 flex items-center">
+        <div className="flex min-h-12 items-center">
           <input
             id="speech-rate"
             type="range"
@@ -102,11 +100,10 @@ export default function SettingsPage() {
             step={0.1}
             value={speechRate}
             onChange={handleRateChange}
-            className="w-full"
+            className="w-full accent-brand"
           />
         </div>
       </div>
-
     </main>
   )
 }

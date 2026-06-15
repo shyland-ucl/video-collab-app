@@ -64,32 +64,41 @@ export default function ProjectPage() {
 
   if (error && !project) {
     return (
-      <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
-        <p className="text-red-700">{error}</p>
-        <Link to="/" className="underline">Back to projects</Link>
+      <main id="main" tabIndex={-1} className="page">
+        <p className="alert-error mb-4">{error}</p>
+        <Link to="/" className="link-back"><span aria-hidden="true">←</span> Back to projects</Link>
       </main>
     )
   }
   if (!project) {
     return (
-      <main id="main" tabIndex={-1} className="p-4">
-        <p>Loading…</p>
+      <main id="main" tabIndex={-1} className="page">
+        <p className="muted">Loading…</p>
       </main>
     )
   }
 
   return (
-    <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
-      <Link to="/" className="mb-4 inline-block underline">← All projects</Link>
-      <h1 className="mb-4 text-2xl font-bold">{project.title}</h1>
+    <main id="main" tabIndex={-1} className="page">
+      <Link to="/" className="link-back mb-3">
+        <span aria-hidden="true">←</span> All projects
+      </Link>
+      <h1 className="page-title mb-6">{project.title}</h1>
 
-      <section aria-labelledby="members-heading" className="mb-6">
-        <h2 id="members-heading" className="mb-2 text-xl font-semibold">
+      <section aria-labelledby="members-heading" className="mb-7">
+        <h2 id="members-heading" className="section-title mb-2.5">
           People ({members.length})
         </h2>
-        <ul className="space-y-1">
+        <ul className="flex flex-wrap gap-2">
           {members.map((m) => (
-            <li key={m.user_id} className="rounded border border-gray-300 p-2">
+            <li
+              key={m.user_id}
+              className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold shadow-card ${
+                m.role === 'creator'
+                  ? 'border-violet-300 bg-violet-50 text-violet-800'
+                  : 'border-amber-300 bg-amber-50 text-amber-800'
+              }`}
+            >
               {m.role === 'creator' ? 'Creator' : 'Helper'}
               {m.user_id === user?.id ? ' (you)' : ''}
             </li>
@@ -100,29 +109,27 @@ export default function ProjectPage() {
       <VideosSection projectId={id} />
 
       {hasReadyVideo && (
-        <Link
-          to={`/projects/${id}/edit`}
-          className="mb-6 inline-block min-h-12 text-lg underline"
-        >
-          Open editor
+        <Link to={`/projects/${id}/edit`} className="btn btn-primary btn-block mb-7">
+          Open editor <span aria-hidden="true">→</span>
         </Link>
       )}
 
-      <button
-        onClick={handleInvite}
-        disabled={inviting}
-        className="min-h-12 w-full rounded bg-blue-700 px-4 py-3 text-lg font-semibold text-white disabled:opacity-50"
-      >
-        Invite a helper
-      </button>
-      {error && <p className="mt-3 text-red-700">{error}</p>}
-      {invite && (
-        <div className="mt-3 rounded border border-gray-300 p-4 text-center">
-          <p className="text-5xl font-bold tracking-[0.4em]">{invite.code}</p>
-          <p className="mt-3 text-lg">Expires in 15 minutes.</p>
-          <p className="text-lg">Ask your helper to enter this code on their home page.</p>
-        </div>
-      )}
+      <div className="card p-5">
+        <button onClick={handleInvite} disabled={inviting} className="btn btn-primary btn-block">
+          Invite a helper
+        </button>
+        {error && <p className="alert-error mt-3">{error}</p>}
+        {invite && (
+          <div className="mt-4 rounded-card border border-brand/25 bg-brand-soft p-5 text-center">
+            <p className="eyebrow mb-2">Invite code</p>
+            <p className="font-display text-5xl font-bold tracking-[0.3em] text-brand-strong">
+              {invite.code}
+            </p>
+            <p className="muted mt-3">Expires in 15 minutes.</p>
+            <p className="muted">Ask your helper to enter this code on their home page.</p>
+          </div>
+        )}
+      </div>
     </main>
   )
 }

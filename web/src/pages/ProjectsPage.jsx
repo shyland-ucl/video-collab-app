@@ -85,86 +85,82 @@ export default function ProjectsPage() {
   }
 
   return (
-    <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Your projects</h1>
+    <main id="main" tabIndex={-1} className="page">
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div>
+          <p className="eyebrow">Video Collab</p>
+          <h1 className="page-title mt-1">Your projects</h1>
+        </div>
         <div className="flex items-center gap-2">
-          <Link
-            to="/settings"
-            className="flex min-h-12 items-center rounded border border-gray-400 px-3"
-          >
+          <Link to="/settings" className="btn btn-ghost">
             Settings
           </Link>
-          <button onClick={signOut} className="min-h-12 rounded border border-gray-400 px-3">
+          <button onClick={signOut} className="btn btn-ghost">
             Sign out
           </button>
         </div>
       </div>
 
-      <form onSubmit={handleCreate} className="mb-6">
-        <label htmlFor="title" className="mb-2 block text-lg">
-          New project name
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="title"
-            required
-            maxLength={200}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="block w-full rounded border border-gray-400 p-3 text-lg"
-          />
-          <button
-            type="submit"
-            disabled={creating}
-            className="min-h-12 shrink-0 rounded bg-blue-700 px-4 font-semibold text-white disabled:opacity-50"
-          >
-            Create
-          </button>
-        </div>
-      </form>
+      <div className="card mb-6 p-5">
+        <form onSubmit={handleCreate} className="mb-5">
+          <label htmlFor="title" className="label">
+            New project name
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="title"
+              required
+              maxLength={200}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="input"
+            />
+            <button type="submit" disabled={creating} className="btn btn-primary shrink-0">
+              Create
+            </button>
+          </div>
+        </form>
 
-      <form onSubmit={handleJoin} className="mb-6">
-        <label htmlFor="join-code" className="mb-2 block text-lg">
-          Join with a code
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="join-code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{4}"
-            maxLength={4}
-            required
-            value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value.replace(/\D/g, ''))}
-            className="block w-full rounded border border-gray-400 p-3 text-lg tracking-widest"
-          />
-          <button
-            type="submit"
-            disabled={joining}
-            className="min-h-12 shrink-0 rounded bg-blue-700 px-4 font-semibold text-white disabled:opacity-50"
-          >
-            Join
-          </button>
-        </div>
-        {joinError && <p className="mt-2 text-red-700">{joinError}</p>}
-      </form>
+        <hr className="my-5 border-line" />
 
-      {error && <p className="mb-4 text-red-700">{error}</p>}
+        <form onSubmit={handleJoin}>
+          <label htmlFor="join-code" className="label">
+            Join with a code
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="join-code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]{4}"
+              maxLength={4}
+              required
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value.replace(/\D/g, ''))}
+              className="input text-center tracking-[0.4em]"
+            />
+            <button type="submit" disabled={joining} className="btn btn-primary shrink-0">
+              Join
+            </button>
+          </div>
+          {joinError && <p className="alert-error mt-3">{joinError}</p>}
+        </form>
+      </div>
+
+      {error && <p className="alert-error mb-4">{error}</p>}
       {projects === null ? (
-        <p>Loading projects…</p>
+        <p className="muted">Loading projects…</p>
       ) : projects.length === 0 ? (
-        <p>No projects yet. Create one above to get started.</p>
+        <div className="card p-6 text-center">
+          <p className="muted">No projects yet. Create one above to get started.</p>
+        </div>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2.5">
           {projects.map((p) => (
             <li key={p.id}>
-              <Link
-                to={`/projects/${p.id}`}
-                className="block min-h-12 rounded border border-gray-300 p-3 text-lg"
-              >
-                {p.title}
+              <Link to={`/projects/${p.id}`} className="row-link flex items-center justify-between gap-3">
+                <span className="truncate">{p.title}</span>
+                <span aria-hidden="true" className="text-ink-faint">→</span>
               </Link>
             </li>
           ))}

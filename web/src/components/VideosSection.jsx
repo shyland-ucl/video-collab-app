@@ -13,6 +13,14 @@ const STATUS_LABELS = {
   failed: 'Failed',
 }
 
+// Status pill colours (Calm Clinical tokens + Tailwind amber for "in progress").
+const STATUS_STYLES = {
+  uploading: 'bg-sunken text-ink-soft',
+  processing: 'bg-amber-100 text-amber-800',
+  ready: 'bg-brand-soft text-brand-strong',
+  failed: 'bg-danger-soft text-danger',
+}
+
 // Fix 4 — friendly error copy for known codes
 const ERROR_LABELS = {
   server_not_configured: 'The server is not reachable right now. Please try again later.',
@@ -144,12 +152,12 @@ export default function VideosSection({ projectId }) {
   }
 
   return (
-    <section aria-labelledby="videos-heading" className="mb-6">
-      <h2 id="videos-heading" className="mb-2 text-xl font-semibold">
+    <section aria-labelledby="videos-heading" className="mb-7">
+      <h2 id="videos-heading" className="section-title mb-3">
         Videos
       </h2>
 
-      <label htmlFor="video-file" className="mb-2 block text-lg">
+      <label htmlFor="video-file" className="label">
         Upload a video (MP4, up to 50 MB)
       </label>
       <input
@@ -158,67 +166,84 @@ export default function VideosSection({ projectId }) {
         accept="video/mp4"
         disabled={progress !== null}
         onChange={handleFileChange}
-        className="mb-3 block w-full rounded border border-gray-400 p-3"
+        className="mb-3 block w-full rounded-field border border-line-strong bg-surface p-2.5 text-sm text-ink-soft file:mr-3 file:rounded-field file:border-0 file:bg-brand file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-brand-strong disabled:opacity-50"
       />
 
       {progress !== null && (
-        <p role="status" className="mb-3 text-lg">
-          Uploading… {progress}%
-        </p>
+        <div role="status" className="mb-3">
+          <p className="mb-1.5 text-sm font-semibold text-ink-soft">Uploading… {progress}%</p>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-sunken">
+            <div
+              className="h-full rounded-full bg-brand transition-[width] duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
       )}
       {error && (
-        <p role="alert" className="mb-3 text-red-700">
+        <p role="alert" className="alert-error mb-3">
           {error}
         </p>
       )}
       {/* Fix 8 — separate alert for transient poll failures */}
       {listError && (
-        <p role="alert" className="mb-3 text-red-700">
+        <p role="alert" className="alert-error mb-3">
           {listError}
         </p>
       )}
 
       {videos === null ? (
-        <p role="status">Loading videos…</p>
+        <p role="status" className="muted">Loading videos…</p>
       ) : videos.length === 0 ? (
-        <p>No videos yet. Upload one above to get started.</p>
+        <p className="muted">No videos yet. Upload one above to get started.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2.5">
           {videos.map((v) => (
-            <li key={v.id} className="rounded border border-gray-300 p-3">
-              <p className="text-lg font-medium">{v.original_name}</p>
-              <p>
-                Status: {STATUS_LABELS[v.status] ?? v.status}
-                {v.status === 'failed' && v.error ? ` — ${v.error}` : ''}
-              </p>
-              {v.status === 'ready' && (
-                <Link
-                  to={`/projects/${projectId}/videos/${v.id}`}
-                  aria-label={`View scenes and descriptions for ${v.original_name}`}
-                  className="mt-1 inline-block min-h-12 underline"
-                >
-                  View scenes and descriptions
-                </Link>
+            <li key={v.id} className="card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <p className="font-display font-bold">{v.original_name}</p>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${STATUS_STYLES[v.status] ?? STATUS_STYLES.processing}`}>
+                  {STATUS_LABELS[v.status] ?? v.status}
+                </span>
+              </div>
+              {v.status === 'failed' && v.error && (
+                <p className="mt-1 text-sm" style={{ color: 'var(--color-danger)' }}>{v.error}</p>
               )}
-              {v.status === 'ready' && (
-                <Link
-                  to={`/projects/${projectId}/edit?video=${v.id}`}
-                  aria-label={`Open ${v.original_name} in the editor`}
-                  className="mt-1 ml-4 inline-block min-h-12 underline"
-                >
-                  Open in editor
-                </Link>
-              )}
-              {/* Fix 2 — stuck-uploading rows (no in-flight upload) also get Retry;
-                  Task 11 — gated to the uploader for uploading status */}
-              {(v.status === 'failed' || (v.status === 'uploading' && progress === null && v.uploaded_by === user.id)) && (
-                <button
-                  onClick={() => handleRetry(v)}
-                  aria-label={`Retry processing ${v.original_name}`}
-                  className="mt-1 min-h-12 rounded border border-gray-400 px-3"
-                >
-                  Retry processing
-                </button>
+              {(v.status === 'ready' ||
+                v.status === 'failed' ||
+                (v.status === 'uploading' && progress === null && v.uploaded_by === user.id)) && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {v.status === 'ready' && (
+                    <>
+                      <Link
+                        to={`/projects/${projectId}/edit?video=${v.id}`}
+                        aria-label={`Open ${v.original_name} in the editor`}
+                        className="btn btn-primary"
+                      >
+                        Open in editor →
+                      </Link>
+                      <Link
+                        to={`/projects/${projectId}/videos/${v.id}`}
+                        aria-label={`View scenes and descriptions for ${v.original_name}`}
+                        className="btn btn-ghost"
+                      >
+                        View scenes
+                      </Link>
+                    </>
+                  )}
+                  {/* Fix 2 — stuck-uploading rows (no in-flight upload) also get Retry;
+                      Task 11 — gated to the uploader for uploading status */}
+                  {(v.status === 'failed' ||
+                    (v.status === 'uploading' && progress === null && v.uploaded_by === user.id)) && (
+                    <button
+                      onClick={() => handleRetry(v)}
+                      aria-label={`Retry processing ${v.original_name}`}
+                      className="btn btn-ghost"
+                    >
+                      Retry processing
+                    </button>
+                  )}
+                </div>
               )}
             </li>
           ))}

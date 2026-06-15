@@ -58,29 +58,29 @@ export default function VideoPage() {
 
   if (error) {
     return (
-      <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
-        <p role="alert">{error}</p>
-        <Link to={`/projects/${projectId}`} className="underline">Back to project</Link>
+      <main id="main" tabIndex={-1} className="page">
+        <p role="alert" className="alert-error mb-4">{error}</p>
+        <Link to={`/projects/${projectId}`} className="link-back">← Back to project</Link>
       </main>
     )
   }
   if (!video) {
     return (
-      <main id="main" tabIndex={-1} className="p-4">
-        <p role="status">Loading…</p>
+      <main id="main" tabIndex={-1} className="page">
+        <p role="status" className="muted">Loading…</p>
       </main>
     )
   }
 
   return (
-    <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
-      <Link to={`/projects/${projectId}`} className="mb-4 inline-block underline">
+    <main id="main" tabIndex={-1} className="page">
+      <Link to={`/projects/${projectId}`} className="link-back mb-3">
         ← Back to project
       </Link>
-      <h1 className="mb-4 text-2xl font-bold">{video.original_name}</h1>
+      <h1 className="page-title mb-5">{video.original_name}</h1>
 
       {video.status !== 'ready' && (
-        <p role="status" className="mb-4 rounded border border-gray-300 p-3 text-lg">
+        <p role="status" className="card mb-5 p-4 text-lg">
           This video is still being prepared — scenes and descriptions will appear here when it's ready.
         </p>
       )}
@@ -89,22 +89,26 @@ export default function VideoPage() {
         <video
           controls
           src={urls[video.storage_path]}
-          className="mb-6 w-full rounded"
+          className="mb-6 w-full rounded-card border border-line shadow-card"
           aria-label={`Original video: ${video.original_name}`}
         />
       )}
 
-      <fieldset className="mb-6">
-        <legend className="mb-2 text-lg font-semibold">Description detail</legend>
-        <div className="flex flex-col gap-2">
+      <fieldset className="mb-7">
+        <legend className="label mb-2.5">Description detail</legend>
+        <div className="flex flex-col gap-2.5">
           {LEVELS.map((opt) => (
-            <label key={opt.value} className="flex min-h-12 items-center gap-2 text-lg">
+            <label
+              key={opt.value}
+              className="flex min-h-12 cursor-pointer items-center gap-3 rounded-field border border-line bg-surface px-4 text-lg shadow-card transition-colors hover:bg-sunken has-[:checked]:border-brand has-[:checked]:bg-brand-soft"
+            >
               <input
                 type="radio"
                 name="description-level"
                 value={opt.value}
                 checked={level === opt.value}
                 onChange={() => setLevel(opt.value)}
+                className="h-5 w-5 accent-brand"
               />
               {opt.label}
             </label>
@@ -113,25 +117,30 @@ export default function VideoPage() {
       </fieldset>
 
       <section aria-labelledby="scenes-heading">
-        <h2 id="scenes-heading" className="mb-2 text-xl font-semibold">
+        <h2 id="scenes-heading" className="section-title mb-3">
           Scenes ({segments.length})
         </h2>
-        <ol className="space-y-3">
+        <ol className="space-y-3.5">
           {segments.map((seg) => {
             const description = seg.descriptions?.find((d) => d.level === level)
             return (
-              <li key={seg.id} className="rounded border border-gray-300 p-3">
+              <li key={seg.id} className="card overflow-hidden">
                 {urls[seg.keyframe_path] && (
                   <img
                     src={urls[seg.keyframe_path]}
                     alt={seg.descriptions?.find((d) => d.level === 1)?.text ?? `Keyframe for ${seg.label}`}
-                    className="mb-2 w-full rounded"
+                    className="w-full border-b border-line"
                   />
                 )}
-                <p className="text-lg font-medium">
-                  {seg.label} ({formatTime(seg.start_seconds)}–{formatTime(seg.end_seconds)})
-                </p>
-                <p>{description?.text ?? 'No description available.'}</p>
+                <div className="p-4">
+                  <p className="font-display text-lg font-bold">
+                    {seg.label}{' '}
+                    <span className="muted font-sans text-sm font-medium">
+                      {formatTime(seg.start_seconds)}–{formatTime(seg.end_seconds)}
+                    </span>
+                  </p>
+                  <p className="mt-1">{description?.text ?? 'No description available.'}</p>
+                </div>
               </li>
             )
           })}

@@ -1,1 +1,137 @@
 @import "tailwindcss";
+
+/* ============================================================================
+   Calm Clinical — design system
+   Trustworthy, soft, accessible. A warm off-white canvas, a calm teal brand,
+   gentle depth, generous spacing. Role accents (creator violet / helper amber)
+   are kept for the editor. Legibility first: large text, high contrast (AA+),
+   visible focus, reduced-motion respected.
+   ========================================================================== */
+@theme {
+  /* Surfaces & ink */
+  --color-canvas: #faf9f6;        /* warm off-white app background */
+  --color-surface: #ffffff;       /* cards, inputs */
+  --color-sunken: #f3f1ea;        /* inset / hover wells */
+  --color-ink: #1c1b1a;           /* primary text */
+  --color-ink-soft: #57534e;      /* secondary text */
+  --color-ink-faint: #8a857d;     /* hints, placeholders */
+  --color-line: #e8e4da;          /* hairline borders */
+  --color-line-strong: #d6d0c4;   /* input borders */
+
+  /* Brand (deep teal) */
+  --color-brand: #0f766e;
+  --color-brand-strong: #0b5a54;
+  --color-brand-soft: #d9efec;
+
+  /* Role accents (editor) */
+  --color-creator: #7c3aed;
+  --color-helper: #d97706;
+
+  /* Feedback */
+  --color-danger: #b42318;
+  --color-danger-soft: #fdeceb;
+  --color-success: #15803d;
+
+  /* Type */
+  --font-display: "Bricolage Grotesque", "Public Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Public Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  /* Radii & depth */
+  --radius-field: 10px;
+  --radius-card: 14px;
+  --shadow-card: 0 1px 2px rgba(28, 27, 26, 0.04), 0 6px 20px -12px rgba(28, 27, 26, 0.18);
+  --shadow-pop: 0 12px 40px -16px rgba(28, 27, 26, 0.28);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    /* Whisper-quiet warmth so the canvas reads as a surface, not a void. */
+    background-image: radial-gradient(120% 80% at 50% -10%, rgba(15, 118, 110, 0.05), transparent 60%);
+    background-attachment: fixed;
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.018em;
+    color: var(--color-ink);
+  }
+
+  /* One visible, high-contrast focus style for every keyboard target. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: var(--color-brand-soft);
+    color: var(--color-ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Layout ---------------------------------------------------------------- */
+  .page { @apply mx-auto w-full max-w-lg px-5 py-7 sm:px-6; }
+  .page-title { @apply text-[1.75rem] font-bold leading-tight; }
+  .section-title { @apply text-lg font-bold; }
+  .eyebrow { @apply text-xs font-bold uppercase tracking-[0.12em] text-ink-faint; }
+  .muted { @apply text-ink-soft; }
+
+  /* Cards & rows ---------------------------------------------------------- */
+  .card { @apply rounded-card border border-line bg-surface shadow-card; }
+  /* A tappable list row that lifts gently on hover/focus. */
+  .row-link {
+    @apply block rounded-card border border-line bg-surface px-4 py-3.5 text-lg font-medium
+           shadow-card transition-[transform,border-color,box-shadow] duration-150
+           hover:-translate-y-px hover:border-brand/40 hover:shadow-pop;
+  }
+
+  /* Forms ----------------------------------------------------------------- */
+  .label { @apply mb-1.5 block text-sm font-semibold text-ink-soft; }
+  .input {
+    @apply block w-full rounded-field border border-line-strong bg-surface px-3.5 py-3 text-lg text-ink
+           shadow-[inset_0_1px_2px_rgba(28,27,26,0.04)]
+           placeholder:text-ink-faint
+           focus:border-brand focus:bg-surface;
+  }
+
+  /* Buttons --------------------------------------------------------------- */
+  .btn {
+    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-field px-4 py-3
+           text-base font-semibold leading-none transition-colors duration-150
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  /* Variants are color-only modifiers — compose as `btn btn-primary` in JSX
+     (v4 @apply can't reference another component class). */
+  .btn-primary { @apply bg-brand text-white hover:bg-brand-strong; }
+  .btn-ghost   { @apply border border-line-strong bg-surface text-ink hover:bg-sunken; }
+  .btn-block   { @apply w-full; }
+
+  /* Links ----------------------------------------------------------------- */
+  .link { @apply font-semibold text-brand underline-offset-2 hover:underline; }
+  .link-back { @apply inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-ink-soft hover:text-ink; }
+
+  /* Feedback -------------------------------------------------------------- */
+  .alert-error {
+    @apply rounded-field border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-sm font-medium;
+    color: var(--color-danger);
+  }
+}
