@@ -4,13 +4,35 @@ import path from 'node:path'
 import { getVideoMeta } from './videoMeta.js'
 import { planSegments, cutSegment } from './segmentation.js'
 import { formatExecError } from './ffmpegRun.js'
-import { describeKeyframe, loadDescriptionPrompt, DESCRIPTION_MODEL } from './descriptions.js'
+import { describeKeyframe, describeScene, loadDescriptionPrompt, DESCRIPTION_MODEL } from './descriptions.js'
+
+// base64 length guard — keep inline Gemini requests comfortably under the 20 MB
+// cap; an oversize clip falls back to the keyframe. Set DESCRIBE_FROM_CLIP=0 to
+// force the legacy keyframe path without a redeploy.
+const MAX_CLIP_INLINE_B64 = 14 * 1024 * 1024
+
+async function describeWithFallback({ describeFromClip, describe, model, prompt, modelClipFile, kfBytes, planId, log }) {
+  const kfB64 = kfBytes.toString('base64')
+  if (process.env.DESCRIBE_FROM_CLIP !== '0' && modelClipFile) {
+    try {
+      const clipB64 = (await fs.readFile(modelClipFile)).toString('base64')
+      if (clipB64.length <= MAX_CLIP_INLINE_B64) {
+        return await describeFromClip(model, prompt, { data: clipB64, mimeType: 'video/mp4' })
+      }
+      log(`clip ${planId} too large to send inline (${clipB64.length}b) — using keyframe`)
+    } catch (err) {
+      log(`clip describe failed for ${planId} (${String(err?.message ?? err)}) — using keyframe`)
+    }
+  }
+  return describe(model, prompt, kfB64)
+}
 
 export async function processVideo({ supabase, model, videoId, log = () => {} }, deps = {}) {
   const {
     getMeta = getVideoMeta,
     cut = cutSegment,
     describe = describeKeyframe,
+    describeFromClip = describeScene,
     loadPrompt = loadDescriptionPrompt,
   } = deps
 
@@ -44,7 +66,7 @@ export async function processVideo({ supabase, model, videoId, log = () => {} },
     const prompt = await loadPrompt()
 
     for (const plan of plans) {
-      const { segFile, kfFile } = await cut(sourceFile, workDir, plan)
+      const { segFile, kfFile, modelClipFile } = await cut(sourceFile, workDir, plan)
       const segmentPath = `${prefix}/segments/${plan.id}.mp4`
       const keyframePath = `${prefix}/keyframes/${plan.id}_kf.jpg`
 
@@ -68,7 +90,10 @@ export async function processVideo({ supabase, model, videoId, log = () => {} },
       }).select().single()
       if (segErr) throw new Error(`segment_insert_failed: ${segErr.message}`)
 
-      const levels = await describe(model, prompt, kfBytes.toString('base64'))
+      const levels = await describeWithFallback({
+        describeFromClip, describe, model, prompt,
+        modelClipFile, kfBytes, planId: plan.id, log,
+      })
       const { error: descErr } = await supabase.from('descriptions').insert(
         [1, 2, 3].map((level) => ({
           segment_id: segRow.id,

@@ -59,13 +59,19 @@ function makeDeps({ describeFails = false } = {}) {
     cut: vi.fn(async (_src, outDir, plan) => {
       const segFile = path.join(outDir, `${plan.id}.mp4`)
       const kfFile = path.join(outDir, `${plan.id}_kf.jpg`)
+      const modelClipFile = path.join(outDir, `${plan.id}_model.mp4`)
       await fs.writeFile(segFile, 'seg-bytes')
       await fs.writeFile(kfFile, 'kf-bytes')
-      return { segFile, kfFile }
+      await fs.writeFile(modelClipFile, 'model-clip-bytes')
+      return { segFile, kfFile, modelClipFile }
     }),
     describe: vi.fn(async () => {
       if (describeFails) throw new Error('gemini_down')
-      return { level_1: 'one', level_2: 'two', level_3: 'three' }
+      return { level_1: 'kf one', level_2: 'kf two', level_3: 'kf three' }
+    }),
+    describeFromClip: vi.fn(async () => {
+      if (describeFails) throw new Error('clip_gemini_down')
+      return { level_1: 'clip one', level_2: 'clip two', level_3: 'clip three' }
     }),
     loadPrompt: vi.fn(async () => 'PROMPT'),
   }
@@ -130,6 +136,47 @@ describe('processVideo', () => {
     expect(last.patch.status).toBe('failed')
     expect(last.patch.error).toMatch(/signal=SIGKILL/)
     expect(last.patch.error).toMatch(/OOM/i)
+  })
+
+  it('describes from the model clip (not the keyframe) on the happy path', async () => {
+    const supabase = makeFakeSupabase()
+    const deps = makeDeps()
+    await processVideo({ supabase, model: {}, videoId: 'vid-1' }, deps)
+
+    expect(deps.describeFromClip).toHaveBeenCalled()
+    expect(deps.describe).not.toHaveBeenCalled()
+    const [, , media] = deps.describeFromClip.mock.calls[0]
+    expect(media).toMatchObject({ mimeType: 'video/mp4' })
+    expect(typeof media.data).toBe('string')
+    expect(supabase.inserted.descriptions.some((d) => d.text === 'clip one')).toBe(true)
+  })
+
+  it('falls back to the keyframe when the clip describe throws (still ready)', async () => {
+    const supabase = makeFakeSupabase()
+    const deps = makeDeps()
+    deps.describeFromClip = vi.fn(async () => { throw new Error('clip boom') })
+
+    await processVideo({ supabase, model: {}, videoId: 'vid-1' }, deps)
+
+    expect(deps.describe).toHaveBeenCalled()
+    const statuses = supabase.updates.filter((u) => u.table === 'videos' && u.patch.status).map((u) => u.patch.status)
+    expect(statuses[statuses.length - 1]).toBe('ready')
+    expect(supabase.inserted.descriptions.some((d) => d.text === 'kf one')).toBe(true)
+  })
+
+  it('forces the keyframe path when DESCRIBE_FROM_CLIP=0', async () => {
+    const prev = process.env.DESCRIBE_FROM_CLIP
+    process.env.DESCRIBE_FROM_CLIP = '0'
+    try {
+      const supabase = makeFakeSupabase()
+      const deps = makeDeps()
+      await processVideo({ supabase, model: {}, videoId: 'vid-1' }, deps)
+      expect(deps.describeFromClip).not.toHaveBeenCalled()
+      expect(deps.describe).toHaveBeenCalled()
+    } finally {
+      if (prev === undefined) delete process.env.DESCRIBE_FROM_CLIP
+      else process.env.DESCRIBE_FROM_CLIP = prev
+    }
   })
 })
 
