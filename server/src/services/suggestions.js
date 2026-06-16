@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { AI_FIXABLE_ACTIONS, inRangeValue } from './fixActions.js'
 
 const promptsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'prompts')
 
@@ -8,7 +9,7 @@ const promptsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..',
 // apply-path. AI_FIXABLE values map 1:1 onto the colour/zoom/rotate/mute ops the
 // editor already accepts, so a kept fix_template is guaranteed applicable when
 // Phase 3b wires it up.
-export const AI_FIXABLE_ACTIONS = ['brightness', 'contrast', 'saturation', 'zoom', 'rotate', 'mute', 'unmute']
+export { AI_FIXABLE_ACTIONS }
 export const PROTOTYPE_ACTIONS = [
   ...AI_FIXABLE_ACTIONS,
   'trim_start', 'trim_end', 'split', 'delete', 'reorder',
@@ -16,13 +17,6 @@ export const PROTOTYPE_ACTIONS = [
 ]
 export const SUGGESTION_CATEGORIES = ['issue', 'structural', 'creative']
 const CATEGORY_PRIORITY = { issue: 0, structural: 1, creative: 2 }
-
-// Same numeric bounds the editor's colour/zoom/rotate ops accept.
-const FIX_VALUE_RANGES = { brightness: [-100, 100], contrast: [-100, 100], saturation: [-100, 100], zoom: [100, 250], rotate: [-180, 180] }
-
-function inRange(n, [lo, hi]) {
-  return typeof n === 'number' && Number.isFinite(n) && n >= lo && n <= hi
-}
 
 // Validate a fix_template; return a clean template or null (strip, don't drop
 // the whole suggestion — it stays as a creator/helper action).
@@ -33,7 +27,7 @@ export function cleanFixTemplate(fix) {
   let value
   if (action === 'mute') { if (fix.value !== true) return null; value = true }
   else if (action === 'unmute') { if (fix.value !== false) return null; value = false }
-  else { if (!inRange(fix.value, FIX_VALUE_RANGES[action])) return null; value = fix.value }
+  else { if (!inRangeValue(action, fix.value)) return null; value = fix.value }
   const label = typeof fix.label === 'string' ? fix.label.trim().slice(0, 60) : ''
   if (!label) return null
   return { action, value, label }
