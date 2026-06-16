@@ -1,5 +1,6 @@
 import { applyOperation } from '../../lib/editor/sceneEditOps'
 import ConfirmEditDialog from './ConfirmEditDialog'
+import { fixTemplateToOpFn, describeFixTemplate } from '../../lib/editor/suggestionRouting'
 
 /**
  * Confirm-first dialog for AI-proposed edits (phase 1c, Task 9).
@@ -12,6 +13,15 @@ import ConfirmEditDialog from './ConfirmEditDialog'
  * mismatch is unrecoverable.
  */
 
+const VISUAL_OPS = ['brightness', 'contrast', 'saturation', 'zoom', 'rotate', 'mute', 'unmute']
+
+// mute/unmute carry no server value; fixTemplateToOpFn/describeFixTemplate ignore
+// the value for them, but build the canonical bool for clarity.
+function visualFixTemplate(op, params = {}) {
+  const value = op === 'mute' ? true : op === 'unmute' ? false : params.value
+  return { action: op, value }
+}
+
 // Task 3's characterization proved applyOperation natively accepts every op in
 // the AI contract ('delete', 'split', 'move_earlier', 'move_later',
 // 'add_caption', 'trim_start', 'trim_end') with options { captionText,
@@ -19,6 +29,9 @@ import ConfirmEditDialog from './ConfirmEditDialog'
 // absent, and unknown ops are a safe no-op.
 export function proposalToOpFn(proposal) {
   const { op, target_clip_id: id, params = {} } = proposal
+  if (VISUAL_OPS.includes(op)) {
+    return fixTemplateToOpFn(visualFixTemplate(op, params), id)
+  }
   return (state) => applyOperation(state, id, op, { captionText: params.caption_text })
 }
 
@@ -31,6 +44,9 @@ export function describeProposal(proposal, clips) {
   const clip = (clips || []).find((c) => c.id === proposal.target_clip_id)
   if (!clip) return null
   const name = clip.name
+  if (VISUAL_OPS.includes(proposal.op)) {
+    return describeFixTemplate(visualFixTemplate(proposal.op, proposal.params), name)
+  }
   const caption = proposal.params?.caption_text ?? ''
   switch (proposal.op) {
     case 'delete':

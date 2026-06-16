@@ -170,3 +170,32 @@ describe('ConfirmAiEditDialog', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 })
+
+describe('visual ops routing', () => {
+  const clips = [{ id: 's1', name: 'Scene 1', startTime: 0, endTime: 5 }]
+
+  it('describeProposal uses the fix-template sentence for brightness', () => {
+    const d = describeProposal({ op: 'brightness', target_clip_id: 's1', params: { value: 30 } }, clips)
+    expect(d.question).toBe('Increase the brightness on Scene 1?')
+    expect(d.done).toBe('Increased the brightness on Scene 1.')
+  })
+
+  it('describeProposal handles zoom and mute', () => {
+    expect(describeProposal({ op: 'zoom', target_clip_id: 's1', params: { value: 150 } }, clips).question)
+      .toBe('Zoom Scene 1 to 150%?')
+    expect(describeProposal({ op: 'mute', target_clip_id: 's1', params: {} }, clips).question)
+      .toBe('Mute the original audio on Scene 1?')
+  })
+
+  it('proposalToOpFn applies brightness to the scene colour map', () => {
+    const opFn = proposalToOpFn({ op: 'brightness', target_clip_id: 's1', params: { value: 30 } })
+    const next = opFn({ clips, colour: {} })
+    expect(next.colour.s1.brightness).toBe(30)
+  })
+
+  it('proposalToOpFn mutes via the existing op', () => {
+    const opFn = proposalToOpFn({ op: 'mute', target_clip_id: 's1', params: {} })
+    const next = opFn({ clips })
+    expect(next.clips.find((c) => c.id === 's1').muted).toBe(true)
+  })
+})
