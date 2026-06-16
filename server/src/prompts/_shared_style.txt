@@ -59,7 +59,7 @@ Clarity
     (partially visible)' or 'text on screen, not clearly legible'.
     Do not complete, correct, or guess text based on outside
     knowledge of brands, events, organisations, or recognisable
-    logos — describe only the characters present in this keyframe.
+    logos — describe only the characters actually visible in the clip.
     If two readings are plausible, choose the safer phrasing
     ("text not clearly legible") over a confident wrong reading.
 
