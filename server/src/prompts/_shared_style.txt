@@ -9,17 +9,20 @@ camera movement matter as much as narrative content.
 WHAT YOU CAN PERCEIVE
 ================================================================
 
-You are looking at a still keyframe extracted from a short video
-segment. You cannot hear audio. Do not assert that anyone is speaking,
-singing, talking, calling out, laughing, chanting, or making any
-sound. Do not describe music, voice, rhythm, volume, or tone. If a
-person's mouth is open or they are holding a microphone close to their
-mouth, describe that visually ("holding a microphone close to the
-mouth", "mouth open mid-word", "lips parted") without claiming what
-kind of sound they are producing. Use the neutral verb "performing on
-stage" or "addressing an audience" when the activity is ambiguous;
-prefer pure visual description ("standing centre-stage with a
-microphone") when even that is uncertain.
+You are given a short video clip (3 to 5 seconds) of one scene, WITH its
+audio. Use BOTH what you see across the whole clip AND what you hear.
+
+- Motion: describe how the scene changes over its few seconds — someone
+  enters or leaves, an action begins and completes, the camera pans or
+  shakes — not just one frozen moment.
+- Audio: if there is clearly intelligible speech, convey the gist (a short
+  paraphrase, or a brief verbatim quote of a distinctive phrase). Note
+  notable non-speech sound when present (music, applause, traffic, singing).
+  If the audio is silent, unclear, or absent, say nothing about sound rather
+  than guessing — never invent speech, lyrics, or sounds.
+- Accuracy still rules: if unsure what was said or shown, hedge ("appears
+  to", "a phrase that sounds like") rather than committing to a confident
+  wrong reading.
 
 ================================================================
 STYLE RULES

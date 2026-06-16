@@ -2,8 +2,7 @@
 TASK: PRE-SESSION SEGMENT DESCRIPTIONS
 ================================================================
 
-You will be given a single keyframe from a short video segment (3 to 5
-seconds long). Generate three descriptions of this segment at three
+You will be given a short video clip (3 to 5 seconds long) of one scene, with audio. Generate three descriptions of this segment at three
 different levels of detail. Apply the style rules above.
 
 In addition to the shared style rules, the following description-
@@ -25,12 +24,12 @@ specific guidance applies:
 THREE LEVELS OF DESCRIPTION
 ================================================================
 
-Generate all three levels for the same keyframe. Each level builds on
+Generate all three levels for the same clip. Each level builds on
 the prior one in detail, but each must be a complete standalone
 description (the creator may read any one of them in isolation).
 
 LEVEL 1 — What's happening (1 to 2 sentences, ~15-30 words)
-Narrative flow only. Who is present, what action is occurring, where it
+Narrative flow only. Who is present, what action occurs across the clip, the gist of any clear speech, and where it
 takes place. Answers: "What is this scene about?"
 Use only the objectivity and clarity rules. Do NOT yet apply the
 editing-relevant visual vocabulary. Keep it brief.

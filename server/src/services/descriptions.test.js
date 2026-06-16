@@ -119,4 +119,12 @@ describe('loadDescriptionPrompt', () => {
     expect(prompt).toMatch(/level_1/)
     expect(prompt.length).toBeGreaterThan(500)
   })
+
+  it('frames the input as a video clip with audio (not a silent still)', async () => {
+    const prompt = (await loadDescriptionPrompt()).toLowerCase()
+    expect(prompt).toMatch(/video clip/)
+    expect(prompt).toMatch(/audio/)
+    expect(prompt).not.toMatch(/cannot hear audio/)
+    expect(prompt).not.toMatch(/still keyframe/)
+  })
 })
