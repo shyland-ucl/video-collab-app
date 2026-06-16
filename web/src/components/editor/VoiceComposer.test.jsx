@@ -38,10 +38,23 @@ beforeEach(() => {
   hookState.lastOptions = null
 })
 
+// The composer auto-focuses the mic button on mount via requestAnimationFrame
+// (VoiceComposer.jsx). Drain that rAF so it can't fire mid-interaction and steal
+// focus from the input — otherwise a subsequent {Enter} lands on the mic button
+// instead of the input's onKeyDown and the submit never fires (flaky under load).
+function flushRaf() {
+  // act() flushes the React effect; the inner rAF promise drains the callback
+  // jsdom schedules on a macrotask.
+  return act(async () => {
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()))
+  })
+}
+
 describe('VoiceComposer', () => {
   it('typing + clicking submit calls onSubmit(trimmed text)', async () => {
     const onSubmit = vi.fn()
     render(<VoiceComposer onSubmit={onSubmit} submitLabel="Ask" inputAriaLabel="Your question" />)
+    await flushRaf() // let the mount mic-autofocus settle so it can't steal focus mid-type
 
     await userEvent.type(screen.getByRole('textbox', { name: /your question/i }), '  what is she doing?  ')
     await userEvent.click(screen.getByRole('button', { name: /^ask$/i }))
@@ -53,6 +66,7 @@ describe('VoiceComposer', () => {
   it('typing + Enter submits', async () => {
     const onSubmit = vi.fn()
     render(<VoiceComposer onSubmit={onSubmit} inputAriaLabel="Your question" />)
+    await flushRaf() // let the mount mic-autofocus settle so it can't steal focus mid-type
 
     await userEvent.type(screen.getByRole('textbox', { name: /your question/i }), 'hello{Enter}')
 
@@ -119,14 +133,7 @@ describe('VoiceComposer — focus management (probe parity)', () => {
   // The mic auto-focuses on mount (mount === ask-panel-opened) and refocuses
   // when a request resolves if focus fell to <body> — mirroring the probe's
   // InlineVQAComposer / TaskRouterPanel so a BLV user is not stranded.
-
-  function flushRaf() {
-    // Run the rAF callbacks the focus effects scheduled. jsdom's rAF resolves on
-    // a macrotask; act() flushes the React effect, then we drain the rAF.
-    return act(async () => {
-      await new Promise((resolve) => requestAnimationFrame(() => resolve()))
-    })
-  }
+  // (flushRaf is defined at module scope above.)
 
   it('auto-focuses the mic button on mount', async () => {
     render(<VoiceComposer onSubmit={vi.fn()} />)
