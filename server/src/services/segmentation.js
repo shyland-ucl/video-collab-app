@@ -43,12 +43,29 @@ export function buildKeyframeArgs(sourceFile, kfFile, plan) {
   ]
 }
 
+// Downscaled (480p, mono-audio) copy of the scene used as the MODEL INPUT for
+// descriptions. Gemini samples video ~1 fps so higher res buys nothing, and the
+// small size keeps the inline request well under the 20 MB limit. Audio is kept
+// (the point is motion + speech). Thread-capped like the other encodes.
+export function buildModelClipArgs(sourceFile, clipFile, plan) {
+  return [
+    '-y', '-ss', String(plan.start_seconds), '-to', String(plan.end_seconds),
+    '-i', sourceFile,
+    '-vf', 'scale=-2:480',
+    '-c:v', 'libx264', '-preset', 'fast', ...x264ThreadArgs(),
+    '-c:a', 'aac', '-ac', '1',
+    clipFile,
+  ]
+}
+
 export async function cutSegment(sourceFile, outDir, plan) {
   const segFile = path.join(outDir, `${plan.id}.mp4`)
   const kfFile = path.join(outDir, `${plan.id}_kf.jpg`)
+  const modelClipFile = path.join(outDir, `${plan.id}_model.mp4`)
 
   await runFfmpeg(buildSegmentArgs(sourceFile, segFile, plan))
   await runFfmpeg(buildKeyframeArgs(sourceFile, kfFile, plan))
+  await runFfmpeg(buildModelClipArgs(sourceFile, modelClipFile, plan))
 
-  return { segFile, kfFile }
+  return { segFile, kfFile, modelClipFile }
 }

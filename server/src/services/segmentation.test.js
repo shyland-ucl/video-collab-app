@@ -5,7 +5,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import ffmpegPath from 'ffmpeg-static'
-import { planSegments, cutSegment, buildSegmentArgs } from './segmentation.js'
+import { planSegments, cutSegment, buildSegmentArgs, buildModelClipArgs } from './segmentation.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -66,6 +66,20 @@ describe('buildSegmentArgs', () => {
   })
 })
 
+describe('buildModelClipArgs', () => {
+  it('downscales to 480p, keeps an audio stream, caps threads, output last', () => {
+    const [plan] = planSegments(10, 5)
+    const args = buildModelClipArgs('/in.mp4', '/out/seg_001_model.mp4', plan)
+    expect(args.join(' ')).toContain('scale=-2:480')
+    expect(args).toContain('-c:a')          // audio kept...
+    expect(args).not.toContain('-an')       // ...NOT stripped
+    const i = args.indexOf('-threads')
+    expect(i).toBeGreaterThanOrEqual(0)
+    expect(Number(args[i + 1])).toBeLessThanOrEqual(8)
+    expect(args[args.length - 1]).toBe('/out/seg_001_model.mp4')
+  })
+})
+
 describe('cutSegment', () => {
   let workDir
   let clipPath
@@ -85,7 +99,7 @@ describe('cutSegment', () => {
 
   it('produces a playable segment file and a keyframe jpeg', async () => {
     const [plan] = planSegments(6, 3)
-    const { segFile, kfFile } = await cutSegment(clipPath, workDir, plan)
+    const { segFile, kfFile, modelClipFile } = await cutSegment(clipPath, workDir, plan)
 
     const segStat = await fs.stat(segFile)
     expect(segStat.size).toBeGreaterThan(0)
@@ -96,5 +110,9 @@ describe('cutSegment', () => {
     // JPEG magic bytes
     expect(kfBytes[0]).toBe(0xff)
     expect(kfBytes[1]).toBe(0xd8)
+
+    const modelStat = await fs.stat(modelClipFile)
+    expect(modelStat.size).toBeGreaterThan(0)
+    expect(modelClipFile.endsWith('seg_001_model.mp4')).toBe(true)
   }, 60000)
 })
