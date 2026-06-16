@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { buildSceneList, proposeEdit, validateProposal, AI_EDIT_OPS } from './aiEdit.js'
 
+
 const CLIPS = [
   { id: 'g1', name: 'Scene 1', duration_seconds: 5 },
   { id: 'g2', name: 'Scene 2', duration_seconds: 3 },
@@ -92,5 +93,42 @@ describe('proposeEdit', () => {
     const model = fakeModel(JSON.stringify(raw))
     const result = await proposeEdit(model, 'do something', CLIPS, DESCRIPTIONS)
     expect(result.clarification.length).toBeLessThanOrEqual(500)
+  })
+})
+
+describe('validateProposal — visual ops', () => {
+  const ids = new Set(['c1'])
+
+  it('accepts an in-range numeric visual op', () => {
+    expect(validateProposal({ op: 'brightness', target_clip_id: 'c1', params: { value: 30 }, summary: 'brighten' }, ids))
+      .toEqual({ ok: true, kind: 'proposal' })
+  })
+
+  it('rejects an out-of-range value', () => {
+    expect(validateProposal({ op: 'brightness', target_clip_id: 'c1', params: { value: 500 }, summary: 'x' }, ids))
+      .toEqual({ ok: false, reason: 'bad_value' })
+  })
+
+  it('rejects a missing value on a numeric op', () => {
+    expect(validateProposal({ op: 'zoom', target_clip_id: 'c1', params: {}, summary: 'x' }, ids))
+      .toEqual({ ok: false, reason: 'bad_value' })
+  })
+
+  it('accepts mute/unmute with no value', () => {
+    expect(validateProposal({ op: 'mute', target_clip_id: 'c1', params: {}, summary: 'silence it' }, ids))
+      .toEqual({ ok: true, kind: 'proposal' })
+  })
+})
+
+describe('proposeEdit — visual output whitelist', () => {
+  it('forwards an in-range value for numeric ops, {} for mute', async () => {
+    const clips = [{ id: 'c1', name: 'Scene 1', duration_seconds: 5 }]
+    const brightnessModel = { generateContent: async () => ({ response: { text: () => JSON.stringify({ op: 'brightness', target_clip_id: 'c1', params: { value: 30, sneaky: 'x' }, summary: 'brighten Scene 1' }) } }) }
+    const out = await proposeEdit(brightnessModel, 'brighten scene 1', clips, {})
+    expect(out).toEqual({ op: 'brightness', target_clip_id: 'c1', params: { value: 30 }, summary: 'brighten Scene 1' })
+
+    const muteModel = { generateContent: async () => ({ response: { text: () => JSON.stringify({ op: 'mute', target_clip_id: 'c1', params: {}, summary: 'mute Scene 1' }) } }) }
+    const muteOut = await proposeEdit(muteModel, 'mute scene 1', clips, {})
+    expect(muteOut).toEqual({ op: 'mute', target_clip_id: 'c1', params: {}, summary: 'mute Scene 1' })
   })
 })

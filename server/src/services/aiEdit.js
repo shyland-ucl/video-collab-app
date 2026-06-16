@@ -1,10 +1,13 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { AI_FIXABLE_ACTIONS, inRangeValue } from './fixActions.js'
 
 const promptsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'prompts')
 
-export const AI_EDIT_OPS = ['delete', 'split', 'move_earlier', 'move_later', 'add_caption', 'trim_start', 'trim_end']
+const STRUCTURAL_OPS = ['delete', 'split', 'move_earlier', 'move_later', 'add_caption', 'trim_start', 'trim_end']
+export const AI_EDIT_OPS = [...STRUCTURAL_OPS, ...AI_FIXABLE_ACTIONS]
+const NUMERIC_VISUAL_OPS = ['brightness', 'contrast', 'saturation', 'zoom', 'rotate']
 
 export function buildSceneList(clips, descriptionsById) {
   return clips
@@ -26,6 +29,9 @@ export function validateProposal(proposal, validIds) {
   const params = proposal.params ?? {}
   if (proposal.op === 'add_caption' && !(typeof params.caption_text === 'string' && params.caption_text.trim())) {
     return { ok: false, reason: 'missing_caption_text' }
+  }
+  if (NUMERIC_VISUAL_OPS.includes(proposal.op) && !inRangeValue(proposal.op, params.value)) {
+    return { ok: false, reason: 'bad_value' }
   }
   return { ok: true, kind: 'proposal' }
 }
@@ -58,7 +64,12 @@ export async function proposeEdit(model, request, clips, descriptionsById) {
   return {
     op: proposal.op,
     target_clip_id: proposal.target_clip_id,
-    params: proposal.op === 'add_caption' ? { caption_text: String(proposal.params.caption_text).slice(0, 500) } : {},
+    params:
+      proposal.op === 'add_caption'
+        ? { caption_text: String(proposal.params.caption_text).slice(0, 500) }
+        : NUMERIC_VISUAL_OPS.includes(proposal.op)
+          ? { value: proposal.params.value }
+          : {},
     summary: String(proposal.summary).slice(0, 500),
   }
 }
