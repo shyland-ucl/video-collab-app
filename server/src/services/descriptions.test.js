@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   parseLevels,
   describeKeyframe,
+  describeScene,
   answerQuestion,
   loadDescriptionPrompt,
 } from './descriptions.js'
@@ -74,6 +75,30 @@ describe('describeKeyframe', () => {
   it('throws when both attempts fail to parse', async () => {
     const model = fakeModel(['junk', 'more junk'])
     await expect(describeKeyframe(model, 'PROMPT', 'b64')).rejects.toThrow()
+  })
+})
+
+describe('describeScene', () => {
+  it('sends a video/mp4 inline part and returns parsed levels', async () => {
+    const model = fakeModel([GOOD_JSON])
+    const levels = await describeScene(model, 'PROMPT', { data: 'clipb64', mimeType: 'video/mp4' })
+    expect(levels.level_1).toMatch(/hallway/)
+    const parts = model.calls[0]
+    expect(parts[0].inlineData).toMatchObject({ mimeType: 'video/mp4', data: 'clipb64' })
+    expect(parts[1].text).toBe('PROMPT')
+  })
+
+  it('defaults the mime type to video/mp4', async () => {
+    const model = fakeModel([GOOD_JSON])
+    await describeScene(model, 'PROMPT', { data: 'clipb64' })
+    expect(model.calls[0][0].inlineData.mimeType).toBe('video/mp4')
+  })
+
+  it('retries once with a JSON reminder on junk, then parses', async () => {
+    const model = fakeModel(['not json at all', GOOD_JSON])
+    const levels = await describeScene(model, 'PROMPT', { data: 'c' })
+    expect(levels.level_3).toMatch(/Handheld/)
+    expect(model.generateContent).toHaveBeenCalledTimes(2)
   })
 })
 

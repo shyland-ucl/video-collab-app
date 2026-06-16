@@ -35,11 +35,10 @@ export function parseLevels(responseText) {
   return { level_1: parsed.level_1, level_2: parsed.level_2, level_3: parsed.level_3 }
 }
 
-export async function describeKeyframe(model, promptTemplate, jpegBase64) {
-  const parts = [
-    { inlineData: { mimeType: 'image/jpeg', data: jpegBase64 } },
-    { text: promptTemplate },
-  ]
+// Shared image/video → level_1/2/3 describer: one generateContent call with a
+// single JSON-reminder retry if the model returns non-JSON.
+async function describeMedia(model, promptTemplate, inlineData) {
+  const parts = [{ inlineData }, { text: promptTemplate }]
   const first = await model.generateContent(parts)
   try {
     return parseLevels(first.response.text())
@@ -50,6 +49,16 @@ export async function describeKeyframe(model, promptTemplate, jpegBase64) {
     ])
     return parseLevels(retry.response.text())
   }
+}
+
+export async function describeKeyframe(model, promptTemplate, jpegBase64) {
+  return describeMedia(model, promptTemplate, { mimeType: 'image/jpeg', data: jpegBase64 })
+}
+
+// Describe a scene from its short video CLIP (frames + audio) — richer than one
+// keyframe. Gemini 2.5 Flash samples video frames + the audio track natively.
+export async function describeScene(model, promptTemplate, { data, mimeType = 'video/mp4' }) {
+  return describeMedia(model, promptTemplate, { mimeType, data })
 }
 
 export async function answerQuestion(model, jpegBase64, question) {
