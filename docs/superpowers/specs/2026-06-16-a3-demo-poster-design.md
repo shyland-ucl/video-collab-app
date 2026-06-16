@@ -63,9 +63,11 @@
 ### Section content & copy
 
 **Headline block**
-- Kicker: `FOR BLIND & LOW-VISION CREATORS`
+- Kicker: `FOR CREATORS WITH VISUAL IMPAIRMENTS`
 - H1: **Editing video, together.**
 - Subhead: *AI-assisted, collaborative editing that puts creators with visual impairments in the director's seat — directing their helpers and AI, not handing over control.*
+
+> Audience wording is standardized on **"creators with visual impairments"** throughout the poster.
 
 **Hero photo** — `collab_app_visible.jpg` (creator + sighted helper, app UI visible on the phone).
 
@@ -88,15 +90,17 @@
 
 **Footer**
 - Logos repeated small.
-- Consent line: *Session photography used with participants' consent. Participant names are not shown.*
-- Optional small QR → 60-second demo video or project page (not the paper). Decide at build time.
+- Consent line: *Session photography used with participants' consent. Faces are blurred and names are not shown.*
+- No QR code (decided out for this version).
 
 ## 5. Assets
 
 **Photos** (extracted from consented session recordings on `F:\Lan's Project`, reproducible via ffmpeg):
 - **Hero:** `collab_app_visible.jpg` — `May 4\Morning Session-001.mp4` @ `00:57:05`.
 - **App-in-action:** `app_in_action_two_phones.jpg` — `May 4\Morning Session-001.mp4` @ `02:32:30`.
-- Working copies staged in `.superpowers/brainstorm/`; final copies go in `poster_a3/assets/`. Re-extract at higher quality (`-q:v 2`) and crop for print.
+- Working copies staged in `.superpowers/brainstorm/`; final copies go in `poster_a3/assets/`. Re-extract at higher quality (`-q:v 2`), **blur the faces**, and crop for print.
+
+**Face blurring (required):** every identifiable face in both photos must be blurred before the photo is placed in the poster. Approach: detect/locate face regions and apply a strong Gaussian blur or pixelation (e.g. ffmpeg `boxblur`/`gblur` on a masked region, or an image editor). Blur must be irreversible (flattened into the exported JPG/PNG), and strong enough that the person is not identifiable, while the collaboration scene (two people, phones, app UI) stays legible.
 
 **Logos** (from `poster_archive/Logos/`): `University_College_London_logo.svg.png`, `uclic-logo-2434x800.png`, `gdi_hub_logo_black_300dpi.jpg`. (CHI logo optional.)
 
@@ -104,21 +108,17 @@
 
 ## 6. Privacy guardrail
 
+- **Faces are blurred** in every photo on the poster (see Section 5). This is the decided privacy posture — we do not rely on consent for identifiable faces.
 - No participant **names** printed anywhere (study rule: names stay in the intake sheet; IDs used in outputs).
-- Faces appear only via the **consented** professionally-recorded session footage.
 - All quotes attributed generically: *"— Blind creator, Nairobi."*
-- Footer consent line included.
-- **Open confirmation needed from Lan:** confirm the session footage consent covers public/event display of identifiable faces. If not, fall back to anonymized framing (crop/blur, or app-screenshots-only).
+- Footer consent line included, noting faces are blurred.
 
 ## 7. Out of scope (YAGNI)
 
 - The full 3-layer framework graphic (concept referenced in one line only).
-- QR to the arXiv paper (audience is general; a demo/project QR is optional instead).
+- Any QR code (decided out for this version).
 - Matching the A0 poster's exact section structure — this is a friendlier, photo-led explainer, not a research poster.
 
 ## 8. Open items to resolve at build
 
-1. Confirm footage-consent for public display (Section 6).
-2. Final headline kicker wording ("blind & low-vision" vs "with visual impairments").
-3. Whether to include the optional demo/project QR (and the destination URL).
-4. Re-extract + crop the two photos at print quality.
+1. Re-extract the two photos at print quality, **blur the faces** (Section 5), and crop for the A3 frame.
