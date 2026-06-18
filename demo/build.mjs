@@ -48,10 +48,7 @@ for (const m of moments.timeline) {
     norm(v, join(CLIPS, `${m.id}.audio.wav`), dur(m), out)
   } else if (m.type === 'broll') {
     const v = join(BROLL, `${m.brollId}.webm`)
-    if (!existsSync(v)) {
-      console.warn(`skipping b-roll segment ${m.id} (${v} not found — will be added in a later task)`)
-      continue  // do not push to list; b-roll added later
-    }
+    if (!existsSync(v)) throw new Error(`missing b-roll webm ${v} — run: npx playwright test -c demo/app/demo-broll.config.mjs`)
     // Take the TAIL of the webm (the UI shot); its head is sign-in/loading.
     const seek = Math.max(0, vdur(v) - dur(m) - 0.2)
     norm(v, null, dur(m), out, seek)   // b-roll is silent under its caption

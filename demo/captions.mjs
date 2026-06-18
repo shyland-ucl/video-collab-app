@@ -30,5 +30,6 @@ for (const m of moments.timeline) {
   }
   cur += d
 }
+if (cur < 55 || cur > 65) throw new Error(`total duration ${cur.toFixed(1)}s is outside the 55–65s acceptance window`)
 writeFileSync(join(OUT_DIR, 'demo.ass'), head + lines)
 console.log('captions -> out/demo.ass; total', cur.toFixed(1), 's')

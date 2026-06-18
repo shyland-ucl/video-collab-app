@@ -1,4 +1,4 @@
-import json, subprocess, sys, wave, struct, tempfile, os
+import json, subprocess, sys, wave, struct, tempfile
 from pathlib import Path
 import numpy as np
 
@@ -34,7 +34,7 @@ def best_lag(template: np.ndarray, haystack: np.ndarray) -> int:
 
 def calibrate(key, s):
     wav = SCRIPTS / s["wav"]
-    vid = F_ROOT / s["video"]
+    vid = F_ROOT / s.get("videoAngles", [s["video"]])[0]
     if not wav.exists(): raise FileNotFoundError(wav)
     if not vid.exists(): raise FileNotFoundError(f"{vid} (mount F:?)")
     template = extract(wav, ANCHOR, WIN)
