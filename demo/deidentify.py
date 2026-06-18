@@ -56,11 +56,15 @@ def cluster_regions(boxes, W, H):
 def blur_region(frame, r, W, H):
     x0, y0, x1, y1 = r
     x0, y0 = max(0, x0), max(0, y0); x1, y1 = min(W, x1), min(H, y1)
+    if x1 <= x0 or y1 <= y0: return
     roi = frame[y0:y1, x0:x1]
     if roi.size == 0: return
-    small = cv2.resize(roi, (max(1, (x1 - x0) // 18), max(1, (y1 - y0) // 18)))
+    # Heavy mosaic: collapse to ~ (region/28) blocks, then nearest-upscale.
+    small = cv2.resize(roi, (max(1, (x1 - x0) // 28), max(1, (y1 - y0) // 28)))
     pix = cv2.resize(small, (x1 - x0, y1 - y0), interpolation=cv2.INTER_NEAREST)
-    frame[y0:y1, x0:x1] = cv2.GaussianBlur(pix, (0, 0), 8)
+    # Strong Gaussian scaled to region width so close-ups get heavier smoothing.
+    sigma = max(12, (x1 - x0) // 25)
+    frame[y0:y1, x0:x1] = cv2.GaussianBlur(pix, (0, 0), sigma)
 
 def process(clip_id):
     src = CLIPS / f"{clip_id}.raw.mp4"
