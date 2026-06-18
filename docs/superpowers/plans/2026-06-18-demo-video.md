@@ -20,7 +20,8 @@
   - F_ROOT = `F:\Lan's Project`
   - SCRIPTS = `C:\Users\shyla\Downloads\Video_Editing_Platform\Study Scripts`
 - **SRT time == WAV time** (offset 0). Camera video time = SRT time + per-session `offset`.
-- Run all commands from `video-collab-app/` unless stated. Use `python` (native PowerShell Python 3.13; the Git-Bash python is broken).
+- Run all commands from `video-collab-app/` unless stated.
+- **Python interpreter: use `py -3`** (the working Microsoft-Store Python 3.13). The bare `python`/`C:\Python313` is BROKEN (UCRT DLL load failure) — do NOT use it. `numpy` + `opencv-python` are already installed under `py -3`.
 
 ---
 
@@ -361,7 +362,7 @@ if __name__ == "__main__":
 
 Run (PowerShell):
 ```powershell
-python -c "import numpy as np; import importlib.util as u; spec=u.spec_from_file_location('c','demo/calibrate.py'); m=u.module_from_spec(spec); spec.loader.exec_module(m); rng=np.random.default_rng(0); h=rng.standard_normal(20000).astype('float32'); t=h[5000:7000].copy(); print('lag', m.best_lag(t,h))"
+py -3 -c "import numpy as np; import importlib.util as u; spec=u.spec_from_file_location('c','demo/calibrate.py'); m=u.module_from_spec(spec); spec.loader.exec_module(m); rng=np.random.default_rng(0); h=rng.standard_normal(20000).astype('float32'); t=h[5000:7000].copy(); print('lag', m.best_lag(t,h))"
 ```
 Expected: `lag 5000` (the template is found at index 5000).
 
@@ -369,7 +370,7 @@ Expected: `lag 5000` (the template is found at index 5000).
 
 Run:
 ```powershell
-python demo/calibrate.py may4am may4pm may7am
+py -3 demo/calibrate.py may4am may4pm may7am
 ```
 Expected: three `offset = ...s` lines (each within a few minutes of 0) and `wrote demo/offsets.json`.
 If a session has little speech at ANCHOR=600s, re-run after editing `ANCHOR` to a talky time, or set the offset manually in `offsets.json`.
@@ -548,7 +549,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run it**
 
-Run: `python demo/deidentify.py`
+Run: `py -3 demo/deidentify.py`
 Expected: `deid <id>: N frames -> <id>.deid.mp4` per clip.
 
 - [ ] **Step 3: QA GATE — review every contact sheet (de-identification is safety-critical)**
@@ -903,9 +904,9 @@ git commit -m "feat(demo): captions + final assembly pipeline"
 import { execFileSync } from 'node:child_process'
 import { DEMO_DIR } from './lib/paths.mjs'
 const run = (cmd, args) => execFileSync(cmd, args, { cwd: DEMO_DIR + '/..', stdio: 'inherit' })
-console.log('1/5 calibrate'); run('python', ['demo/calibrate.py'])
+console.log('1/5 calibrate'); run('py', ['-3', 'demo/calibrate.py'])
 console.log('2/5 cut');       run('node', ['demo/cut.mjs'])
-console.log('3/5 deidentify');run('python', ['demo/deidentify.py'])
+console.log('3/5 deidentify');run('py', ['-3', 'demo/deidentify.py'])
 console.log('4/5 captions');  run('node', ['demo/captions.mjs'])
 console.log('5/5 build');     run('node', ['demo/build.mjs'])
 console.log('done. Review demo/out/*.contact.jpg before sharing.')
@@ -923,7 +924,7 @@ Builds a ~60s de-identified demo from real study footage + app UI b-roll.
 ## Prerequisites
 - External drive **F:\Lan's Project** mounted (session video).
 - Transcripts at **C:\Users\shyla\Downloads\Video_Editing_Platform\Study Scripts**.
-- `ffmpeg` + `ffprobe` on PATH; `python` with `numpy` + `opencv-python` (`pip install numpy opencv-python`).
+- `ffmpeg` + `ffprobe` on PATH; **`py -3`** (Microsoft-Store Python; the bare `python` is broken) with `numpy` + `opencv-python` (`py -3 -m pip install numpy opencv-python`).
 - For app b-roll: filled `server/.env` + `web/.env.local`, and `npm run dev:web` + `npm run dev:server` running.
 
 ## One-time
