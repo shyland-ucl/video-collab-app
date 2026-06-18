@@ -1,0 +1,18 @@
+{
+  "may4am": {
+    "video": "May 4\\Morning Session-001.mp4",
+    "wav": "May 4\\Audio\\2026-05-04_morning.wav",
+    "srt": "May 4\\Audio\\2026-05-04_morning.srt"
+  },
+  "may4pm": {
+    "video": "May 4\\Aternoon-002.mp4",
+    "wav": "May 4\\Audio\\2026-05-04_afternoon.wav",
+    "srt": "May 4\\Audio\\2026-05-04_afternoon.srt"
+  },
+  "may7am": {
+    "video": "May 7\\Morning Session-001.mp4",
+    "videoAngles": ["May 7\\Morning Session-001.mp4", "May 7\\Morning Session-001 (1).mp4"],
+    "wav": "May 7\\Audio\\2026-05-07_morning.wav",
+    "srt": "May 7\\Audio\\2026-05-07_morning.srt"
+  }
+}
