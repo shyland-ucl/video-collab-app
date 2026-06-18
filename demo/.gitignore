@@ -1,0 +1,5 @@
+out/
+offsets.json
+app/out/
+*.webm
+assets/source.mp4
