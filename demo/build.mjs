@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { FFMPEG, DEMO_DIR, OUT_DIR } from './lib/paths.mjs'
+import { FFMPEG, FFPROBE, DEMO_DIR, OUT_DIR } from './lib/paths.mjs'
 import { clipDuration } from './lib/timecode.mjs'
 
 const moments = JSON.parse(readFileSync(join(DEMO_DIR, 'moments.json')))
@@ -12,11 +12,18 @@ const SEG = join(OUT_DIR, 'segments')
 mkdirSync(SEG, { recursive: true })
 const ff = (a, opts) => execFileSync(FFMPEG, ['-y', '-v', 'error', ...a], { stdio: 'inherit', ...opts })
 const dur = (m) => m.dur ?? clipDuration(m.srtStart, m.srtEnd)
+const vdur = (p) => parseFloat(
+  execFileSync(FFPROBE, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', p]).toString().trim()
+)
 
 // Common normalize: 1920x1080@30, yuv420p, 48k stereo AAC, exactly `d` seconds.
+// `seek` (seconds) seeks into the source before grabbing `d` seconds — used for
+// b-roll, whose webm begins with sign-in/loading and only shows the UI near the end.
 const VF = 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,setsar=1,format=yuv420p'
-function norm(srcVideo, srcAudio, d, outPath) {
-  const args = ['-i', srcVideo]
+function norm(srcVideo, srcAudio, d, outPath, seek = 0) {
+  const args = []
+  if (seek > 0) args.push('-ss', seek.toFixed(3))
+  args.push('-i', srcVideo)
   if (srcAudio) {
     args.push('-i', srcAudio)
     args.push('-t', d.toFixed(3), '-vf', VF, '-r', '30')
@@ -45,7 +52,9 @@ for (const m of moments.timeline) {
       console.warn(`skipping b-roll segment ${m.id} (${v} not found — will be added in a later task)`)
       continue  // do not push to list; b-roll added later
     }
-    norm(v, null, dur(m), out)   // b-roll is silent under its caption
+    // Take the TAIL of the webm (the UI shot); its head is sign-in/loading.
+    const seek = Math.max(0, vdur(v) - dur(m) - 0.2)
+    norm(v, null, dur(m), out, seek)   // b-roll is silent under its caption
   }
   list.push(`file '${out.replace(/\\/g, '/')}'`)
 }
