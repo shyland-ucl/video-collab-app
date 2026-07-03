@@ -121,6 +121,30 @@ function findFirstClipChange(prevClips = [], nextClips = []) {
         text: soundName ? `Sound changed: ${soundName}` : 'Sound changed',
       };
     }
+
+    // Per-scene playback volume (0–200%, 100 = unchanged). A volume-only diff
+    // changes no other clip field, so without this the stamp fell through to
+    // null → no "Edited" badge for a volume change. 0% reads as "Muted".
+    const prevVolume = typeof prev.volume === 'number' ? prev.volume : 100;
+    const nextVolume = typeof next.volume === 'number' ? next.volume : 100;
+    if (prevVolume !== nextVolume) {
+      return {
+        sceneId: baseSceneId(next.id),
+        text: nextVolume === 0 ? 'Muted' : `Volume ${nextVolume}%`,
+      };
+    }
+
+    // Original-audio mute toggle (clip.muted boolean). Distinct from volume: a
+    // mute-only diff touches no other field, so it likewise needs its own branch
+    // or the stamp stays empty and the "Edited" badge never appears (the gap that
+    // made an AI/self mute look like it did nothing). Mirrors summarizeEditState-
+    // Change's findMuteChange + describeEditOp's mute/unmute wording.
+    if (!!prev.muted !== !!next.muted) {
+      return {
+        sceneId: baseSceneId(next.id),
+        text: next.muted ? 'Original audio muted' : 'Original audio unmuted',
+      };
+    }
   }
 
   return null;
@@ -204,7 +228,11 @@ function findTextOverlayStamp(prevOverlays = [], nextOverlays = [], fallbackScen
 // the rendered list still holds — so the stamp lands on the present clip with
 // no further mapping. Detects the first scene whose grade changed and, when one
 // property moved, names it; a multi-property change stays generic.
-const COLOUR_STAMP_PROPS = ['brightness', 'contrast', 'saturation', 'zoom'];
+// rotate is the 5th visual slider (EditorTimeline COLOUR_SLIDERS) and rides the
+// same state.colour map — it MUST be here, or a rotate-only grade (e.g. an AI
+// "rotate scene 2" edit) leaves no "Edited" badge. Mirrors projectOverview's
+// COLOUR_PROPS, which already includes it for the cross-device summary.
+const COLOUR_STAMP_PROPS = ['brightness', 'contrast', 'saturation', 'zoom', 'rotate'];
 
 function colourPropValue(entry, prop) {
   const fallback = prop === 'zoom' ? 100 : 0;
@@ -222,6 +250,9 @@ function colourPropLabel(prop, value) {
       return `Saturation ${value >= 0 ? '+' : ''}${value}`;
     case 'zoom':
       return `Zoom ${value}%`;
+    case 'rotate':
+      // Noun phrase to match projectOverview.describeEditOp ("Rotation 30°").
+      return `Rotation ${value}°`;
     default:
       return 'Colour adjusted';
   }

@@ -3,8 +3,8 @@ export default defineConfig({
   testDir: '.',
   timeout: 180_000,
   workers: 1,
-  globalSetup: '../../e2e/setup/globalSetup.mjs',
-  globalTeardown: '../../e2e/setup/globalTeardown.mjs',
+  globalSetup: './demo-setup.mjs',
+  globalTeardown: './demo-teardown.mjs',
   use: {
     baseURL: 'http://localhost:5173',
     viewport: { width: 1280, height: 720 },

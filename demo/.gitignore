@@ -3,3 +3,5 @@ offsets.json
 app/out/
 *.webm
 assets/source.mp4
+__pycache__/
+models/

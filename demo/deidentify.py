@@ -14,6 +14,17 @@ HAAR = [cv2.CascadeClassifier(cv2.data.haarcascades + n) for n in
 # Copy the model to a guaranteed ASCII-safe temp location once per run.
 _YUNET_ASCII = Path(tempfile.gettempdir()) / "yunet_2023mar.onnx"
 
+# --- Blur tuning (v2: small, FACE-ONLY region) --------------------------------
+# The user wants ONLY the face area obscured (a small blur is fine) and the
+# device/phone screen left sharp — so there is no clip-wide "seat region" union
+# any more. We blur a tight box around each *detected* face, and carry a face
+# forward for a few frames so a momentary detection dropout doesn't flash it.
+PAD_X = 0.16          # horizontal padding as a fraction of the face box width
+PAD_Y_TOP = 0.30      # extra above the box (hair/forehead/cap)
+PAD_Y_BOTTOM = 0.12   # a little below (chin)
+MEMORY_FRAMES = 8     # keep a face blurred this many frames after it's lost
+MOSAIC_DIV = 12       # block size = region / this  (smaller div = chunkier)
+
 def ensure_model():
     if not YUNET.exists():
         print("downloading YuNet model ...")
@@ -38,20 +49,15 @@ def detect_frame(frame, yunet):
             out.append((int(x), int(y), int(w), int(h)))
     return out
 
-def cluster_regions(boxes, W, H):
-    groups = {"L": [], "R": []}
-    for (x, y, w, h) in boxes:
-        groups["L" if (x + w / 2) < W / 2 else "R"].append((x, y, w, h))
-    regions = []
-    for g in groups.values():
-        if len(g) < 2:   # need a few detections to trust a seat region
-            continue
-        x0 = min(b[0] for b in g); y0 = min(b[1] for b in g)
-        x1 = max(b[0] + b[2] for b in g); y1 = max(b[1] + b[3] for b in g)
-        bw, bh = x1 - x0, y1 - y0
-        px, py = int(0.5 * bw), int(0.6 * bh)
-        regions.append((max(0, x0 - px), max(0, y0 - py), min(W, x1 + px), min(H, y1 + py)))
-    return regions
+def face_to_region(box, W, H):
+    """A tight blur rectangle around a single detected face box."""
+    x, y, w, h = box
+    px = int(PAD_X * w)
+    pty = int(PAD_Y_TOP * h)
+    pby = int(PAD_Y_BOTTOM * h)
+    x0 = max(0, x - px); y0 = max(0, y - pty)
+    x1 = min(W, x + w + px); y1 = min(H, y + h + pby)
+    return (x0, y0, x1, y1)
 
 def blur_region(frame, r, W, H):
     x0, y0, x1, y1 = r
@@ -59,11 +65,11 @@ def blur_region(frame, r, W, H):
     if x1 <= x0 or y1 <= y0: return
     roi = frame[y0:y1, x0:x1]
     if roi.size == 0: return
-    # Heavy mosaic: collapse to ~ (region/28) blocks, then nearest-upscale.
-    small = cv2.resize(roi, (max(1, (x1 - x0) // 28), max(1, (y1 - y0) // 28)))
+    # Pixelate to ~ (region / MOSAIC_DIV) blocks, nearest-upscale, then a light
+    # Gaussian to smooth block edges. Enough to de-identify; kept modest in size.
+    small = cv2.resize(roi, (max(1, (x1 - x0) // MOSAIC_DIV), max(1, (y1 - y0) // MOSAIC_DIV)))
     pix = cv2.resize(small, (x1 - x0, y1 - y0), interpolation=cv2.INTER_NEAREST)
-    # Strong Gaussian scaled to region width so close-ups get heavier smoothing.
-    sigma = max(12, (x1 - x0) // 25)
+    sigma = max(6, (x1 - x0) // 40)
     frame[y0:y1, x0:x1] = cv2.GaussianBlur(pix, (0, 0), sigma)
 
 def process(clip_id):
@@ -71,27 +77,23 @@ def process(clip_id):
     cap = cv2.VideoCapture(str(src))
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
     W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)); H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    # Pass 1: collect all detections.
-    yunet = make_yunet(W, H); all_boxes = []
-    while True:
-        ok, frame = cap.read()
-        if not ok: break
-        all_boxes += detect_frame(frame, yunet)
-    cap.release()
-    regions = cluster_regions(all_boxes, W, H)
-    # Pass 2: blur seat regions + live detections.
     yunet = make_yunet(W, H)
-    cap = cv2.VideoCapture(str(src))
     tmp = CLIPS / f"{clip_id}.deid.tmp.mp4"
     vw = cv2.VideoWriter(str(tmp), cv2.VideoWriter_fourcc(*"mp4v"), fps, (W, H))
-    frames, samples = 0, []
+    # Short-memory carry-forward: list of [region, frames_left].
+    recent = []
+    frames, samples, det_total = 0, [], 0
     while True:
         ok, frame = cap.read()
         if not ok: break
-        for r in regions: blur_region(frame, r, W, H)
-        for (x, y, w, h) in detect_frame(frame, yunet):
-            px, py = int(0.45 * w), int(0.55 * h)
-            blur_region(frame, (x - px, y - py, x + w + px, y + h + py), W, H)
+        boxes = detect_frame(frame, yunet)
+        det_total += len(boxes)
+        # Age existing memories; refresh / add current detections.
+        recent = [[r, n - 1] for (r, n) in recent if n - 1 > 0]
+        for b in boxes:
+            recent.append([face_to_region(b, W, H), MEMORY_FRAMES])
+        for (r, _n) in recent:
+            blur_region(frame, r, W, H)
         vw.write(frame)
         if frames % 15 == 0: samples.append(cv2.resize(frame, (320, 180)))
         frames += 1
@@ -107,7 +109,7 @@ def process(clip_id):
             r, c = divmod(i, cols); grid[r*180:(r+1)*180, c*320:(c+1)*320] = s
         ok, buf = cv2.imencode(".jpg", grid)
         (CLIPS / f"{clip_id}.contact.jpg").write_bytes(buf.tobytes())
-    print(f"deid {clip_id}: {frames} frames, {len(all_boxes)} dets, {len(regions)} seat-regions -> {out.name}")
+    print(f"deid {clip_id}: {frames} frames, {det_total} face dets -> {out.name}")
 
 if __name__ == "__main__":
     ensure_model()

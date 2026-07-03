@@ -5,28 +5,30 @@
     { "id": "intro", "type": "card", "card": "intro", "dur": 3 },
 
     { "id": "M1", "type": "clip", "session": "may4am", "srtStart": "00:14:03,897", "srtEnd": "00:14:08,039",
-      "speaker": "David", "caption": "The tool doesn't tell you what you're doing." },
+      "caption": "The tool doesn't tell you what you're doing." },
     { "id": "M3", "type": "clip", "session": "may7am", "srtStart": "00:08:23,194", "srtEnd": "00:08:29,057",
-      "speaker": "Mandela", "caption": "To record is easy — but to edit is the biggest problem for a blind person." },
+      "caption": "To record is easy — but to edit is the biggest problem for a blind person." },
     { "id": "M4", "type": "clip", "session": "may7am", "srtStart": "00:13:18,326", "srtEnd": "00:13:21,268",
-      "speaker": "Mandela & helper", "caption": "\"Are they accessible?\" — \"Not at all.\"" },
+      "caption": "\"Are they accessible?\" — \"Not at all.\"" },
 
-    { "id": "BR_desc", "type": "broll", "brollId": "descriptions", "dur": 4,
-      "caption": "The app describes every scene aloud." },
+    { "id": "BR_desc", "type": "broll", "brollId": "descriptions", "dur": 7, "vo": "overview", "voFit": true,
+      "caption": "The app describes every scene aloud — in three levels of detail." },
     { "id": "M7", "type": "clip", "session": "may4am", "srtStart": "00:27:31,626", "srtEnd": "00:27:35,503",
-      "speaker": "David", "caption": "I never knew there was a decorative… It's wonderful." },
+      "caption": "I never knew there was a decorative… It's wonderful." },
 
     { "id": "M11", "type": "clip", "session": "may4pm", "srtStart": "00:58:04,103", "srtEnd": "00:58:13,500",
-      "speaker": "Lily", "caption": "Before, I didn't know where the problem was. Now I can say: edit scene two." },
-    { "id": "BR_route", "type": "broll", "brollId": "routing", "dur": 3,
+      "caption": "Before, I didn't know where the problem was. Now I can say: edit scene two." },
+    { "id": "BR_route", "type": "broll", "brollId": "routing", "dur": 5,
       "caption": "Edit it yourself, ask AI, or ask your helper." },
+    { "id": "BR_aiedit", "type": "broll", "brollId": "aiedit", "dur": 6.5, "vo": "feedback",
+      "caption": "Ask the AI to edit — it confirms the moment it's done." },
     { "id": "M10", "type": "clip", "session": "may7am", "srtStart": "01:36:18,292", "srtEnd": "01:36:25,095",
-      "speaker": "Mandela", "caption": "Now the app confirms it has been done. That's incredible." },
+      "caption": "Now the app confirms it has been done. That's incredible." },
 
     { "id": "M12", "type": "clip", "session": "may4pm", "srtStart": "01:16:44,850", "srtEnd": "01:16:52,636",
-      "speaker": "Lily", "caption": "Knowing that I'm now independent makes me feel extremely good." },
+      "caption": "Knowing that I'm now independent makes me feel extremely good." },
     { "id": "M16", "type": "clip", "session": "may7am", "srtStart": "00:56:31,304", "srtEnd": "00:56:40,594",
-      "speaker": "Mandela", "caption": "All of us blind people dream of independence. This is the beginning." },
+      "caption": "All of us blind people dream of independence. This is the beginning." },
 
     { "id": "outro", "type": "card", "card": "outro", "dur": 4 }
   ]

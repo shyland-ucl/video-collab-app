@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { buildEditChangeSceneStamp } from './editChangeStamp';
-import { splitClip, deleteClip, addCaption } from './sceneEditOps';
+import { splitClip, deleteClip, addCaption, setClipMuted, setClipVolume } from './sceneEditOps';
 
 function clip(id, startTime, endTime) {
   return { id, name: id, startTime, endTime, trimStart: 0, trimEnd: 0 };
@@ -98,5 +98,48 @@ describe('buildEditChangeSceneStamp', () => {
     const next = deleteClip(withColour, 'seg2');
     const stamp = buildEditChangeSceneStamp(prev, next, { fallbackSceneId: 'seg1' });
     expect(stamp).toEqual({ sceneId: 'seg2', text: 'Removed from edit' });
+  });
+
+  it('mute: stamps the muted scene with "Original audio muted"', () => {
+    const prev = baseState();
+    const next = setClipMuted(prev, 'seg2', true);
+    const stamp = buildEditChangeSceneStamp(prev, next, { fallbackSceneId: 'seg1' });
+    expect(stamp).toEqual({ sceneId: 'seg2', text: 'Original audio muted' });
+  });
+
+  it('unmute: stamps the scene with "Original audio unmuted"', () => {
+    const muted = setClipMuted(baseState(), 'seg2', true);
+    const next = setClipMuted(muted, 'seg2', false);
+    const stamp = buildEditChangeSceneStamp(muted, next, { fallbackSceneId: 'seg1' });
+    expect(stamp).toEqual({ sceneId: 'seg2', text: 'Original audio unmuted' });
+  });
+
+  it('mute on a split piece: stamps the ROOT segment id', () => {
+    const split = splitClip(baseState(), 'seg2', 15);
+    const splitPieceId = split.clips.find((c) => c.id !== 'seg2' && /^seg2-split-/.test(c.id)).id;
+    const next = setClipMuted(split, splitPieceId, true);
+    const stamp = buildEditChangeSceneStamp(split, next, { fallbackSceneId: 'seg1' });
+    expect(stamp).toEqual({ sceneId: 'seg2', text: 'Original audio muted' });
+  });
+
+  it('volume: stamps the scene with "Volume <n>%"', () => {
+    const prev = baseState();
+    const next = setClipVolume(prev, 'seg2', 80);
+    const stamp = buildEditChangeSceneStamp(prev, next, { fallbackSceneId: 'seg1' });
+    expect(stamp).toEqual({ sceneId: 'seg2', text: 'Volume 80%' });
+  });
+
+  it('volume to 0: stamps "Muted"', () => {
+    const prev = baseState();
+    const next = setClipVolume(prev, 'seg2', 0);
+    const stamp = buildEditChangeSceneStamp(prev, next, { fallbackSceneId: 'seg1' });
+    expect(stamp).toEqual({ sceneId: 'seg2', text: 'Muted' });
+  });
+
+  it('rotate: stamps the graded scene with "Rotation <n>°"', () => {
+    const prev = { ...baseState(), colour: {} };
+    const next = { ...baseState(), colour: { seg2: { rotate: 90 } } };
+    const stamp = buildEditChangeSceneStamp(prev, next, { fallbackSceneId: 'seg1' });
+    expect(stamp).toEqual({ sceneId: 'seg2', text: 'Rotation 90°' });
   });
 });
