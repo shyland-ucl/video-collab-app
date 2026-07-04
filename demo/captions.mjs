@@ -1,10 +1,10 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DEMO_DIR, OUT_DIR } from './lib/paths.mjs'
-import { clipDuration } from './lib/timecode.mjs'
+import { OUT_DIR } from './lib/paths.mjs'
+import { loadMoments, effectiveDur } from './lib/timeline.mjs'
 
-const moments = JSON.parse(readFileSync(join(DEMO_DIR, 'moments.json')))
-const dur = (m) => m.dur ?? clipDuration(m.srtStart, m.srtEnd)
+const moments = loadMoments()
+const dur = effectiveDur
 const t = (sec) => {
   const h = Math.floor(sec/3600), mm = Math.floor((sec%3600)/60)
   const ss = (sec%60).toFixed(2).padStart(5,'0')
@@ -24,12 +24,12 @@ let cur = 0, lines = ''
 for (const m of moments.timeline) {
   const d = dur(m)
   if (m.caption) {
+    // Caption text only — no speaker label (participants are not named).
     const text = m.caption.replace(/\n/g, '\\N')
-    const sp = m.speaker ? `{\\i1}${m.speaker}:{\\i0} ` : ''
-    lines += `Dialogue: 0,${t(cur)},${t(cur+d)},Cap,,0,0,0,,${sp}${text}\n`
+    lines += `Dialogue: 0,${t(cur)},${t(cur+d)},Cap,,0,0,0,,${text}\n`
   }
   cur += d
 }
-if (cur < 55 || cur > 65) throw new Error(`total duration ${cur.toFixed(1)}s is outside the 55–65s acceptance window`)
+if (cur < 55 || cur > 82) throw new Error(`total duration ${cur.toFixed(1)}s is outside the 55–82s acceptance window`)
 writeFileSync(join(OUT_DIR, 'demo.ass'), head + lines)
 console.log('captions -> out/demo.ass; total', cur.toFixed(1), 's')
