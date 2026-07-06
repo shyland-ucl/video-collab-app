@@ -35,5 +35,17 @@ export function makeApp(supabaseClient, videoDeps = {}) {
   app.use(makeSuggestRoutes(supabaseClient))
   app.use(makeRenderRoutes(supabaseClient))
 
+  // Terminal JSON error handler. Express 5 forwards a rejected async route
+  // handler here automatically (e.g. a Gemini call that throws in ai-edit or
+  // suggest). Without it Express serves an HTML error page that leaks a stack
+  // trace unless NODE_ENV=production — which the platform does not set for us.
+  // Always answer JSON, never the stack.
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, req, res, next) => {
+    console.error('unhandled route error:', err)
+    if (res.headersSent) return next(err)
+    res.status(500).json({ error: 'server_error' })
+  })
+
   return app
 }

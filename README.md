@@ -3,7 +3,7 @@
 Collaborative video editing for blind/low-vision creators and their sighted helpers.
 
 Productized from the `video-collab-probe` research platform (kept frozen as the study artifact).
-Design spec: see `video-collab-probe/docs/superpowers/specs/2026-06-10-product-phase1-backend-design.md`.
+Design spec: see [`docs/superpowers/specs/2026-06-10-product-phase1-backend-design.md`](docs/superpowers/specs/2026-06-10-product-phase1-backend-design.md).
 
 ## Structure
 - `web/` — Vite + React SPA (talks to Supabase directly; mobile-first)
