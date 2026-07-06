@@ -1,8 +1,20 @@
 import { Router } from 'express'
 import { makeRequireAuth } from '../middleware/requireAuth.js'
 import { makeGeminiModel } from '../services/descriptions.js'
-import { proposeEdit } from '../services/aiEdit.js'
+import { proposeEdit, MAX_CLARIFY_ROUNDS } from '../services/aiEdit.js'
 import { rootSegmentIds, loadLevel1Descriptions } from '../services/aiEditData.js'
+
+// Sanitize the client-sent clarification transcript: keep only well-formed
+// { request, clarification } rounds, coerce+bound each string, and keep the
+// most recent MAX_CLARIFY_ROUNDS (bounds prompt size and drives the final-round
+// "stop asking" instruction). Never trust the body — this feeds the LLM prompt.
+function sanitizeHistory(raw) {
+  if (!Array.isArray(raw)) return []
+  const clean = raw
+    .filter((h) => h && typeof h.request === 'string' && typeof h.clarification === 'string')
+    .map((h) => ({ request: h.request.slice(0, 500), clarification: h.clarification.slice(0, 500) }))
+  return clean.slice(-MAX_CLARIFY_ROUNDS)
+}
 
 export function makeAiEditRoutes(supabase, deps = {}) {
   const { propose = proposeEdit, getModel = makeGeminiModel } = deps
@@ -31,6 +43,13 @@ export function makeAiEditRoutes(supabase, deps = {}) {
     })).filter((c) => c.id && c.name)
     if (!cleanClips.length) return res.status(400).json({ error: 'bad_request_body' })
 
+    // The scene the request came from — only honour it if it's one of the
+    // submitted clips (so a deictic "make it brighter" resolves to that scene
+    // instead of looping on "which scene?"). Untrusted ids are dropped.
+    const focusRaw = String(req.body?.focused_clip_id ?? '')
+    const focusedClipId = cleanClips.some((c) => c.id === focusRaw) ? focusRaw : null
+    const history = sanitizeHistory(req.body?.history)
+
     let model
     try {
       model = getModel()
@@ -39,7 +58,11 @@ export function makeAiEditRoutes(supabase, deps = {}) {
     }
 
     const descriptions = await loadLevel1Descriptions(supabase, project.id, rootSegmentIds(cleanClips))
-    const proposal = await propose(model, request, cleanClips, descriptions)
+    const proposal = await propose(model, request, cleanClips, descriptions, {
+      focusedClipId,
+      history,
+      log: console.warn,
+    })
     res.json(proposal)
   })
 
