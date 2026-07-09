@@ -91,4 +91,47 @@ describe('POST /api/projects/:id/ai-edit', () => {
     expect(res.body).toMatchObject({ op: 'delete', target_clip_id: 'g1' })
     expect(proposeSpy).toHaveBeenCalled()
   })
+
+  it('forwards a valid focused_clip_id (and a logger) to propose', async () => {
+    await request(appWith(makeFakeSupabase({ project: PROJECT, member: MEMBER })))
+      .post('/api/projects/p1/ai-edit').set('Authorization', 'Bearer good')
+      .send({ request: 'brighten it', clips: CLIPS, focused_clip_id: 'g1' })
+    const opts = proposeSpy.mock.calls[0][4] ?? {}
+    expect(opts.focusedClipId).toBe('g1')
+    expect(typeof opts.log).toBe('function')
+  })
+
+  it('drops a focused_clip_id that is not one of the submitted clips (never trust the body)', async () => {
+    await request(appWith(makeFakeSupabase({ project: PROJECT, member: MEMBER })))
+      .post('/api/projects/p1/ai-edit').set('Authorization', 'Bearer good')
+      .send({ request: 'brighten it', clips: CLIPS, focused_clip_id: 'not-a-clip' })
+    const opts = proposeSpy.mock.calls[0][4] ?? {}
+    expect(opts.focusedClipId).toBe(null)
+  })
+
+  it('forwards clarification history, sanitized and clamped to the last two well-formed rounds', async () => {
+    const history = [
+      { request: 'r1', clarification: 'c1' },
+      { request: 'r2', clarification: 'c2' },
+      { request: 'r3', clarification: 'c3' },
+      { bad: 'x' }, // malformed → dropped
+    ]
+    await request(appWith(makeFakeSupabase({ project: PROJECT, member: MEMBER })))
+      .post('/api/projects/p1/ai-edit').set('Authorization', 'Bearer good')
+      .send({ request: 'the second one', clips: CLIPS, history })
+    const opts = proposeSpy.mock.calls[0][4] ?? {}
+    expect(opts.history).toEqual([
+      { request: 'r2', clarification: 'c2' },
+      { request: 'r3', clarification: 'c3' },
+    ])
+  })
+
+  it('defaults to no focus and empty history when the body omits them', async () => {
+    await request(appWith(makeFakeSupabase({ project: PROJECT, member: MEMBER })))
+      .post('/api/projects/p1/ai-edit').set('Authorization', 'Bearer good')
+      .send({ request: 'delete scene one', clips: CLIPS })
+    const opts = proposeSpy.mock.calls[0][4] ?? {}
+    expect(opts.focusedClipId).toBe(null)
+    expect(opts.history).toEqual([])
+  })
 })

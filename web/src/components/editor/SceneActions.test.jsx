@@ -412,6 +412,78 @@ describe('SceneActions — ask AI to edit (confirm-first)', () => {
     expect(screen.getByRole('group', { name: /ask ai to edit/i })).toBeInTheDocument()
     a11yState.audioEnabled = false
   })
+
+  it('carries the prior request + clarification when the creator answers a clarifying question', async () => {
+    mockServerPost
+      .mockResolvedValueOnce({ clarification: 'Which scene would you like to make brighter?' })
+      .mockResolvedValueOnce({ op: 'brightness', target_clip_id: 's1', params: { value: 20 }, summary: 'brighten it' })
+    renderActions({ allClips: STATE.clips })
+
+    await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
+    const panel = screen.getByRole('group', { name: /ask ai to edit/i })
+    await userEvent.type(within(panel).getByRole('textbox'), 'make it brighter')
+    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+    await screen.findByText('Which scene would you like to make brighter?')
+
+    // First request carried no history.
+    expect(mockServerPost.mock.calls[0][1].history).toEqual([])
+
+    // Answer the clarifying question in the same (now-cleared) box.
+    await userEvent.type(within(panel).getByRole('textbox'), 'scene 1')
+    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+
+    expect(mockServerPost).toHaveBeenCalledTimes(2)
+    const secondBody = mockServerPost.mock.calls[1][1]
+    expect(secondBody.request).toBe('scene 1')
+    expect(secondBody.history).toEqual([
+      { request: 'make it brighter', clarification: 'Which scene would you like to make brighter?' },
+    ])
+  })
+
+  it('resets the clarification history when the panel is closed and reopened (a fresh exchange)', async () => {
+    mockServerPost
+      .mockResolvedValueOnce({ clarification: 'Which scene do you mean?' })
+      .mockResolvedValueOnce({ clarification: 'Which scene do you mean?' })
+    renderActions({ allClips: STATE.clips })
+
+    await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
+    let panel = screen.getByRole('group', { name: /ask ai to edit/i })
+    await userEvent.type(within(panel).getByRole('textbox'), 'edit it')
+    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+    await screen.findByText('Which scene do you mean?')
+
+    // Close then reopen the panel — the next request starts a clean exchange.
+    await userEvent.click(screen.getByRole('button', { name: /close ai edit/i }))
+    await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
+    panel = screen.getByRole('group', { name: /ask ai to edit/i })
+    await userEvent.type(within(panel).getByRole('textbox'), 'do something else')
+    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+
+    expect(mockServerPost.mock.calls[1][1].history).toEqual([])
+  })
+
+  it('an AI-confirmed edit can be undone, like a self-edit (rebasable:false)', async () => {
+    mockServerPost.mockResolvedValueOnce({ op: 'delete', target_clip_id: 's1', summary: 'remove the intro' })
+    const { props } = renderActions({ allClips: STATE.clips })
+
+    await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
+    const panel = screen.getByRole('group', { name: /ask ai to edit/i })
+    await userEvent.type(within(panel).getByRole('textbox'), 'delete this scene')
+    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+    const dialog = await screen.findByRole('alertdialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^confirm/i }))
+    expect(props.applyAndSave).toHaveBeenCalledTimes(1)
+
+    // The AI edit is now on the shared undo stack: open Edit by Myself and undo.
+    props.applyAndSave.mockClear()
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+    const undo = screen.getByRole('button', { name: /undo last edit/i })
+    expect(undo).toBeEnabled()
+    await userEvent.click(undo)
+    expect(props.applyAndSave).toHaveBeenCalledTimes(1)
+    const [, , opts] = props.applyAndSave.mock.calls[0]
+    expect(opts).toEqual(expect.objectContaining({ rebasable: false }))
+  })
 })
 
 describe('SceneActions — VQA (Ask AI about scene)', () => {

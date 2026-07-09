@@ -121,6 +121,11 @@ export default function SceneActions({
   const [aiEditPending, setAiEditPending] = useState(false)
   const [aiEditNote, setAiEditNote] = useState(null) // clarification / invalid note
   const [aiProposal, setAiProposal] = useState(null) // drives ConfirmAiEditDialog
+  // Prior { request, clarification } rounds of the CURRENT ask-AI exchange, sent
+  // back so the server can combine the creator's answer with what they first
+  // asked (a stateless answer looped forever — the reported bug). Cleared when
+  // the panel toggles or an edit is proposed/applied.
+  const [aiClarifyHistory, setAiClarifyHistory] = useState([])
 
   // Local undo/redo snapshots (probe behavior) — applied non-rebasable so a
   // conflict resyncs instead of clobbering a concurrent helper edit. Each
@@ -183,24 +188,33 @@ export default function SceneActions({
   // ---------------------------------------------------------------------------
   // Edit by Myself — every edit routes through applyAndSave(opFn, text).
   // ---------------------------------------------------------------------------
-  const runEdit = useCallback(
-    (op, options, text, { rebasable = true } = {}) => {
-      if (!clip) return
-      const id = clip.id
-      // Each edit gets its own undo entry. applyAndSave's opFn closes over
-      // EditorPage's live state, so we wrap it to stash the pre-image the
-      // moment the real applyAndSave invokes it (first call wins).
+  // Push ANY opFn onto the undo stack and persist it. Each edit gets its own
+  // undo entry; applyAndSave's opFn closes over EditorPage's live state, so we
+  // wrap it to stash the pre-image the moment the real applyAndSave invokes it
+  // (first call wins). Shared by self-edits (runEdit) AND applied AI proposals
+  // (handleAiConfirm) so both are equally undoable.
+  const pushUndoable = useCallback(
+    (rawOpFn, text, { rebasable = true } = {}) => {
       const entry = { preImage: null }
       const opFn = (s) => {
         if (entry.preImage === null) entry.preImage = s
-        return applyOperation(s, id, op, options)
+        return rawOpFn(s)
       }
       entry.opFn = opFn
       setUndoStack((prev) => [...prev, entry])
       setRedoStack([])
       applyAndSave(opFn, text, { rebasable })
     },
-    [clip, applyAndSave]
+    [applyAndSave]
+  )
+
+  const runEdit = useCallback(
+    (op, options, text, { rebasable = true } = {}) => {
+      if (!clip) return
+      const id = clip.id
+      pushUndoable((s) => applyOperation(s, id, op, options), text, { rebasable })
+    },
+    [clip, pushUndoable]
   )
 
   // Self-edits announce SYNCHRONOUSLY and scene-numbered the instant the button
@@ -298,6 +312,9 @@ export default function SceneActions({
       const proposal = await serverPost(`/api/projects/${projectId}/ai-edit`, {
         request,
         focused_clip_id: clip.id,
+        // Prior rounds of THIS exchange so the server combines the creator's
+        // answer with what they first asked (instead of looping statelessly).
+        history: aiClarifyHistory,
         clips: aiClips.map((c) => ({
           id: c.id,
           name: c.name,
@@ -307,7 +324,9 @@ export default function SceneActions({
       })
       setAiEditPending(false)
       if (proposal?.clarification) {
-        // Clarification: announce + speak, keep the panel open for a follow-up.
+        // Clarification: announce + speak, keep the panel open, and remember
+        // this round so the creator's next answer is understood in context.
+        setAiClarifyHistory((h) => [...h, { request, clarification: proposal.clarification }])
         setAiEditNote(proposal.clarification)
         announce(proposal.clarification)
         speakResponse(proposal.clarification)
@@ -320,25 +339,40 @@ export default function SceneActions({
         announce(AI_INVALID_PROPOSAL_TEXT, { assertive: true })
         return
       }
+      // A real proposal ends the clarification exchange.
+      setAiClarifyHistory([])
       setAiProposal(proposal)
     } catch {
       setAiEditPending(false)
       announce(AI_FAILED_TEXT, { assertive: true })
     }
-  }, [clip, aiClips, projectId, speakResponse])
+  }, [clip, aiClips, projectId, speakResponse, aiClarifyHistory])
 
   const handleAiConfirm = useCallback(() => {
     const proposal = aiProposal
     setAiProposal(null)
     const described = describeProposal(proposal, aiClips)
     if (!described) return
-    applyAndSave(proposalToOpFn(proposal), described.done)
+    // Route through the shared undo path so an AI-applied edit is as undoable
+    // as a self-edit (a BLV creator who mishears the confirmation can revert it).
+    pushUndoable(proposalToOpFn(proposal), described.done)
     setShowAiEdit(false)
-  }, [aiProposal, aiClips, applyAndSave])
+    setAiClarifyHistory([])
+    setAiEditNote(null)
+  }, [aiProposal, aiClips, pushUndoable])
 
   const handleAiCancel = useCallback(() => {
     setAiProposal(null)
     announce('Cancelled — no change was made.')
+  }, [])
+
+  // Toggling the Ask-AI panel starts a fresh exchange: drop any carried
+  // clarification history and note so a new request isn't coloured by an
+  // abandoned one.
+  const handleToggleAiEdit = useCallback(() => {
+    setShowAiEdit((v) => !v)
+    setAiClarifyHistory([])
+    setAiEditNote(null)
   }, [])
 
   // ---------------------------------------------------------------------------
@@ -581,7 +615,7 @@ export default function SceneActions({
       <div>
         <button
           type="button"
-          onClick={() => setShowAiEdit((v) => !v)}
+          onClick={handleToggleAiEdit}
           className="w-full py-3 text-sm font-medium rounded text-white transition-colors focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
           style={{ backgroundColor: AI_EDIT_COLOR, minHeight: '48px' }}
         >

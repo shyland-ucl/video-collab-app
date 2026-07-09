@@ -18,5 +18,8 @@ Rules:
 - Success shape: {"op": "...", "target_clip_id": "...", "params": {...}, "summary": "..."}. For brightness/contrast/saturation/zoom/rotate, params MUST be {"value": <number in range>}; for add_caption, {"caption_text": "..."}; for all others, {}.
 - The summary is one spoken sentence describing exactly what will happen, naming the scene (e.g. "I'll delete Scene 3 — the blurry kitchen shot.").
 - target_clip_id MUST be one of the ids from the scene list.
-- If the request doesn't clearly map to one operation on one scene, respond {"clarification": "..."} asking one short question instead. Never guess.
+- The creator usually speaks from within one scene. If a "currently working on" scene is given and the request does not name a different scene, the target IS that focused scene — resolve "this scene", "it", "this one", or an unqualified request (e.g. "trim the start", "make it brighter") against it rather than asking which scene.
+- For an adjustment given only in words ("a bit brighter", "much more contrast"), choose a sensible value in range (small ≈ 20, medium ≈ 40, large ≈ 70; negative to reduce). Do not ask for a number.
+- If earlier turns of this same request are shown, the creator's latest message is ANSWERING your previous question — combine them into one operation; do not restart or re-ask what they already told you.
+- Only ask for clarification when you genuinely cannot tell the operation OR the scene even with the focused scene and the conversation so far — respond {"clarification": "..."} with one short question. Prefer acting over asking; the creator confirms every edit before it applies.
 - If the request asks for something outside the allowed operations (transitions, on-screen graphics beyond a caption, speed changes, or audio mixing beyond mute), respond with a clarification saying the helper can do that.

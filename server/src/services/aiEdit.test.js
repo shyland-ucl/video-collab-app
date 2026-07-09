@@ -132,3 +132,66 @@ describe('proposeEdit — visual output whitelist', () => {
     expect(muteOut).toEqual({ op: 'mute', target_clip_id: 'c1', params: {}, summary: 'mute Scene 1' })
   })
 })
+
+// Regression coverage for the reported bug: deictic requests ("make it
+// brighter", "trim the start") looped on clarifications because the focused
+// scene was never given to the model and clarification answers carried no
+// context. These assert the prompt-assembly contract; the live model behaviour
+// is verified separately by scripts/diag-aiedit.mjs.
+describe('proposeEdit — focused scene + clarification history', () => {
+  const CLIPS3 = [
+    { id: 'g1', name: 'Scene 1', duration_seconds: 5 },
+    { id: 'g2', name: 'Scene 2', duration_seconds: 3 },
+  ]
+
+  it('names the focused scene in the prompt so a deictic request resolves', async () => {
+    const model = fakeModel(JSON.stringify({ op: 'brightness', target_clip_id: 'g2', params: { value: 20 }, summary: 'brighten Scene 2' }))
+    await proposeEdit(model, 'make it brighter', CLIPS3, {}, { focusedClipId: 'g2' })
+    const prompt = model.generateContent.mock.calls[0][0]
+    expect(prompt).toMatch(/working on Scene 2/i)
+    expect(prompt).toContain('g2')
+  })
+
+  it('omits the focus line when the focused id is not one of the clips', async () => {
+    const model = fakeModel(JSON.stringify({ clarification: 'Which scene?' }))
+    await proposeEdit(model, 'make it brighter', CLIPS3, {}, { focusedClipId: 'nope' })
+    // The dynamic focus block names a real scene ("working on Scene 2"); assert
+    // THAT is absent (the static template mentions a lowercase "currently
+    // working on" scene, so a looser matcher would false-positive on it).
+    expect(model.generateContent.mock.calls[0][0]).not.toMatch(/working on Scene \d/i)
+  })
+
+  it('renders prior clarification rounds so the answer is combined with the original request', async () => {
+    const model = fakeModel(JSON.stringify({ op: 'delete', target_clip_id: 'g2', params: {}, summary: 'delete Scene 2' }))
+    const history = [{ request: 'get rid of it', clarification: 'Which scene would you like to delete?' }]
+    await proposeEdit(model, 'scene 2', CLIPS3, {}, { history })
+    const prompt = model.generateContent.mock.calls[0][0]
+    expect(prompt).toMatch(/earlier/i)
+    expect(prompt).toContain('get rid of it')
+    expect(prompt).toContain('Which scene would you like to delete?')
+  })
+
+  it('instructs the model to stop asking once the clarification round cap is reached', async () => {
+    const model = fakeModel(JSON.stringify({ op: 'delete', target_clip_id: 'g2', params: {}, summary: 'delete Scene 2' }))
+    const history = [
+      { request: 'do the thing', clarification: 'Which scene?' },
+      { request: 'that one', clarification: 'What would you like to do?' },
+    ]
+    await proposeEdit(model, 'delete it', CLIPS3, {}, { history })
+    expect(model.generateContent.mock.calls[0][0]).toMatch(/do not ask|final/i)
+  })
+
+  it('returns an amount-specific clarification (not the generic one) when a numeric value is out of range', async () => {
+    const model = fakeModel(JSON.stringify({ op: 'brightness', target_clip_id: 'g1', params: { value: 999 }, summary: 'x' }))
+    const result = await proposeEdit(model, 'much brighter', CLIPS3, {})
+    expect(result.clarification).toMatch(/amount|how much/i)
+    expect(result.clarification).not.toMatch(/name the scene number/i)
+  })
+
+  it('logs the validation-failure reason via the injected logger', async () => {
+    const log = vi.fn()
+    const model = fakeModel(JSON.stringify({ op: 'brightness', target_clip_id: 'g1', params: { value: 999 }, summary: 'x' }))
+    await proposeEdit(model, 'much brighter', CLIPS3, {}, { log })
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/bad_value/))
+  })
+})
