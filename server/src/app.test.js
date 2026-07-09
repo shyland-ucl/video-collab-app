@@ -13,6 +13,26 @@ const fakeSupabase = {
   },
 }
 
+// A supabase double that passes membership so a request reaches a route body
+// (empty segments/descriptions so loadLevel1Descriptions short-circuits).
+function memberSupabase() {
+  return {
+    auth: fakeSupabase.auth,
+    from: (table) => {
+      if (table === 'projects') {
+        return { select: () => ({ eq: () => ({ single: async () => ({ data: { id: 'p1', title: 'T' }, error: null }) }) }) }
+      }
+      if (table === 'project_members') {
+        return { select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { user_id: 'user-1' }, error: null }) }) }) }) }
+      }
+      if (table === 'segments') {
+        return { select: () => ({ in: () => ({ eq: async () => ({ data: [], error: null }) }) }) }
+      }
+      return { select: () => ({ in: async () => ({ data: [], error: null }) }) }
+    },
+  }
+}
+
 describe('app', () => {
   it('GET /health is public', async () => {
     const res = await request(makeApp(fakeSupabase)).get('/health')
@@ -45,6 +65,27 @@ describe('app', () => {
     } finally {
       if (prev === undefined) delete process.env.WEB_ORIGIN
       else process.env.WEB_ORIGIN = prev
+    }
+  })
+
+  it('returns JSON (not an HTML stack trace) when a route handler throws', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const app = makeApp(memberSupabase(), {
+        propose: async () => { throw new Error('boom-secret-internal-detail') },
+        getModel: () => ({}),
+      })
+      const res = await request(app)
+        .post('/api/projects/p1/ai-edit')
+        .set('Authorization', 'Bearer good')
+        .send({ request: 'delete scene one', clips: [{ id: 'g1', name: 'Scene 1', duration_seconds: 5 }] })
+      expect(res.status).toBe(500)
+      expect(res.headers['content-type']).toMatch(/application\/json/)
+      expect(res.body).toEqual({ error: 'server_error' })
+      // The internal error message must never reach the client.
+      expect(JSON.stringify(res.body)).not.toContain('boom-secret')
+    } finally {
+      errSpy.mockRestore()
     }
   })
 })

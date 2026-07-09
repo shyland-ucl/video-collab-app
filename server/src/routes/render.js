@@ -40,6 +40,11 @@ export function makeRenderRoutes(supabase, deps = {}) {
     const { data: row, error } = await supabase.from('renders')
       .insert({ project_id: project.id, status: 'rendering', edl_version: edlVersion, created_by: req.user.id })
       .select('id').single()
+    // 23505 = the partial unique index (renders_one_active_per_project) rejected
+    // a second concurrent 'rendering' row — the single-flight loser. Same 409 the
+    // inflight SELECT returns, so the race and the guard are indistinguishable to
+    // the client.
+    if (error?.code === '23505') return res.status(409).json({ error: 'already_rendering' })
     if (error || !row) return res.status(500).json({ error: 'render_create_failed' })
 
     res.status(202).json({ renderId: row.id })

@@ -6,7 +6,7 @@ import { makeRenderRoutes } from './render.js'
 const user = { id: 'user-1', email: 'a@b.c' }
 
 // Fake supabase: projects, project_members, and renders (inflight select + insert).
-function makeFakeSupabase({ project, member, inflight = [], insertId = 'r1' } = {}) {
+function makeFakeSupabase({ project, member, inflight = [], insertId = 'r1', insertError = null } = {}) {
   return {
     auth: { getUser: vi.fn(async (t) => t === 'good' ? { data: { user }, error: null } : { data: { user: null }, error: { message: 'bad' } }) },
     from: (table) => {
@@ -19,7 +19,7 @@ function makeFakeSupabase({ project, member, inflight = [], insertId = 'r1' } = 
       // renders: select(inflight).eq.eq.limit  OR  insert.select.single
       return {
         select: () => ({ eq: () => ({ eq: () => ({ limit: async () => ({ data: inflight, error: null }) }) }) }),
-        insert: () => ({ select: () => ({ single: async () => ({ data: { id: insertId }, error: null }) }) }),
+        insert: () => ({ select: () => ({ single: async () => insertError ? { data: null, error: insertError } : { data: { id: insertId }, error: null } }) }),
       }
     },
   }
@@ -69,6 +69,16 @@ describe('POST /api/projects/:id/render', () => {
       .post('/api/projects/p1/render').set('Authorization', 'Bearer good').send({})
     expect(res.status).toBe(400)
     expect(res.body.error).toBe('nothing_to_render')
+    expect(renderSpy).not.toHaveBeenCalled()
+  })
+
+  it('409s when the insert loses the single-flight race (unique-index violation)', async () => {
+    // Two requests can both pass the "already rendering?" SELECT; the DB partial
+    // unique index makes the second insert fail with 23505, which maps to 409.
+    const supabase = makeFakeSupabase({ project: PROJECT, member: MEMBER, insertError: { code: '23505', message: 'duplicate key value' } })
+    const res = await request(appWith(supabase)).post('/api/projects/p1/render').set('Authorization', 'Bearer good').send({})
+    expect(res.status).toBe(409)
+    expect(res.body.error).toBe('already_rendering')
     expect(renderSpy).not.toHaveBeenCalled()
   })
 
