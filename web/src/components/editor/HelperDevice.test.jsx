@@ -138,6 +138,7 @@ describe('HelperDevice — timeline edits', () => {
     // select a clip then delete
     await userEvent.click(screen.getByRole('option', { name: /Scene 1/i }))
     await userEvent.click(screen.getByRole('button', { name: /delete selected clip/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^delete:/i }))
 
     expect(props.applyAndSave).toHaveBeenCalledTimes(1)
     const [opFn] = props.applyAndSave.mock.calls[0]

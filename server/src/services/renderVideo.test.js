@@ -68,4 +68,24 @@ describe('renderVideo', () => {
     await expect(renderVideo(opts)).rejects.toThrow(/nothing_to_render/)
     expect(opts.supabase.updates.some((u) => u.patch.status === 'failed')).toBe(true)
   })
+
+  it('renders the validated snapshot without reloading a newer edit', async () => {
+    const loadState = vi.fn(async () => ({
+      version: 99,
+      state: { clips: [], colour: {} },
+    }))
+    const loadSources = vi.fn(async () => [])
+    const opts = baseOpts({
+      renderState: STATE,
+      renderSources: SOURCES,
+      loadState,
+      loadSources,
+    })
+
+    await renderVideo(opts)
+
+    expect(loadState).not.toHaveBeenCalled()
+    expect(loadSources).not.toHaveBeenCalled()
+    expect(opts.runFfmpeg).toHaveBeenCalledTimes(3)
+  })
 })

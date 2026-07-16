@@ -92,7 +92,7 @@ export default function TaskRequestModal({ mode, clip, onSend, onClose, pending 
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+      className="fixed inset-0 z-50 flex items-end justify-center overscroll-contain bg-black/40"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -106,7 +106,7 @@ export default function TaskRequestModal({ mode, clip, onSend, onClose, pending 
         }
       }}
     >
-      <div className="w-full max-w-lg bg-white rounded-t-2xl shadow-2xl max-h-[70vh] flex flex-col">
+      <div className="flex max-h-[70dvh] w-full max-w-lg flex-col rounded-t-2xl bg-white shadow-2xl" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <h3 className="font-bold text-sm text-gray-900">{title}</h3>

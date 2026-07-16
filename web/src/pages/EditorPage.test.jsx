@@ -189,6 +189,16 @@ function channelOpts() {
   return mockJoinProjectChannel.mock.calls[0][1]
 }
 
+function deferred() {
+  let resolve
+  let reject
+  const promise = new Promise((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   captured.creator = null
@@ -240,6 +250,46 @@ describe('EditorPage', () => {
 
     unmount()
     expect(channelApi.leave).toHaveBeenCalled()
+  })
+
+  it('does not let a stale subscription catch-up erase a realtime task insert', async () => {
+    const staleTaskList = deferred()
+    const realtimeTask = {
+      id: 't-race',
+      text: 'Trim the opening',
+      segment_label: 'Scene 1',
+      status: 'pending',
+      created_by: 'u2',
+    }
+    mockListTasks
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(staleTaskList.promise)
+      .mockResolvedValueOnce([realtimeTask])
+
+    const { unmount } = renderPage()
+    expect(await screen.findByText('creator device')).toBeInTheDocument()
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    let catchUpPromise
+    await act(async () => {
+      catchUpPromise = channelOpts().onSubscribed()
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(mockListTasks).toHaveBeenCalledTimes(2))
+
+    act(() => {
+      channelOpts().onTaskChange({ eventType: 'INSERT', task: realtimeTask })
+    })
+    expect(captured.creator.tasks).toEqual([realtimeTask])
+
+    await act(async () => {
+      staleTaskList.resolve([])
+      await catchUpPromise
+    })
+
+    expect(mockListTasks).toHaveBeenCalledTimes(3)
+    expect(captured.creator.tasks).toEqual([realtimeTask])
+    unmount()
   })
 
   it('passes the ?video= query param down to the creator device as initialVideoId', async () => {

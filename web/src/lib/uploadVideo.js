@@ -15,6 +15,18 @@ export function uploadVideo({ supabaseUrl, accessToken, objectName, file, onProg
       uploadDataDuringCreation: true,
       removeFingerprintOnSuccess: true,
       chunkSize: CHUNK_SIZE,
+      // tus' browser default fingerprints only the file + endpoint. Include
+      // the destination object so the same interrupted file selected for a
+      // different project/video can never resume into the old storage path.
+      fingerprint: (uploadFile, options) => Promise.resolve([
+        'video-collab',
+        options.metadata?.objectName ?? objectName,
+        uploadFile.name,
+        uploadFile.type,
+        uploadFile.size,
+        uploadFile.lastModified,
+        options.endpoint,
+      ].join('|')),
       metadata: {
         bucketName: 'videos',
         objectName,

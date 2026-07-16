@@ -14,7 +14,7 @@
   --color-sunken: #f3f1ea;        /* inset / hover wells */
   --color-ink: #1c1b1a;           /* primary text */
   --color-ink-soft: #57534e;      /* secondary text */
-  --color-ink-faint: #8a857d;     /* hints, placeholders */
+  --color-ink-faint: #706a62;     /* hints, placeholders; AA on white */
   --color-line: #e8e4da;          /* hairline borders */
   --color-line-strong: #d6d0c4;   /* input borders */
 
@@ -49,7 +49,12 @@
     scroll-behavior: smooth;
   }
 
+  html[data-text-size="small"]  { font-size: 15px; }
+  html[data-text-size="medium"] { font-size: 16px; }
+  html[data-text-size="large"]  { font-size: 20px; }
+
   body {
+    min-height: 100dvh;
     background-color: var(--color-canvas);
     /* Whisper-quiet warmth so the canvas reads as a surface, not a void. */
     background-image: radial-gradient(120% 80% at 50% -10%, rgba(15, 118, 110, 0.05), transparent 60%);
@@ -58,6 +63,10 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  button, a, input, textarea, select, label {
+    touch-action: manipulation;
   }
 
   h1, h2, h3 {
@@ -71,6 +80,12 @@
     outline: 2px solid var(--color-brand);
     outline-offset: 2px;
     border-radius: 6px;
+  }
+
+  /* Route changes focus the semantic main region for screen-reader context.
+     It is not an interactive control, so avoid outlining the whole viewport. */
+  main[tabindex="-1"]:focus {
+    outline: none;
   }
 
   ::selection {
@@ -90,6 +105,12 @@
 @layer components {
   /* Layout ---------------------------------------------------------------- */
   .page { @apply mx-auto w-full max-w-lg px-5 py-7 sm:px-6; }
+  .editor-shell {
+    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+  }
   .page-title { @apply text-[1.75rem] font-bold leading-tight; }
   .section-title { @apply text-lg font-bold; }
   .eyebrow { @apply text-xs font-bold uppercase tracking-[0.12em] text-ink-faint; }

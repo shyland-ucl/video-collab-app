@@ -25,11 +25,12 @@ function SearchProbe() {
 }
 
 describe('RequireAuth', () => {
-  it('renders nothing while session is loading', () => {
+  it('shows an accessible status while session is loading', () => {
     mockSession = undefined
     renderAt('/secret')
     expect(screen.queryByText('secret content')).not.toBeInTheDocument()
     expect(screen.queryByText('sign in page')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Checking your sign-in…')
   })
 
   it('redirects to /signin when signed out', () => {

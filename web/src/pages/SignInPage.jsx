@@ -73,7 +73,7 @@ export default function SignInPage() {
       : 'Welcome back. Sign in to reach your projects.'
 
   return (
-    <main id="main" tabIndex={-1} className="page flex min-h-screen flex-col justify-center">
+    <main id="main" tabIndex={-1} className="page flex min-h-[100dvh] flex-col justify-center">
       <header className="mb-7 text-center">
         <p className="eyebrow">Video Collab</p>
         <h1 className="page-title mt-2">{heading}</h1>
@@ -88,11 +88,16 @@ export default function SignInPage() {
           <input
             id="email"
             ref={emailRef}
+            name="email"
             type="email"
             required
             autoComplete="email"
+            autoCapitalize="none"
+            spellCheck={false}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? 'auth-error' : undefined}
             className="input mb-4"
           />
           <label htmlFor="password" className="label">
@@ -100,12 +105,15 @@ export default function SignInPage() {
           </label>
           <input
             id="password"
+            name="password"
             type="password"
             required
             minLength={6}
             autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? 'auth-error' : undefined}
             className="input mb-5"
           />
           <button type="submit" disabled={busy} className="btn btn-primary btn-block">
@@ -117,7 +125,7 @@ export default function SignInPage() {
                 ? 'Signing in…'
                 : 'Sign in'}
           </button>
-          {error && <p className="alert-error mt-4">{error}</p>}
+          {error && <p id="auth-error" role="alert" className="alert-error mt-4">{error}</p>}
         </form>
       </div>
 

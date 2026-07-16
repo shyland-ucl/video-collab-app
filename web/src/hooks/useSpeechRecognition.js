@@ -22,9 +22,14 @@ export default function useSpeechRecognition({
   const mountedRef = useRef(true);
 
   // Stop recognition and block any further state updates once unmounted.
-  useEffect(() => () => {
-    mountedRef.current = false;
-    try { recognitionRef.current?.abort?.(); } catch { /* ignore */ }
+  // StrictMode runs setup -> cleanup -> setup once in development, so the
+  // setup must explicitly re-arm the ref after that trial cleanup.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      try { recognitionRef.current?.abort?.(); } catch { /* ignore */ }
+    };
   }, []);
 
   const toggleListening = useCallback(() => {

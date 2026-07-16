@@ -52,6 +52,18 @@ function reducer(state, action) {
 export function AccessibilityProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
+  // Apply text size at the document root so the setting affects every route,
+  // including the editor, instead of only changing the Settings screen.
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = root.dataset.textSize;
+    root.dataset.textSize = state.textSize;
+    return () => {
+      if (previous) root.dataset.textSize = previous;
+      else delete root.dataset.textSize;
+    };
+  }, [state.textSize]);
+
   // Persist to localStorage with debounce to avoid thrashing on rapid changes
   useEffect(() => {
     const timer = setTimeout(() => {

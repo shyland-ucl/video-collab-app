@@ -637,9 +637,9 @@ export default function SceneBlockList({
       >
         {scenes.map((scene, i) => {
           // Removed scenes are dropped from the rendered list entirely so
-          // they don't take screen-reader focus or visual space. Restoration
-          // happens via the Edit-by-Myself panel's Undo button (the most
-          // recent Remove). Auto-follow still uses the original `scenes`
+          // they don't take screen-reader focus or visual space. Removal is
+          // confirm-first because the scene's local controls disappear with
+          // it. Auto-follow still uses the original `scenes`
           // array, but playbackEditState already filters removed clips so
           // the engine never lands on a removed scene's time range.
           if (keptScenes[scene.id] === false) return null;

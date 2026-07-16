@@ -47,6 +47,29 @@ describe('uploadVideo', () => {
     expect(onProgress).toHaveBeenCalledWith(50)
   })
 
+  it('uses a destination-specific resume fingerprint', async () => {
+    const file = new File(['same bytes'], 'clip.mp4', { type: 'video/mp4' })
+
+    await uploadVideo({
+      supabaseUrl: 'https://ref.supabase.co',
+      accessToken: 't',
+      objectName: 'project-a/video-a/original.mp4',
+      file,
+    })
+    await uploadVideo({
+      supabaseUrl: 'https://ref.supabase.co',
+      accessToken: 't',
+      objectName: 'project-b/video-b/original.mp4',
+      file,
+    })
+
+    const first = await created[0].options.fingerprint(file, created[0].options)
+    const second = await created[1].options.fingerprint(file, created[1].options)
+    expect(first).toContain('project-a/video-a/original.mp4')
+    expect(second).toContain('project-b/video-b/original.mp4')
+    expect(first).not.toBe(second)
+  })
+
   it('rejects when the upload errors', async () => {
     const file = new File(['x'], 'clip.mp4', { type: 'video/mp4' })
     // make the fake fail this time

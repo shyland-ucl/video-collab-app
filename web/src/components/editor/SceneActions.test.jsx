@@ -129,6 +129,8 @@ describe('SceneActions — edit by myself', () => {
     const { props } = renderActions()
     await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
     await userEvent.click(screen.getByRole('button', { name: /delete this clip/i }))
+    expect(props.applyAndSave).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: /^remove:/i }))
 
     expect(props.applyAndSave).toHaveBeenCalledTimes(1)
     const [opFn, announceText] = props.applyAndSave.mock.calls[0]
@@ -142,14 +144,23 @@ describe('SceneActions — edit by myself', () => {
     expect(announceText).toBe('')
   })
 
-  it('Delete announces exactly ONCE, scene-numbered, with no second post-save read (Fix B)', async () => {
+  it('Delete asks for confirmation before announcing the completed removal', async () => {
     renderActions({ index: 0 })
     await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
     await userEvent.click(screen.getByRole('button', { name: /delete this clip/i }))
+    expect(mockAnnounce).toHaveBeenCalledWith('Remove Scene 1 from the edit?', { assertive: true })
+    await userEvent.click(screen.getByRole('button', { name: /^remove:/i }))
 
-    // Exactly one announcement, with the probe wording.
-    expect(mockAnnounce).toHaveBeenCalledTimes(1)
     expect(mockAnnounce).toHaveBeenCalledWith('Scene 1 removed from the edit.')
+  })
+
+  it('Cancel leaves the scene unchanged', async () => {
+    const { props } = renderActions()
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(screen.getByRole('button', { name: /delete this clip/i }))
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+
+    expect(props.applyAndSave).not.toHaveBeenCalled()
   })
 
   it('Split immediately announces "Scene N trimmed at this point." (Fix A)', async () => {

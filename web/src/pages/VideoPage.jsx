@@ -60,7 +60,7 @@ export default function VideoPage() {
     return (
       <main id="main" tabIndex={-1} className="page">
         <p role="alert" className="alert-error mb-4">{error}</p>
-        <Link to={`/projects/${projectId}`} className="link-back">← Back to project</Link>
+        <Link to={`/projects/${projectId}`} className="link-back"><span aria-hidden="true">←</span> Back to project</Link>
       </main>
     )
   }
@@ -75,9 +75,9 @@ export default function VideoPage() {
   return (
     <main id="main" tabIndex={-1} className="page">
       <Link to={`/projects/${projectId}`} className="link-back mb-3">
-        ← Back to project
+        <span aria-hidden="true">←</span> Back to project
       </Link>
-      <h1 className="page-title mb-5">{video.original_name}</h1>
+      <h1 className="page-title mb-5 break-words">{video.original_name}</h1>
 
       {video.status !== 'ready' && (
         <p role="status" className="card mb-5 p-4 text-lg">
@@ -89,7 +89,8 @@ export default function VideoPage() {
         <video
           controls
           src={urls[video.storage_path]}
-          className="mb-6 w-full rounded-card border border-line shadow-card"
+          preload="metadata"
+          className="mb-6 aspect-video w-full rounded-card border border-line bg-black object-contain shadow-card"
           aria-label={`Original video: ${video.original_name}`}
         />
       )}
@@ -120,7 +121,9 @@ export default function VideoPage() {
         <h2 id="scenes-heading" className="section-title mb-3">
           Scenes ({segments.length})
         </h2>
-        <ol className="space-y-3.5">
+        {segments.length === 0 ? (
+          <p className="muted">No scenes are available yet.</p>
+        ) : <ol className="space-y-3.5">
           {segments.map((seg) => {
             const description = seg.descriptions?.find((d) => d.level === level)
             return (
@@ -129,7 +132,11 @@ export default function VideoPage() {
                   <img
                     src={urls[seg.keyframe_path]}
                     alt={seg.descriptions?.find((d) => d.level === 1)?.text ?? `Keyframe for ${seg.label}`}
-                    className="w-full border-b border-line"
+                    width="1280"
+                    height="720"
+                    loading="lazy"
+                    decoding="async"
+                    className="aspect-video w-full border-b border-line bg-black object-contain"
                   />
                 )}
                 <div className="p-4">
@@ -139,12 +146,12 @@ export default function VideoPage() {
                       {formatTime(seg.start_seconds)}–{formatTime(seg.end_seconds)}
                     </span>
                   </p>
-                  <p className="mt-1">{description?.text ?? 'No description available.'}</p>
+                  <p className="mt-1 break-words">{description?.text ?? 'No description available.'}</p>
                 </div>
               </li>
             )
           })}
-        </ol>
+        </ol>}
       </section>
     </main>
   )

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { announce } from '../../utils/announcer'
+import ConfirmEditDialog from './ConfirmEditDialog'
 import {
   splitClip, deleteClip, moveClip, addCaption, getClipForScene,
   setClipMuted, getClipMuted, setClipVolume, getClipVolume,
@@ -83,6 +84,7 @@ export default function EditorTimeline({
   const [showVisualPanel, setShowVisualPanel] = useState(false)
   const [showSoundPanel, setShowSoundPanel] = useState(false)
   const [captionText, setCaptionText] = useState('')
+  const [pendingDelete, setPendingDelete] = useState(null)
   const timelineRef = useRef(null)
   const toolbarRef = useRef(null)
 
@@ -128,10 +130,17 @@ export default function EditorTimeline({
     if (selectedClipIndex === null) return
     const clip = clips[selectedClipIndex]
     if (!clip) return
+    setPendingDelete(clip)
+  }, [selectedClipIndex, clips])
+
+  const confirmDelete = useCallback(() => {
+    if (!pendingDelete) return
+    const clip = pendingDelete
     const id = clip.id
+    setPendingDelete(null)
     setSelectedClipIndex(null)
     applyAndSave((s) => deleteClip(s, id), `Deleted clip: ${clip.name}`)
-  }, [selectedClipIndex, clips, applyAndSave])
+  }, [pendingDelete, applyAndSave])
 
   const handleSplit = useCallback(() => {
     if (selectedClipIndex === null) return
@@ -392,7 +401,7 @@ export default function EditorTimeline({
                   onSeek(fraction * timelineTotalDuration)
                 }
               }}
-              className="relative flex items-center justify-center cursor-pointer overflow-hidden select-none transition-all duration-150"
+              className="relative flex cursor-pointer select-none items-center justify-center overflow-hidden transition-[background,border-color,box-shadow,transform] duration-150"
               style={{
                 width: `${widthPercent}%`,
                 background: isSelected ? `linear-gradient(180deg, ${clip.color}, ${clip.color}cc)` : `linear-gradient(180deg, ${clip.color}dd, ${clip.color}99)`,
@@ -611,6 +620,16 @@ export default function EditorTimeline({
           )}
         </div>
       )}
+      {pendingDelete && (
+        <ConfirmEditDialog
+          title="Delete clip"
+          question={`Delete ${pendingDelete.name} from the timeline?`}
+          confirmLabel="Delete"
+          destructive
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   )
 }
@@ -621,7 +640,7 @@ function ToolbarButton({ children, onClick, disabled, label }) {
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="px-3 py-1.5 rounded-md text-xs font-semibold text-white/90 transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/15 active:scale-[0.97]"
+      className="rounded-md px-3 py-1.5 text-xs font-semibold text-white/90 transition-[background-color,opacity,transform] duration-150 hover:bg-white/15 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30"
       style={{ backgroundColor: 'rgba(255,255,255,0.08)', minHeight: '44px', minWidth: '44px', border: '1px solid rgba(255,255,255,0.1)' }}
     >
       {children}

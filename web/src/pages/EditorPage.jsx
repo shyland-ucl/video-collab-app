@@ -24,6 +24,7 @@ const URL_TTL_SECONDS = 3600
 const URL_REFRESH_MS = 50 * 60 * 1000
 const READY_POLL_MS = 60 * 1000
 const TOAST_MS = 6000
+const CATCH_UP_MAX_ATTEMPTS = 3
 
 const LOAD_ERROR_TEXT = "Couldn't load the editor — try again"
 const MEMBER_ERROR_TEXT = 'Project not found, or you are not a member of it.'
@@ -104,6 +105,9 @@ export default function EditorPage() {
   const snapshotRef = useRef(null)
   const tasksRef = useRef([])
   const suggestionsRef = useRef([])
+  const tasksRevisionRef = useRef(0)
+  const suggestionsRevisionRef = useRef(0)
+  const renderRevisionRef = useRef(0)
   const lastSuggestionAnnounceRef = useRef(0)
   const renderRef = useRef(null)
   const roleRef = useRef(null)
@@ -122,16 +126,19 @@ export default function EditorPage() {
 
   const applyTasks = useCallback((updater) => {
     tasksRef.current = typeof updater === 'function' ? updater(tasksRef.current) : updater
+    tasksRevisionRef.current += 1
     setTasks(tasksRef.current)
   }, [])
 
   const applySuggestions = useCallback((updater) => {
     suggestionsRef.current = typeof updater === 'function' ? updater(suggestionsRef.current) : updater
+    suggestionsRevisionRef.current += 1
     setSuggestions(suggestionsRef.current)
   }, [])
 
   const applyRender = useCallback((row) => {
     renderRef.current = row
+    renderRevisionRef.current += 1
     setRender(row)
   }, [])
 
@@ -275,34 +282,57 @@ export default function EditorPage() {
         if (segments.length === 0 && (latest.state?.clips?.length ?? 0) === 0) setNoScenes(true)
         applySnapshot(latest)
 
-        const taskRows = await listTasks(supabase, projectId)
+        const [taskRows, suggestionRows, renderRow] = await Promise.all([
+          listTasks(supabase, projectId),
+          listProjectSuggestions(supabase, projectId).catch(() => null),
+          latestRender(supabase, projectId).catch(() => null),
+        ])
         if (cancelled) return
         applyTasks(taskRows)
-
-        // Phase 3b: persisted AI suggestions (across any analysed video). A
-        // failure here is non-fatal — the editor still loads; suggestions just
-        // won't show until the next analyse/realtime event.
-        try {
-          const sugRows = await listProjectSuggestions(supabase, projectId)
-          if (!cancelled) applySuggestions(sugRows)
-        } catch {
-          /* non-fatal */
-        }
-
-        // Phase 4: the latest render (so a returning creator sees a ready
-        // download or an in-flight render). Non-fatal.
-        try {
-          const r = await latestRender(supabase, projectId)
-          if (!cancelled) applyRender(r)
-        } catch {
-          /* non-fatal */
-        }
+        if (suggestionRows) applySuggestions(suggestionRows)
+        applyRender(renderRow)
       } catch {
         if (!cancelled) fail()
         return
       }
 
-      // 6. Realtime channel.
+      async function applyStableCatchUp(loader, revisionRef, applyValue) {
+        for (let attempt = 0; attempt < CATCH_UP_MAX_ATTEMPTS; attempt += 1) {
+          const revisionBeforeLoad = revisionRef.current
+          const value = await loader()
+          if (cancelled) return
+          if (revisionBeforeLoad === revisionRef.current) {
+            // Check + apply stay in the same microtask, so a Realtime callback
+            // cannot land between them and then be replaced by this snapshot.
+            applyValue(value)
+            return
+          }
+        }
+        // Realtime/local changes won every attempt. Keep their newer state
+        // instead of replacing it with a response whose snapshot may be older.
+      }
+
+      async function syncFromServer() {
+        setSyncDown(false)
+        const [stateResult] = await Promise.allSettled([
+          loadLatestState(supabase, projectId),
+          applyStableCatchUp(() => listTasks(supabase, projectId), tasksRevisionRef, applyTasks),
+          applyStableCatchUp(
+            () => listProjectSuggestions(supabase, projectId),
+            suggestionsRevisionRef,
+            applySuggestions,
+          ),
+          applyStableCatchUp(() => latestRender(supabase, projectId), renderRevisionRef, applyRender),
+        ])
+        if (cancelled) return
+        if (stateResult.status === 'fulfilled') {
+          const latest = stateResult.value
+          if (latest && latest.version > (snapshotRef.current?.version ?? 0)) applySnapshot(latest)
+        }
+      }
+
+      // 6. Realtime channel. Its first successful SUBSCRIBED callback runs a
+      // catch-up read, closing the initial fetch-before-subscribe race.
       const channel = joinProjectChannel(supabase, {
         projectId,
         userId,
@@ -410,23 +440,7 @@ export default function EditorPage() {
         onPlayhead: (payload) => setRemote((r) => ({ ...r, playhead: payload })),
         onTransport: (payload) => setRemote((r) => ({ ...r, transport: payload })),
         onActivity: (payload) => setRemote((r) => ({ ...r, activity: payload })),
-        onReconnect: async () => {
-          setSyncDown(false)
-          try {
-            const latest = await loadLatestState(supabase, projectId)
-            if (latest && latest.version > (snapshotRef.current?.version ?? 0)) {
-              applySnapshot(latest)
-            }
-            const taskRows = await listTasks(supabase, projectId)
-            applyTasks(taskRows)
-            const sugRows = await listProjectSuggestions(supabase, projectId)
-            applySuggestions(sugRows)
-            const r = await latestRender(supabase, projectId)
-            applyRender(r)
-          } catch {
-            // Transient refetch failure — the next state insert or reconnect catches us up.
-          }
-        },
+        onSubscribed: syncFromServer,
         onError: () => {
           setSyncDown(true)
           announce(SYNC_DOWN_TEXT, { assertive: true })
@@ -464,7 +478,7 @@ export default function EditorPage() {
       channelRef.current?.leave()
       channelRef.current = null
     }
-  }, [projectId, userId, applySnapshot, applyTasks, refreshSources, showToast])
+  }, [projectId, userId, applySnapshot, applyTasks, applySuggestions, applyRender, refreshSources, showToast])
 
   const applyAndSave = useCallback(
     async (opFn, announceText, options = {}) => {
@@ -658,7 +672,15 @@ export default function EditorPage() {
     // (Probe3Page `fixed inset-0 … flex flex-col overflow-hidden`). `fixed
     // inset-0` is safe here: the skip-link/announcer regions live in App.jsx
     // outside the route, and `#main` stays in the DOM as the skip target.
-    <main id="main" tabIndex={-1} className="fixed inset-0 bg-white flex flex-col overflow-hidden p-4">
+    <main id="main" tabIndex={-1} className="editor-shell fixed inset-0 flex flex-col overflow-hidden bg-white">
+      <header className="mb-2 flex flex-shrink-0 items-center gap-3">
+        <Link to={`/projects/${projectId}`} className="link-back shrink-0">
+          <span aria-hidden="true">←</span> Project
+        </Link>
+        <h1 className="min-w-0 truncate text-base font-bold">
+          {role === 'creator' ? 'Creator editor' : 'Helper editor'}
+        </h1>
+      </header>
       {syncDown && (
         <p role="alert" className="flex-shrink-0 mb-3 rounded border border-red-700 bg-red-50 p-3 text-red-700">
           {SYNC_DOWN_TEXT}
@@ -688,8 +710,8 @@ export default function EditorPage() {
           {toast}
         </p>
       )}
-      <div className="flex-1 min-h-0 flex flex-col">
-      <Device
+      <div className="flex min-h-0 flex-1 flex-col">
+        <Device
         role={role}
         projectId={projectId}
         initialVideoId={initialVideoId}
@@ -711,7 +733,7 @@ export default function EditorPage() {
         onExport={onExport}
         getDownloadUrl={getDownloadUrl}
         syncDown={syncDown}
-      />
+        />
       </div>
     </main>
   )

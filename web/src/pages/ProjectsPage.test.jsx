@@ -148,6 +148,6 @@ describe('ProjectsPage — join with a code', () => {
     mockRpc.mockReturnValue(new Promise(() => {})) // never resolves
     renderPage()
     await typeCodeAndJoin('4827')
-    expect(screen.getByRole('button', { name: 'Join' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Joining…' })).toBeDisabled()
   })
 })

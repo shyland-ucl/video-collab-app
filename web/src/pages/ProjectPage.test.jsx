@@ -122,6 +122,16 @@ describe('ProjectPage', () => {
     expect(screen.queryByRole('link', { name: 'Open editor' })).not.toBeInTheDocument()
   })
 
+  it('hides owner-only invite controls from helpers', async () => {
+    mockProjectSingle.mockResolvedValue({ data: { ...PROJECT, owner_id: 'u2' }, error: null })
+    mockMembersEq.mockResolvedValue({ data: MEMBERS, error: null })
+
+    renderAt()
+    await screen.findByText('My film')
+
+    expect(screen.queryByRole('button', { name: 'Invite a helper' })).not.toBeInTheDocument()
+  })
+
   it('shows the 4-digit code with expiry note and announces it', async () => {
     mockProjectSingle.mockResolvedValue({ data: PROJECT, error: null })
     mockMembersEq.mockResolvedValue({ data: MEMBERS, error: null })

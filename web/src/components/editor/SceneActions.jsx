@@ -8,6 +8,7 @@ import { rootSegmentId } from '../../lib/editor/stateStore'
 import DetailLevelSelector from './sceneblocks/DetailLevelSelector'
 import VoiceComposer from './VoiceComposer'
 import ConfirmAiEditDialog, { proposalToOpFn, describeProposal } from './ConfirmAiEditDialog'
+import ConfirmEditDialog from './ConfirmEditDialog'
 
 /**
  * Per-scene action set rendered inside an expanded SceneBlock (Phase 2a Task 2).
@@ -62,8 +63,8 @@ import ConfirmAiEditDialog, { proposalToOpFn, describeProposal } from './Confirm
  *   onCreateTask    ({ text, segmentLabel }) => Promise — Ask Helper route
  */
 
-const ACCENT = '#9B59B6' // Probe 3 creator primary (purple)
-const AI_EDIT_COLOR = '#F0AD4E' // amber — "Ask AI to Edit"
+const ACCENT = '#6D28D9' // accessible creator purple
+const AI_EDIT_COLOR = '#92400E' // accessible amber for "Ask AI to Edit"
 const SELF_EDIT_COLOR = '#2B579A' // blue — "Edit by Myself"
 
 const AI_INVALID_PROPOSAL_TEXT =
@@ -108,6 +109,7 @@ export default function SceneActions({
   const [showEditPanel, setShowEditPanel] = useState(false)
   const [showAiEdit, setShowAiEdit] = useState(false)
   const [showHelper, setShowHelper] = useState(false)
+  const [deletePending, setDeletePending] = useState(false)
 
   // Per-panel composer text. VQA / AI-edit / helper text now lives inside the
   // VoiceComposer (which feeds it here via voice or typing); only the caption
@@ -225,8 +227,9 @@ export default function SceneActions({
   //    survives a save conflict (EditorPage skips the post-save announce then);
   //  - for delete we pass NO announceText so the creator hears the deletion
   //    exactly ONCE (EditorPage's remote summary still announces to the helper).
-  const handleDelete = useCallback(() => {
+  const handleConfirmDelete = useCallback(() => {
     if (!clip) return
+    setDeletePending(false)
     runEdit('delete', {}, '')
     setShowEditPanel(false)
     announce(`Scene ${index + 1} removed from the edit.`)
@@ -525,9 +528,9 @@ export default function SceneActions({
             </div>
             <button
               type="button"
-              onClick={handleDelete}
+              onClick={() => setDeletePending(true)}
               aria-label="Delete this clip from the timeline"
-              className="w-full py-3 rounded-lg bg-red-500 text-sm font-bold text-white hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2"
+              className="w-full rounded-lg bg-red-700 py-3 text-sm font-bold text-white hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2"
               style={{ minHeight: '48px' }}
             >
               Delete
@@ -559,7 +562,7 @@ export default function SceneActions({
                 type="button"
                 onClick={() => setShowCaptionInput(true)}
                 aria-label="Add a caption to this scene"
-                className="w-full py-3 rounded-lg bg-amber-500 text-sm font-bold text-white hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
+                className="w-full rounded-lg bg-amber-800 py-3 text-sm font-bold text-white hover:bg-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-700 focus:ring-offset-2"
                 style={{ minHeight: '48px' }}
               >
                 Add Caption
@@ -581,7 +584,7 @@ export default function SceneActions({
                   onClick={handleAddCaption}
                   disabled={!captionText.trim()}
                   aria-label="Save caption"
-                  className="px-4 py-2 rounded-lg bg-amber-500 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-1"
+                  className="rounded-lg bg-amber-800 px-4 py-2 text-sm font-bold text-white hover:bg-amber-900 disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-amber-700 focus:ring-offset-1"
                   style={{ minHeight: '48px', minWidth: '48px' }}
                 >
                   Save
@@ -687,6 +690,16 @@ export default function SceneActions({
           clips={aiClips}
           onConfirm={handleAiConfirm}
           onCancel={handleAiCancel}
+        />
+      )}
+      {deletePending && clip && (
+        <ConfirmEditDialog
+          title="Remove scene"
+          question={`Remove ${clip.name} from the edit?`}
+          confirmLabel="Remove"
+          destructive
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setDeletePending(false)}
         />
       )}
     </>

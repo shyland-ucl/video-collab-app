@@ -92,11 +92,11 @@ export default function TransportControls({
     if (duration) onSeek?.(duration)
   }, [duration, onSeek])
 
-  const btnBase = 'flex items-center justify-center w-11 h-11 rounded text-white hover:bg-white/20 transition-colors focus:outline-2 focus:outline-white focus:outline-offset-2'
+  const btnBase = 'flex h-11 w-full max-w-12 items-center justify-center justify-self-center rounded text-white hover:bg-white/20 transition-colors focus:outline-2 focus:outline-white focus:outline-offset-2'
 
   return (
     <div
-      className="flex items-center gap-2 px-4 py-2 rounded-b"
+      className="grid grid-cols-3 items-center gap-1.5 rounded-b px-2 py-2 min-[420px]:grid-cols-5"
       style={{ backgroundColor: '#1F3864' }}
       role="toolbar"
       aria-label="Video transport controls"
@@ -108,7 +108,7 @@ export default function TransportControls({
         <IconRewind />
       </button>
       <button
-        className="flex items-center justify-center w-12 h-12 rounded-full text-white transition-colors focus:outline-2 focus:outline-white focus:outline-offset-2"
+        className="flex h-12 w-full max-w-12 items-center justify-center justify-self-center rounded-full text-white transition-colors focus:outline-2 focus:outline-white focus:outline-offset-2"
         style={{ backgroundColor: '#2B579A' }}
         onClick={handlePlayPause}
         aria-label={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
@@ -122,7 +122,7 @@ export default function TransportControls({
       <button className={btnBase} onClick={handleJumpToEnd} aria-label="Jump to end" title="Jump to end">
         <IconSkipForward />
       </button>
-      <div className="ml-auto text-white text-sm font-mono" aria-live="off" aria-label={`Time: ${formatTime(currentTime)} of ${formatTime(duration)}`} role="timer">
+      <div className="col-span-full justify-self-center font-mono text-sm text-white" aria-live="off" aria-label={`Time: ${formatTime(currentTime)} of ${formatTime(duration)}`} role="timer">
         {formatTime(currentTime)} / {formatTime(duration)}
       </div>
     </div>

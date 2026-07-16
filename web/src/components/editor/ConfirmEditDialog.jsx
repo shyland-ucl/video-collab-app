@@ -24,7 +24,15 @@ import { useAccessibility } from '../../contexts/AccessibilityContext'
  *
  * Props: { question, summary?, onConfirm, onCancel }.
  */
-export default function ConfirmEditDialog({ question, summary, onConfirm, onCancel }) {
+export default function ConfirmEditDialog({
+  question,
+  summary,
+  title = 'Confirm AI edit',
+  confirmLabel = 'Confirm',
+  destructive = false,
+  onConfirm,
+  onCancel,
+}) {
   const { audioEnabled, speechRate } = useAccessibility()
   const confirmRef = useRef(null)
   const preFocusRef = useRef(typeof document !== 'undefined' ? document.activeElement : null)
@@ -48,7 +56,7 @@ export default function ConfirmEditDialog({ question, summary, onConfirm, onCanc
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+      className="fixed inset-0 z-50 flex items-end justify-center overscroll-contain bg-black/40"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="confirm-ai-edit-question"
@@ -59,9 +67,9 @@ export default function ConfirmEditDialog({ question, summary, onConfirm, onCanc
         }
       }}
     >
-      <div className="w-full max-w-lg bg-white rounded-t-2xl shadow-2xl">
+      <div className="w-full max-w-lg rounded-t-2xl bg-white shadow-2xl" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="px-4 py-3 border-b border-gray-200">
-          <h3 className="font-bold text-sm text-gray-900">Confirm AI edit</h3>
+          <h3 className="font-bold text-sm text-gray-900">{title}</h3>
         </div>
         <div className="p-4 flex flex-col gap-3">
           <p id="confirm-ai-edit-question" className="text-lg font-semibold text-gray-900">
@@ -73,11 +81,15 @@ export default function ConfirmEditDialog({ question, summary, onConfirm, onCanc
               type="button"
               ref={confirmRef}
               onClick={onConfirm}
-              className="flex-1 py-3 rounded-lg bg-[#2B579A] text-sm font-bold text-white hover:bg-[#1e3f6f] focus:outline-none focus:ring-2 focus:ring-[#2B579A] focus:ring-offset-1"
+              className={`flex-1 rounded-lg py-3 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+                destructive
+                  ? 'bg-red-700 hover:bg-red-800 focus:ring-red-600'
+                  : 'bg-[#2B579A] hover:bg-[#1e3f6f] focus:ring-[#2B579A]'
+              }`}
               style={{ minHeight: '48px' }}
-              aria-label={`Confirm: ${question}`}
+              aria-label={`${confirmLabel}: ${question}`}
             >
-              Confirm
+              {confirmLabel}
             </button>
             <button
               type="button"

@@ -99,7 +99,7 @@ export default function SuggestionItem({
       <button
         type="button"
         onClick={onRouteHelper}
-        className="w-full py-2.5 rounded-lg bg-orange-500 text-sm font-bold text-white hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-1"
+        className="w-full rounded-lg bg-orange-700 py-2.5 text-sm font-bold text-white hover:bg-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-600 focus:ring-offset-1"
         style={{ minHeight: '44px' }}
       >
         Ask {helperName} to fix it
@@ -107,8 +107,8 @@ export default function SuggestionItem({
       <button
         type="button"
         onClick={onRouteAI}
-        className="w-full py-2.5 rounded-lg text-sm font-bold text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[#9B59B6] focus:ring-offset-1"
-        style={{ backgroundColor: '#9B59B6', minHeight: '44px' }}
+        className="w-full rounded-lg py-2.5 text-sm font-bold text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] focus:ring-offset-1"
+        style={{ backgroundColor: '#6D28D9', minHeight: '44px' }}
       >
         Ask AI to fix it
       </button>

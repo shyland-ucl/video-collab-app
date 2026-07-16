@@ -20,6 +20,8 @@ export async function renderVideo(opts) {
     supabase,
     projectId,
     renderId,
+    renderState,
+    renderSources,
     runFfmpeg = defaultRunFfmpeg,
     loadState = loadLatestState,
     loadSources = loadProjectSources,
@@ -31,12 +33,18 @@ export async function renderVideo(opts) {
   } = opts
 
   const dir = workdir ?? (await fs.mkdtemp(path.join(os.tmpdir(), `vca-render-${renderId}-`)))
-  const setRender = (patch) => supabase.from('renders').update(patch).eq('id', renderId)
+  const setRender = async (patch) => {
+    const { error } = await supabase.from('renders').update(patch).eq('id', renderId)
+    if (error) throw new Error(`render_status_update_failed: ${error.message}`)
+  }
 
   try {
-    const latest = await loadState(supabase, projectId)
-    const sources = await loadSources(supabase, projectId)
-    const plan = buildRenderPlan(latest?.state ?? {}, sources) // throws nothing_to_render
+    // The route passes the exact snapshot it validated and recorded as
+    // edl_version. Falling back to loaders keeps the worker independently
+    // callable in diagnostics, but a routed job never drifts to a newer edit.
+    const state = renderState ?? (await loadState(supabase, projectId))?.state ?? {}
+    const sources = renderSources ?? await loadSources(supabase, projectId)
+    const plan = buildRenderPlan(state, sources) // throws nothing_to_render
 
     // download each DISTINCT source original once
     const localBySource = new Map()
@@ -72,7 +80,11 @@ export async function renderVideo(opts) {
     await setRender({ status: 'ready', output_path: outputPath })
     log(`render ${renderId} ready at ${outputPath}`)
   } catch (err) {
-    await setRender({ status: 'failed', error: formatExecError(err) })
+    try {
+      await setRender({ status: 'failed', error: formatExecError(err) })
+    } catch (statusError) {
+      log(`could not mark render ${renderId} failed: ${statusError.message}`)
+    }
     throw err
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {})

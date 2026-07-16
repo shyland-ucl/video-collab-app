@@ -140,4 +140,71 @@ describe('usePlaybackEngine — mute + volume on the active element', () => {
     ])
     expect(el.volume).toBe(1)
   })
+
+  it('updates mute and volume when the active clip is edited in place', () => {
+    const el = fakeVideo()
+    const videoRefs = { v1: { current: el } }
+    const baseClip = {
+      id: 's1', sourceId: 'v1', name: 's1', startTime: 0, endTime: 10,
+      trimStart: 0, trimEnd: 0, muted: false, volume: 100,
+    }
+    const { rerender } = renderHook(
+      ({ clips }) => usePlaybackEngine(null, clips, [], true, videoRefs),
+      { initialProps: { clips: [baseClip] } },
+    )
+
+    expect(el.muted).toBe(false)
+    expect(el.volume).toBe(1)
+
+    rerender({ clips: [{ ...baseClip, muted: true, volume: 40 }] })
+
+    expect(el.muted).toBe(true)
+    expect(el.volume).toBe(0.4)
+  })
+})
+
+describe('usePlaybackEngine — same-count reorder', () => {
+  it('switches and seeks the real media element to the clip now at the active index', () => {
+    const firstVideo = fakeVideo()
+    const secondVideo = fakeVideo()
+    firstVideo.paused = false
+    const videoRefs = {
+      v1: { current: firstVideo },
+      v2: { current: secondVideo },
+    }
+    const a = { id: 'a', sourceId: 'v1', startTime: 0, endTime: 4, trimStart: 0, trimEnd: 0 }
+    const b = { id: 'b', sourceId: 'v2', startTime: 5, endTime: 9, trimStart: 0, trimEnd: 0 }
+    const { result, rerender } = renderHook(
+      ({ clips }) => usePlaybackEngine(null, clips, [], true, videoRefs),
+      { initialProps: { clips: [a, b] } },
+    )
+
+    expect(result.current.activeSourceId).toBe('v1')
+
+    rerender({ clips: [b, a] })
+
+    expect(result.current.activeSourceId).toBe('v2')
+    expect(secondVideo.currentTime).toBe(5)
+    expect(firstVideo.paused).toBe(true)
+  })
+
+  it('preserves current playback when only a later clip is edited', () => {
+    const firstVideo = fakeVideo()
+    const secondVideo = fakeVideo()
+    const videoRefs = {
+      v1: { current: firstVideo },
+      v2: { current: secondVideo },
+    }
+    const a = { id: 'a', sourceId: 'v1', startTime: 0, endTime: 4, trimStart: 0, trimEnd: 0 }
+    const b = { id: 'b', sourceId: 'v2', startTime: 5, endTime: 9, trimStart: 0, trimEnd: 0 }
+    const { rerender } = renderHook(
+      ({ clips }) => usePlaybackEngine(null, clips, [], true, videoRefs),
+      { initialProps: { clips: [a, b] } },
+    )
+
+    firstVideo.currentTime = 2.5
+    rerender({ clips: [a, { ...b, trimEnd: 1 }] })
+
+    expect(firstVideo.currentTime).toBe(2.5)
+  })
 })

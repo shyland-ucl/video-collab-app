@@ -86,16 +86,16 @@ export default function ProjectsPage() {
 
   return (
     <main id="main" tabIndex={-1} className="page">
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <div>
+      <div className="mb-6 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+        <div className="min-w-0">
           <p className="eyebrow">Video Collab</p>
           <h1 className="page-title mt-1">Your projects</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <Link to="/settings" className="btn btn-ghost">
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <Link to="/settings" className="btn btn-ghost flex-1 sm:flex-none">
             Settings
           </Link>
-          <button onClick={signOut} className="btn btn-ghost">
+          <button onClick={signOut} className="btn btn-ghost flex-1 sm:flex-none">
             Sign out
           </button>
         </div>
@@ -106,17 +106,19 @@ export default function ProjectsPage() {
           <label htmlFor="title" className="label">
             New project name
           </label>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <input
               id="title"
+              name="project-title"
+              autoComplete="off"
               required
               maxLength={200}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="input"
+              className="input min-w-0 flex-1"
             />
-            <button type="submit" disabled={creating} className="btn btn-primary shrink-0">
-              Create
+            <button type="submit" disabled={creating} className="btn btn-primary w-full sm:w-auto sm:shrink-0">
+              {creating ? 'Creating…' : 'Create'}
             </button>
           </div>
         </form>
@@ -127,9 +129,10 @@ export default function ProjectsPage() {
           <label htmlFor="join-code" className="label">
             Join with a code
           </label>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <input
               id="join-code"
+              name="join-code"
               inputMode="numeric"
               autoComplete="one-time-code"
               pattern="[0-9]{4}"
@@ -137,19 +140,22 @@ export default function ProjectsPage() {
               required
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value.replace(/\D/g, ''))}
-              className="input text-center tracking-[0.4em]"
+              aria-invalid={Boolean(joinError)}
+              aria-describedby={joinError ? 'join-code-error' : undefined}
+              spellCheck={false}
+              className="input min-w-0 flex-1 text-center tracking-[0.4em]"
             />
-            <button type="submit" disabled={joining} className="btn btn-primary shrink-0">
-              Join
+            <button type="submit" disabled={joining} className="btn btn-primary w-full sm:w-auto sm:shrink-0">
+              {joining ? 'Joining…' : 'Join'}
             </button>
           </div>
-          {joinError && <p className="alert-error mt-3">{joinError}</p>}
+          {joinError && <p id="join-code-error" role="alert" className="alert-error mt-3">{joinError}</p>}
         </form>
       </div>
 
-      {error && <p className="alert-error mb-4">{error}</p>}
+      {error && <p role="alert" className="alert-error mb-4">{error}</p>}
       {projects === null ? (
-        <p className="muted">Loading projects…</p>
+        <p role="status" className="muted">Loading projects…</p>
       ) : projects.length === 0 ? (
         <div className="card p-6 text-center">
           <p className="muted">No projects yet. Create one above to get started.</p>
@@ -159,8 +165,8 @@ export default function ProjectsPage() {
           {projects.map((p) => (
             <li key={p.id}>
               <Link to={`/projects/${p.id}`} className="row-link flex items-center justify-between gap-3">
-                <span className="truncate">{p.title}</span>
-                <span aria-hidden="true" className="text-ink-faint">→</span>
+                <span className="min-w-0 truncate">{p.title}</span>
+                <span aria-hidden="true" className="shrink-0 text-ink-faint">→</span>
               </Link>
             </li>
           ))}

@@ -87,6 +87,11 @@ describe('POST /api/projects/:id/render', () => {
       .post('/api/projects/p1/render').set('Authorization', 'Bearer good').send({})
     expect(res.status).toBe(202)
     expect(res.body.renderId).toBe('r1')
-    expect(renderSpy).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'p1', renderId: 'r1' }))
+    expect(renderSpy).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'p1',
+      renderId: 'r1',
+      renderState: GOOD_STATE.state,
+      renderSources: SOURCES,
+    }))
   })
 })

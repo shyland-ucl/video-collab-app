@@ -1,8 +1,12 @@
 import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
 
-// Credentials + ids provisioned by setup/globalSetup.mjs against the live stack.
-const state = JSON.parse(fs.readFileSync(new URL('./.state.json', import.meta.url), 'utf-8'))
+// Credentials + ids are provisioned by globalSetup. Read them in a hook so
+// test discovery (`playwright --list`) does not require live-generated state.
+let state
+test.beforeAll(() => {
+  state = JSON.parse(fs.readFileSync(new URL('./.state.json', import.meta.url), 'utf-8'))
+})
 
 // Sign-in selectors are honest against web/src/pages/SignInPage.jsx:
 //   route /signin, label "Email address", label "Password", button "Sign in",
@@ -120,6 +124,7 @@ test('creator and helper collaborate live; state survives refresh', async ({ bro
   await sceneHeader(creator, 1).click()
   await creator.getByRole('button', { name: /^edit by myself$/i }).click()
   await creator.getByRole('button', { name: /delete this clip from the timeline/i }).click()
+  await creator.getByRole('button', { name: /^remove:/i }).click()
   await expect(helper.getByTestId('timeline-clip')).toHaveCount(sceneCountBefore - 1, { timeout: 30_000 })
 
   // (c) Creator sends a task -> helper sees it -> helper marks it done ->

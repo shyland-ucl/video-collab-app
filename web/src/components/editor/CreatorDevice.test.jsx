@@ -171,6 +171,7 @@ describe('CreatorDevice — edit by myself (delete round-trip)', () => {
     const region = await expandScene(1, 'Scene 1')
     await userEvent.click(region.getByRole('button', { name: /edit by myself/i }))
     await userEvent.click(region.getByRole('button', { name: /delete this clip/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^remove:/i }))
 
     expect(applyAndSave).toHaveBeenCalled()
     // The real opFn ran against the tracked state: s1 is gone.
@@ -188,6 +189,7 @@ describe('CreatorDevice — edit by myself (delete round-trip)', () => {
     const region = await expandScene(2, 'Scene 2')
     await userEvent.click(region.getByRole('button', { name: /edit by myself/i }))
     await userEvent.click(region.getByRole('button', { name: /delete this clip/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^remove:/i }))
 
     expect(mockAnnounce).toHaveBeenCalledWith('Scene 2 removed from the edit.')
   })

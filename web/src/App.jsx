@@ -1,15 +1,22 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { AccessibilityProvider } from './contexts/AccessibilityContext'
 import ErrorBoundary from './components/ErrorBoundary'
+import PageLoader from './components/PageLoader'
 import RequireAuth from './components/RequireAuth'
+import RouteAccessibility from './components/RouteAccessibility'
 import SignInPage from './pages/SignInPage'
 import ProjectsPage from './pages/ProjectsPage'
-import ProjectPage from './pages/ProjectPage'
-import VideoPage from './pages/VideoPage'
-import EditorPage from './pages/EditorPage'
-import SettingsPage from './pages/SettingsPage'
 import NotFoundPage from './pages/NotFoundPage'
+
+// Keep the sign-in/home path small. Project detail pulls in the resumable
+// uploader, while the editor owns most interaction code, so both are loaded
+// only when a member navigates to them.
+const ProjectPage = lazy(() => import('./pages/ProjectPage'))
+const VideoPage = lazy(() => import('./pages/VideoPage'))
+const EditorPage = lazy(() => import('./pages/EditorPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 export default function App() {
   return (
@@ -17,7 +24,7 @@ export default function App() {
       <AccessibilityProvider>
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:p-2"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-field focus:border focus:border-brand focus:bg-surface focus:p-3 focus:font-semibold focus:text-ink focus:shadow-pop"
       >
         Skip to content
       </a>
@@ -26,15 +33,18 @@ export default function App() {
           silent white screen, while the announcer live regions below stay
           mounted for its assertive announce(). */}
       <ErrorBoundary>
-        <Routes>
-          <Route path="/signin" element={<SignInPage />} />
-          <Route path="/" element={<RequireAuth><ProjectsPage /></RequireAuth>} />
-          <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
-          <Route path="/projects/:id" element={<RequireAuth><ProjectPage /></RequireAuth>} />
-          <Route path="/projects/:projectId/videos/:videoId" element={<RequireAuth><VideoPage /></RequireAuth>} />
-          <Route path="/projects/:projectId/edit" element={<RequireAuth><EditorPage /></RequireAuth>} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+        <RouteAccessibility />
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/signin" element={<SignInPage />} />
+            <Route path="/" element={<RequireAuth><ProjectsPage /></RequireAuth>} />
+            <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+            <Route path="/projects/:id" element={<RequireAuth><ProjectPage /></RequireAuth>} />
+            <Route path="/projects/:projectId/videos/:videoId" element={<RequireAuth><VideoPage /></RequireAuth>} />
+            <Route path="/projects/:projectId/edit" element={<RequireAuth><EditorPage /></RequireAuth>} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </Suspense>
       </ErrorBoundary>
       {/* Live announcers use aria-live ONLY (no role="status"/"alert"): an
           explicit role makes VoiceOver speak the role name ("status"/"alert")

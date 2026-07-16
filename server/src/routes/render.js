@@ -25,11 +25,15 @@ export function makeRenderRoutes(supabase, deps = {}) {
 
     // validate the EDL is renderable BEFORE creating a job row
     let edlVersion = null
+    let renderState = null
+    let renderSources = null
     try {
       const latest = await loadState(supabase, project.id)
       const sources = await loadSources(supabase, project.id)
       buildRenderPlan(latest?.state ?? {}, sources) // throws nothing_to_render
       edlVersion = latest?.version ?? null
+      renderState = latest?.state ?? {}
+      renderSources = sources
     } catch (err) {
       if (err.code === 'nothing_to_render' || err.code === 'too_many_clips') {
         return res.status(400).json({ error: err.code })
@@ -49,7 +53,16 @@ export function makeRenderRoutes(supabase, deps = {}) {
 
     res.status(202).json({ renderId: row.id })
     try {
-      await render({ supabase, projectId: project.id, renderId: row.id, loadState, loadSources, log: console.log })
+      await render({
+        supabase,
+        projectId: project.id,
+        renderId: row.id,
+        renderState,
+        renderSources,
+        loadState,
+        loadSources,
+        log: console.log,
+      })
     } catch (err) {
       // status already set to 'failed' by renderVideo; log for Railway logs
       console.error(`render failed for project ${project.id}:`, err)

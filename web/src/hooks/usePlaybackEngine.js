@@ -58,6 +58,13 @@ export default function usePlaybackEngine(videoRef, clips, captions, isEngineAct
     return clips.map((c) => `${c.id}:${c.sourceId || ''}:${c.trimStart}:${c.trimEnd}:${c.startTime}:${c.endTime}`).join('|');
   }, [clips]);
 
+  // Audio edits do not alter the EDL layout, but they still need to rerun the
+  // media-element effect for the active clip.
+  const audioKey = useMemo(() => {
+    if (!clips || clips.length === 0) return '';
+    return clips.map((c) => `${c.id}:${Boolean(c.muted)}:${c.volume ?? 100}`).join('|');
+  }, [clips]);
+
   // Get the video element for a given sourceId
   function getVideoForSource(sourceId) {
     const refs = videoRefsRef.current;
@@ -199,6 +206,7 @@ export default function usePlaybackEngine(videoRef, clips, captions, isEngineAct
 
   // Track clip count to detect structural changes (add/remove) vs reorder
   const prevClipCountRef = useRef(0);
+  const prevLayoutRef = useRef([]);
   const isFirstRun = useRef(true);
 
   // When clips structurally change, reset playback position
@@ -207,23 +215,51 @@ export default function usePlaybackEngine(videoRef, clips, captions, isEngineAct
     const currentClips = clipsRef.current;
     const layout = computeClipLayout(currentClips);
     if (layout.length === 0) return;
+    const previousLayout = prevLayoutRef.current;
+    prevLayoutRef.current = layout;
 
     const clipCount = currentClips.length;
     const countChanged = clipCount !== prevClipCountRef.current;
     prevClipCountRef.current = clipCount;
 
-    // On reorder (same count, same clips), keep the current clip index valid
-    // but ensure the active source matches the clip at current index
+    // On a same-count edit, preserve playback when the active entry itself did
+    // not change. Edits to a later clip must not jump the current video back to
+    // its start. If the active entry was replaced/reordered/trimmed, move the
+    // real media element to that entry rather than updating React state alone.
     if (!isFirstRun.current && !countChanged) {
       const idx = Math.min(clipIndexRef.current, layout.length - 1);
       clipIndexRef.current = idx;
       setCurrentClipIndex(idx);
       const entry = layout[idx];
+      const previousEntry = previousLayout[idx];
       const sourceId = entry.clip.sourceId || null;
+      const activeEntryChanged = !previousEntry
+        || previousEntry.clip.id !== entry.clip.id
+        || (previousEntry.clip.sourceId || null) !== sourceId
+        || previousEntry.effectiveStart !== entry.effectiveStart
+        || previousEntry.effectiveEnd !== entry.effectiveEnd;
+
       if (sourceId !== activeSourceIdRef.current) {
-        activeSourceIdRef.current = sourceId;
-        setActiveSourceId(sourceId);
+        const activeVideo = getActiveVideo();
+        const wasPlaying = Boolean(activeVideo && !activeVideo.paused);
+        switchSource(sourceId, entry.effectiveStart, wasPlaying);
+      } else if (activeEntryChanged) {
+        const video = getVideoForSource(sourceId);
+        if (video) {
+          seekingRef.current = true;
+          video.currentTime = entry.effectiveStart;
+          const onSeeked = () => {
+            seekingRef.current = false;
+            video.removeEventListener('seeked', onSeeked);
+          };
+          video.addEventListener('seeked', onSeeked);
+        }
       }
+      const video = getVideoForSource(sourceId);
+      const offsetInClip = activeEntryChanged
+        ? 0
+        : Math.max(0, Math.min((video?.currentTime ?? entry.effectiveStart) - entry.effectiveStart, entry.duration));
+      setEdlTime(entry.edlOffset + offsetInClip);
       return;
     }
 
@@ -272,7 +308,7 @@ export default function usePlaybackEngine(videoRef, clips, captions, isEngineAct
     el.muted = !!activeClip.muted;
     const pct = typeof activeClip.volume === 'number' ? activeClip.volume : 100;
     el.volume = Math.max(0, Math.min(1, pct / 100));
-  }, [isEngineActive, currentClipIndex, clipsKey, activeSourceId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isEngineActive, currentClipIndex, audioKey, activeSourceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Play through the engine
   const play = useCallback(() => {

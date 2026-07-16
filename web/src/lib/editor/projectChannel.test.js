@@ -104,43 +104,44 @@ describe('joinProjectChannel', () => {
     expect(onActivity).toHaveBeenCalledWith({ action: 'Seeked', detail: '0:45' })
   })
 
-  it('fires onReconnect once when a failed first connect later succeeds', async () => {
+  it('marks a successful subscribe after an error as a reconnect', async () => {
     const channel = fakeChannel()
     // Don't auto-fire SUBSCRIBED — drive the status callback by hand.
     channel.subscribe = vi.fn((cb) => { channel.statusCb = cb; return channel })
     const onError = vi.fn()
-    const onReconnect = vi.fn()
+    const onSubscribed = vi.fn()
     joinProjectChannel(fakeSupabase(channel), {
       projectId: 'p1', userId: 'u1', role: 'creator',
       onStateInsert: vi.fn(), onTaskChange: vi.fn(), onPresence: vi.fn(),
       onPlayhead: vi.fn(), onTransport: vi.fn(), onActivity: vi.fn(),
-      onError, onReconnect,
+      onError, onSubscribed,
     })
 
     channel.statusCb('CHANNEL_ERROR', new Error('down'))
     await channel.statusCb('SUBSCRIBED')
 
     expect(onError).toHaveBeenCalledTimes(1)
-    expect(onReconnect).toHaveBeenCalledTimes(1)
+    expect(onSubscribed).toHaveBeenCalledWith({ reconnected: true })
   })
 
-  it('does not fire onReconnect on a clean first subscribe', async () => {
+  it('catches up on the first subscribe and every later re-subscribe', async () => {
     const channel = fakeChannel()
     channel.subscribe = vi.fn((cb) => { channel.statusCb = cb; return channel })
-    const onReconnect = vi.fn()
+    const onSubscribed = vi.fn()
     joinProjectChannel(fakeSupabase(channel), {
       projectId: 'p1', userId: 'u1', role: 'creator',
       onStateInsert: vi.fn(), onTaskChange: vi.fn(), onPresence: vi.fn(),
       onPlayhead: vi.fn(), onTransport: vi.fn(), onActivity: vi.fn(),
-      onReconnect,
+      onSubscribed,
     })
 
     await channel.statusCb('SUBSCRIBED')
-    expect(onReconnect).not.toHaveBeenCalled()
+    expect(onSubscribed).toHaveBeenLastCalledWith({ reconnected: false })
 
-    // ...but a later re-subscribe (drop + recover) does fire it.
+    // A later re-subscribe is identified for callers that want different copy.
     await channel.statusCb('SUBSCRIBED')
-    expect(onReconnect).toHaveBeenCalledTimes(1)
+    expect(onSubscribed).toHaveBeenLastCalledWith({ reconnected: true })
+    expect(onSubscribed).toHaveBeenCalledTimes(2)
   })
 
   it('calls onError with status and err on CHANNEL_ERROR and does not call track', () => {

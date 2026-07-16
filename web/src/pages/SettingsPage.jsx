@@ -3,21 +3,13 @@ import { useAccessibility } from '../contexts/AccessibilityContext'
 import ttsService from '../services/ttsService'
 import { announce } from '../utils/announcer'
 
-// Apply the chosen size to this page's own content so the user sees + hears
-// the effect immediately (the editor consumes textSize for its own scaling).
-const TEXT_SIZE_CLASS = {
-  small: 'text-base',
-  medium: 'text-lg',
-  large: 'text-2xl',
-}
-
 const TEXT_SIZE_OPTIONS = [
   { value: 'small', label: 'Small' },
   { value: 'medium', label: 'Medium' },
   { value: 'large', label: 'Large' },
 ]
 
-const RATE_SAMPLE = 'This is how fast descriptions will be read.'
+const RATE_SAMPLE = 'This is how fast spoken edit prompts will be read.'
 
 export default function SettingsPage() {
   const { textSize, audioEnabled, speechRate, setTextSize, toggleAudio, setSpeechRate } =
@@ -31,7 +23,7 @@ export default function SettingsPage() {
   function handleToggleAudio() {
     // audioEnabled is the value BEFORE the toggle; the new state is the inverse.
     toggleAudio()
-    announce(`Spoken descriptions ${audioEnabled ? 'off' : 'on'}`)
+    announce(`Spoken edit prompts ${audioEnabled ? 'off' : 'on'}`)
   }
 
   function handleRateChange(e) {
@@ -42,12 +34,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <main
-      id="main"
-      tabIndex={-1}
-      className={`page ${TEXT_SIZE_CLASS[textSize] ?? TEXT_SIZE_CLASS.medium}`}
-    >
-      <Link to="/" className="link-back mb-3">← Back to projects</Link>
+    <main id="main" tabIndex={-1} className="page">
+      <Link to="/" className="link-back mb-3"><span aria-hidden="true">←</span> Back to projects</Link>
       <h1 className="page-title mb-7">Settings</h1>
 
       <fieldset className="mb-7 border-0 p-0">
@@ -76,14 +64,15 @@ export default function SettingsPage() {
         <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-field border border-line bg-surface px-4 shadow-card transition-colors hover:bg-sunken has-[:checked]:border-brand has-[:checked]:bg-brand-soft">
           <input
             type="checkbox"
+            name="spoken-edit-prompts"
             checked={audioEnabled}
             onChange={handleToggleAudio}
             className="h-5 w-5 accent-brand"
           />
-          <span className="font-semibold">Spoken descriptions</span>
+          <span className="font-semibold">Spoken edit prompts</span>
         </label>
         <p className="muted mt-1.5 text-sm">
-          Read scene descriptions aloud while you work.
+          Read edit confirmations and AI clarifications aloud while you work.
         </p>
       </div>
 
@@ -94,6 +83,7 @@ export default function SettingsPage() {
         <div className="flex min-h-12 items-center">
           <input
             id="speech-rate"
+            name="speech-rate"
             type="range"
             min={0.5}
             max={2}

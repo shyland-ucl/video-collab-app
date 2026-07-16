@@ -3,7 +3,7 @@ export const PLAYHEAD_THROTTLE_MS = 2000
 export function joinProjectChannel(supabase, {
   projectId, userId, role,
   onStateInsert, onTaskChange, onSuggestionChange, onRenderChange, onPresence, onPlayhead, onTransport, onActivity,
-  onReconnect, onError,
+  onSubscribed, onError,
 }) {
   const channel = supabase.channel(`project:${projectId}`, {
     config: { presence: { key: userId } },
@@ -42,9 +42,10 @@ export function joinProjectChannel(supabase, {
   channel.subscribe(async (status, err) => {
     if (status === 'SUBSCRIBED') {
       await channel.track({ userId, role })
-      // Fire onReconnect on any re-subscribe AND on a first subscribe that
-      // follows an error — the caller's sync-down alarm must clear either way.
-      if (subscribedOnce || hadError) onReconnect?.()
+      // Catch up after EVERY successful subscription, including the first.
+      // Initial page data is loaded before the channel is live, so skipping
+      // this first sync leaves a window where durable changes can be missed.
+      await onSubscribed?.({ reconnected: subscribedOnce || hadError })
       subscribedOnce = true
       hadError = false
     } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {

@@ -41,10 +41,10 @@ export default function ActivityFeed({ tasks = [], creatorActivities = [], onSet
                 <p className="text-xs text-gray-500 mb-2">Clip: {task.segment_label}</p>
               )}
               {task.status === 'pending' ? (
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2">
                   <button
                     onClick={() => handleStatus(task.id, 'done')}
-                    className="flex-1 py-2 rounded-lg bg-green-500 text-white text-xs font-semibold hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-offset-1"
+                    className="flex-1 rounded-lg bg-green-700 py-2 text-xs font-semibold text-white hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-1"
                     style={{ minHeight: '48px' }}
                     aria-label={`Mark done: ${task.text}`}
                   >
@@ -52,7 +52,7 @@ export default function ActivityFeed({ tasks = [], creatorActivities = [], onSet
                   </button>
                   <button
                     onClick={() => handleStatus(task.id, 'needs_discussion')}
-                    className="flex-1 py-2 rounded-lg bg-amber-500 text-white text-xs font-semibold hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-1"
+                    className="flex-1 rounded-lg bg-amber-800 py-2 text-xs font-semibold text-white hover:bg-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-700 focus:ring-offset-1"
                     style={{ minHeight: '48px' }}
                     aria-label={`Needs discussion: ${task.text}`}
                   >
@@ -60,7 +60,7 @@ export default function ActivityFeed({ tasks = [], creatorActivities = [], onSet
                   </button>
                   <button
                     onClick={() => handleStatus(task.id, 'cant_do')}
-                    className="flex-1 py-2 rounded-lg bg-red-500 text-white text-xs font-semibold hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
+                    className="flex-1 rounded-lg bg-red-700 py-2 text-xs font-semibold text-white hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-1"
                     style={{ minHeight: '48px' }}
                     aria-label={`Can't do: ${task.text}`}
                   >
