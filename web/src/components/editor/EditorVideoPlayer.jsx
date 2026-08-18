@@ -85,6 +85,7 @@ export default function EditorVideoPlayer({
       {activeCaption && (
         <div className="absolute bottom-0 left-0 right-0 flex justify-center pointer-events-none" style={{ padding: '0 8px 16px' }}>
           <div
+            /* Deliberately NOT themed: caption preview must match the white-on-black ffmpeg burn-in. */
             className="px-4 py-2 rounded text-white text-center max-w-[90%]"
             style={{ backgroundColor: 'rgba(0, 0, 0, 0.75)', textShadow: '0 1px 3px rgba(0,0,0,0.8)', lineHeight: 1.4 }}
             role="status"

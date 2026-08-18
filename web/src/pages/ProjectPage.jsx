@@ -97,8 +97,8 @@ export default function ProjectPage() {
               key={m.user_id}
               className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold shadow-card ${
                 m.role === 'creator'
-                  ? 'border-violet-300 bg-violet-50 text-violet-800'
-                  : 'border-amber-300 bg-amber-50 text-amber-800'
+                  ? 'border-creator/40 bg-creator-soft text-creator'
+                  : 'border-helper/40 bg-helper-soft text-helper'
               }`}
             >
               {m.role === 'creator' ? 'Creator' : 'Helper'}

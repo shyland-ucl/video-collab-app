@@ -67,24 +67,24 @@ export default function ConfirmEditDialog({
         }
       }}
     >
-      <div className="w-full max-w-lg rounded-t-2xl bg-white shadow-2xl" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <div className="px-4 py-3 border-b border-gray-200">
-          <h3 className="font-bold text-sm text-gray-900">{title}</h3>
+      <div className="w-full max-w-lg rounded-t-2xl bg-surface shadow-pop" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="px-4 py-3 border-b border-line">
+          <h3 className="font-bold text-sm text-ink">{title}</h3>
         </div>
         <div className="p-4 flex flex-col gap-3">
-          <p id="confirm-ai-edit-question" className="text-lg font-semibold text-gray-900">
+          <p id="confirm-ai-edit-question" className="text-lg font-semibold text-ink">
             {question}
           </p>
-          {summary && <p className="text-sm text-gray-500">{summary}</p>}
+          {summary && <p className="text-sm text-ink-soft">{summary}</p>}
           <div className="flex gap-2">
             <button
               type="button"
               ref={confirmRef}
               onClick={onConfirm}
-              className={`flex-1 rounded-lg py-3 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+              className={`flex-1 rounded-lg py-3 text-sm font-bold ${
                 destructive
-                  ? 'bg-red-700 hover:bg-red-800 focus:ring-red-600'
-                  : 'bg-[#2B579A] hover:bg-[#1e3f6f] focus:ring-[#2B579A]'
+                  ? 'bg-danger text-on-accent hover:opacity-90'
+                  : 'bg-brand text-on-brand hover:bg-brand-strong'
               }`}
               style={{ minHeight: '48px' }}
               aria-label={`${confirmLabel}: ${question}`}
@@ -94,7 +94,7 @@ export default function ConfirmEditDialog({
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 py-3 rounded-lg bg-gray-100 text-sm font-semibold text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1"
+              className="flex-1 py-3 rounded-lg bg-sunken text-sm font-semibold text-ink-soft hover:bg-line"
               style={{ minHeight: '48px' }}
               aria-label="Cancel — make no change"
             >

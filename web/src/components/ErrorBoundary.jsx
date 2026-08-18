@@ -29,7 +29,7 @@ export default class ErrorBoundary extends Component {
     if (!this.state.hasError) return this.props.children
     return (
       <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
-        <p role="alert" className="rounded border border-red-700 bg-red-50 p-3 text-red-700">
+        <p role="alert" className="rounded border border-danger/50 bg-danger-soft p-3 text-danger">
           {FALLBACK_TEXT}
         </p>
         <a href="/" className="mt-3 inline-block underline">

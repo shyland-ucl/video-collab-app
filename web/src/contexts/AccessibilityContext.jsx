@@ -8,8 +8,26 @@ const AccessibilityContext = createContext(null);
 
 const STORAGE_KEY = 'accessibilitySettings';
 
+const THEMES = ['default', 'dark', 'hc-dark', 'hc-light'];
+const TEXT_SIZES = ['small', 'medium', 'large', 'x-large'];
+
+// First visit honors the OS: dark scheme -> dark, and an explicit contrast
+// preference upgrades to the HC variant of that polarity. A stored choice
+// (validated below) always wins. jsdom has no matchMedia — treat as default.
+function systemTheme() {
+  if (typeof matchMedia !== 'function') return 'default';
+  try {
+    const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+    const hc = matchMedia('(prefers-contrast: more)').matches;
+    return hc ? (dark ? 'hc-dark' : 'hc-light') : (dark ? 'dark' : 'default');
+  } catch {
+    return 'default';
+  }
+}
+
 const defaults = {
   textSize: 'medium',
+  theme: systemTheme(),
   audioEnabled: false,
   speechRate: 1.2,
 };
@@ -24,7 +42,8 @@ function loadFromStorage() {
     const parsed = JSON.parse(stored);
     if (!parsed || typeof parsed !== 'object') return null;
     const clean = {};
-    if (['small', 'medium', 'large'].includes(parsed.textSize)) clean.textSize = parsed.textSize;
+    if (TEXT_SIZES.includes(parsed.textSize)) clean.textSize = parsed.textSize;
+    if (THEMES.includes(parsed.theme)) clean.theme = parsed.theme;
     if (typeof parsed.audioEnabled === 'boolean') clean.audioEnabled = parsed.audioEnabled;
     if (typeof parsed.speechRate === 'number' && parsed.speechRate >= 0.5 && parsed.speechRate <= 3) {
       clean.speechRate = parsed.speechRate;
@@ -40,6 +59,8 @@ function reducer(state, action) {
   switch (action.type) {
     case 'SET_TEXT_SIZE':
       return { ...state, textSize: action.payload };
+    case 'SET_THEME':
+      return { ...state, theme: action.payload };
     case 'TOGGLE_AUDIO':
       return { ...state, audioEnabled: !state.audioEnabled };
     case 'SET_SPEECH_RATE':
@@ -64,6 +85,18 @@ export function AccessibilityProvider({ children }) {
     };
   }, [state.textSize]);
 
+  // Theme mirrors the text-size treatment; the boot script in index.html set
+  // the pre-paint value, this keeps it live for the session.
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = root.dataset.theme;
+    root.dataset.theme = state.theme;
+    return () => {
+      if (previous) root.dataset.theme = previous;
+      else delete root.dataset.theme;
+    };
+  }, [state.theme]);
+
   // Persist to localStorage with debounce to avoid thrashing on rapid changes
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -78,6 +111,10 @@ export function AccessibilityProvider({ children }) {
     dispatch({ type: 'SET_TEXT_SIZE', payload: size });
   }, []);
 
+  const setTheme = useCallback((theme) => {
+    dispatch({ type: 'SET_THEME', payload: theme });
+  }, []);
+
   const toggleAudio = useCallback(() => {
     dispatch({ type: 'TOGGLE_AUDIO' });
   }, []);
@@ -89,9 +126,10 @@ export function AccessibilityProvider({ children }) {
   const value = useMemo(() => ({
     ...state,
     setTextSize,
+    setTheme,
     toggleAudio,
     setSpeechRate,
-  }), [state, setTextSize, toggleAudio, setSpeechRate]);
+  }), [state, setTextSize, setTheme, toggleAudio, setSpeechRate]);
 
   return (
     <AccessibilityContext.Provider value={value}>

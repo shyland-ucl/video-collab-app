@@ -32,10 +32,9 @@ export default function DetailLevelSelector({ currentLevel, onLevelChange }) {
         const isActive = lvl.value === currentLevel;
         const className =
           'flex-1 py-2 text-sm font-medium rounded-lg transition-colors text-center select-none ' +
-          'focus:outline-2 focus:outline-offset-2 focus:outline-blue-500 ' +
           (isActive
-            ? 'bg-blue-600 text-white font-semibold'
-            : 'bg-gray-100 text-gray-700 hover:bg-gray-200');
+            ? 'bg-brand text-on-brand font-semibold'
+            : 'bg-sunken text-ink-soft hover:bg-line');
         return (
           <div
             key={lvl.value}

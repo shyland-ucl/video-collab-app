@@ -22,15 +22,22 @@
   --color-brand: #0f766e;
   --color-brand-strong: #0b5a54;
   --color-brand-soft: #d9efec;
+  --color-on-brand: #ffffff;      /* text on solid brand fills */
 
   /* Role accents (editor) */
   --color-creator: #7c3aed;
-  --color-helper: #d97706;
+  --color-creator-soft: #f3e8ff;
+  --color-helper: #b45309;
+  --color-helper-soft: #fef3c7;
 
   /* Feedback */
   --color-danger: #b42318;
   --color-danger-soft: #fdeceb;
   --color-success: #15803d;
+  --color-on-accent: #ffffff;     /* text on solid accent fills (success/danger/creator/helper) */
+
+  /* Focus ring — themable so HC modes can use a dedicated high-vis color */
+  --color-focus: #0f766e;
 
   /* Type */
   --font-display: "Bricolage Grotesque", "Public Sans", ui-sans-serif, system-ui, sans-serif;
@@ -43,6 +50,112 @@
   --shadow-pop: 0 12px 40px -16px rgba(28, 27, 26, 0.28);
 }
 
+/* ============================================================================
+   Themes — each block re-values the SAME tokens, so every component that reads
+   tokens (all of them, after the sweep) restyles with zero markup changes.
+   data-theme is applied pre-paint by the inline boot script in index.html and
+   kept in sync by AccessibilityContext. Non-token knobs used below:
+   --canvas-glow (body wash), --border-w (hairline width, 2px in HC).
+   Deliberately NOT themed: the editor timeline strip and video surfaces
+   (conventionally dark in every video editor) and caption/overlay colors
+   (must match what ffmpeg burns into the export).
+   ========================================================================== */
+:root {
+  --canvas-glow: radial-gradient(120% 80% at 50% -10%, rgba(15, 118, 110, 0.05), transparent 60%);
+  --border-w: 1px;
+  color-scheme: light;
+}
+
+/* Dark — warm near-black, off-white ink, teal lifted for contrast. */
+html[data-theme="dark"] {
+  --color-canvas: #161511;
+  --color-surface: #201e19;
+  --color-sunken: #2a2721;
+  --color-ink: #f2efe9;
+  --color-ink-soft: #c9c4ba;
+  --color-ink-faint: #a39d91;
+  --color-line: #3a362e;
+  --color-line-strong: #55503f;
+  --color-brand: #2dd4bf;
+  --color-brand-strong: #5eead4;
+  --color-brand-soft: #123f3b;
+  --color-on-brand: #04211f;
+  --color-creator: #a78bfa;
+  --color-creator-soft: #2e2249;
+  --color-helper: #fbbf24;
+  --color-helper-soft: #3d2e0f;
+  --color-danger: #f87171;
+  --color-danger-soft: #3f1d1a;
+  --color-success: #4ade80;
+  --color-on-accent: #171204;
+  --color-focus: #2dd4bf;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px -12px rgba(0, 0, 0, 0.7);
+  --shadow-pop: 0 12px 40px -16px rgba(0, 0, 0, 0.8);
+  --canvas-glow: radial-gradient(120% 80% at 50% -10%, rgba(45, 212, 191, 0.04), transparent 60%);
+  color-scheme: dark;
+}
+
+/* High-contrast dark — true black, near-white ink (≥7:1), solid borders,
+   no shadows, yellow focus. */
+html[data-theme="hc-dark"] {
+  --color-canvas: #000000;
+  --color-surface: #000000;
+  --color-sunken: #1a1a1a;
+  --color-ink: #ffffff;
+  --color-ink-soft: #f0f0f0;
+  --color-ink-faint: #d9d9d9;
+  --color-line: #bfbfbf;
+  --color-line-strong: #ffffff;
+  --color-brand: #5eead4;
+  --color-brand-strong: #99f6e4;
+  --color-brand-soft: #00332e;
+  --color-on-brand: #000000;
+  --color-creator: #c4b5fd;
+  --color-creator-soft: #241b3d;
+  --color-helper: #fcd34d;
+  --color-helper-soft: #33290a;
+  --color-danger: #ff8f8f;
+  --color-danger-soft: #400a06;
+  --color-success: #6ee7a0;
+  --color-on-accent: #000000;
+  --color-focus: #ffd60a;
+  --shadow-card: none;
+  --shadow-pop: none;
+  --canvas-glow: none;
+  --border-w: 2px;
+  color-scheme: dark;
+}
+
+/* High-contrast light — pure black on white, solid borders, no shadows. */
+html[data-theme="hc-light"] {
+  --color-canvas: #ffffff;
+  --color-surface: #ffffff;
+  --color-sunken: #ececec;
+  --color-ink: #000000;
+  --color-ink-soft: #1a1a1a;
+  --color-ink-faint: #333333;
+  --color-line: #4d4d4d;
+  --color-line-strong: #000000;
+  --color-brand: #005a54;
+  --color-brand-strong: #003b37;
+  --color-brand-soft: #dff1ef;
+  --color-on-brand: #ffffff;
+  --color-creator: #4c1d95;
+  --color-creator-soft: #f1eafd;
+  --color-helper: #713f12;
+  --color-helper-soft: #fdf1cb;
+  --color-danger: #8f1408;
+  --color-danger-soft: #ffe9e6;
+  --color-success: #0f5132;
+  --color-on-accent: #ffffff;
+  --color-focus: #1d4ed8;
+  --shadow-card: none;
+  --shadow-pop: none;
+  --canvas-glow: none;
+  --border-w: 2px;
+  color-scheme: light;
+}
+
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
@@ -52,12 +165,13 @@
   html[data-text-size="small"]  { font-size: 15px; }
   html[data-text-size="medium"] { font-size: 16px; }
   html[data-text-size="large"]  { font-size: 20px; }
+  html[data-text-size="x-large"] { font-size: 24px; }
 
   body {
     min-height: 100dvh;
     background-color: var(--color-canvas);
     /* Whisper-quiet warmth so the canvas reads as a surface, not a void. */
-    background-image: radial-gradient(120% 80% at 50% -10%, rgba(15, 118, 110, 0.05), transparent 60%);
+    background-image: var(--canvas-glow);
     background-attachment: fixed;
     color: var(--color-ink);
     font-family: var(--font-sans);
@@ -77,7 +191,7 @@
 
   /* One visible, high-contrast focus style for every keyboard target. */
   :focus-visible {
-    outline: 2px solid var(--color-brand);
+    outline: 2px solid var(--color-focus);
     outline-offset: 2px;
     border-radius: 6px;
   }
@@ -117,12 +231,13 @@
   .muted { @apply text-ink-soft; }
 
   /* Cards & rows ---------------------------------------------------------- */
-  .card { @apply rounded-card border border-line bg-surface shadow-card; }
+  .card { @apply rounded-card border border-line bg-surface shadow-card; border-width: var(--border-w); }
   /* A tappable list row that lifts gently on hover/focus. */
   .row-link {
     @apply block rounded-card border border-line bg-surface px-4 py-3.5 text-lg font-medium
            shadow-card transition-[transform,border-color,box-shadow] duration-150
            hover:-translate-y-px hover:border-brand/40 hover:shadow-pop;
+    border-width: var(--border-w);
   }
 
   /* Forms ----------------------------------------------------------------- */
@@ -132,6 +247,7 @@
            shadow-[inset_0_1px_2px_rgba(28,27,26,0.04)]
            placeholder:text-ink-faint
            focus:border-brand focus:bg-surface;
+    border-width: var(--border-w);
   }
 
   /* Buttons --------------------------------------------------------------- */
@@ -142,8 +258,8 @@
   }
   /* Variants are color-only modifiers — compose as `btn btn-primary` in JSX
      (v4 @apply can't reference another component class). */
-  .btn-primary { @apply bg-brand text-white hover:bg-brand-strong; }
-  .btn-ghost   { @apply border border-line-strong bg-surface text-ink hover:bg-sunken; }
+  .btn-primary { @apply bg-brand text-on-brand hover:bg-brand-strong; }
+  .btn-ghost   { @apply border border-line-strong bg-surface text-ink hover:bg-sunken; border-width: var(--border-w); }
   .btn-block   { @apply w-full; }
 
   /* Links ----------------------------------------------------------------- */

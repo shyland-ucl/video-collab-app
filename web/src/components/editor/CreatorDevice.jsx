@@ -52,7 +52,7 @@ import TextOverlay from './TextOverlay'
 const PLAYHEAD_INTERVAL_MS = 2000
 const SEGMENT_END_EPSILON = 0.05
 
-const ACCENT = '#9B59B6' // Probe 3 creator primary (purple)
+const ACCENT = 'var(--color-creator)' // creator accent (themable token)
 
 export default function CreatorDevice({
   projectId,

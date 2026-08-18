@@ -82,7 +82,7 @@ export default function SceneBlockList({
   onSeek,
   onPlay,
   onPause,
-  accentColor = '#9B59B6',
+  accentColor = 'var(--color-creator)',
   videoCount = 1,
   summaryFocusToken = 0,
   // sceneId → boolean. When `keptScenes[id] === false`, the scene is marked
@@ -586,11 +586,11 @@ export default function SceneBlockList({
       />
 
       {isPlaying && !disableAutoFollow && (
-        <div className="px-4 py-2 bg-white border-b border-gray-200">
+        <div className="px-4 py-2 bg-surface border-b border-line">
           <PlainScreenReaderAction
             actionRef={playbackPauseButtonRef}
             onActivate={onPause}
-            className="w-full py-2 text-sm font-medium rounded bg-gray-100 hover:bg-gray-200 text-gray-800 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500 transition-colors"
+            className="w-full py-2 text-sm font-medium rounded bg-sunken hover:bg-line text-ink transition-colors"
             style={{ minHeight: '44px' }}
             ariaLabel="Double tap to pause"
           >
@@ -682,7 +682,7 @@ export default function SceneBlockList({
           );
         })}
         {scenes.length === 0 && (
-          <p className="text-center text-gray-400 py-8 text-sm">No scenes loaded.</p>
+          <p className="text-center text-ink-faint py-8 text-sm">No scenes loaded.</p>
         )}
       </div>
     </div>

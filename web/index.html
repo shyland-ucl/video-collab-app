@@ -6,6 +6,27 @@
     <meta name="description" content="A collaborative, accessible video editor for blind and low-vision creators and their sighted helpers." />
     <meta name="theme-color" content="#0f766e" />
     <title>Video Collab — accessible collaborative editing</title>
+    <!-- Pre-paint theme + text size so low-vision users never get a white
+         flash. Mirrors AccessibilityContext: same storage key, same validation
+         lists, same OS-preference fallback. Must never throw. -->
+    <script>
+      ;(function () {
+        try {
+          var themes = ['default', 'dark', 'hc-dark', 'hc-light']
+          var sizes = ['small', 'medium', 'large', 'x-large']
+          var s = {}
+          try { s = JSON.parse(localStorage.getItem('accessibilitySettings')) || {} } catch (e) {}
+          var theme = themes.indexOf(s.theme) >= 0 ? s.theme : null
+          if (!theme) {
+            var dark = matchMedia('(prefers-color-scheme: dark)').matches
+            var hc = matchMedia('(prefers-contrast: more)').matches
+            theme = hc ? (dark ? 'hc-dark' : 'hc-light') : (dark ? 'dark' : 'default')
+          }
+          document.documentElement.dataset.theme = theme
+          document.documentElement.dataset.textSize = sizes.indexOf(s.textSize) >= 0 ? s.textSize : 'medium'
+        } catch (e) { /* default theme renders */ }
+      })()
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

@@ -106,14 +106,14 @@ export default function TaskRequestModal({ mode, clip, onSend, onClose, pending 
         }
       }}
     >
-      <div className="flex max-h-[70dvh] w-full max-w-lg flex-col rounded-t-2xl bg-white shadow-2xl" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="flex max-h-[70dvh] w-full max-w-lg flex-col rounded-t-2xl bg-surface shadow-pop" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-          <h3 className="font-bold text-sm text-gray-900">{title}</h3>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-line">
+          <h3 className="font-bold text-sm text-ink">{title}</h3>
           <button
             onClick={onClose}
             disabled={pending}
-            className="px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-40 focus:outline-2 focus:outline-blue-500"
+            className="px-3 py-1.5 rounded text-sm font-medium text-ink-soft hover:bg-sunken disabled:opacity-40"
             style={{ minHeight: '48px', minWidth: '48px' }}
             aria-label="Close"
           >
@@ -124,8 +124,8 @@ export default function TaskRequestModal({ mode, clip, onSend, onClose, pending 
         <div className="p-4 flex flex-col gap-3 overflow-y-auto">
           {/* Scene context */}
           {clip && (
-            <p className="text-xs text-gray-500">
-              Scene: <span className="font-semibold text-gray-700">{clip.name}</span>{' '}
+            <p className="text-xs text-ink-soft">
+              Scene: <span className="font-semibold text-ink">{clip.name}</span>{' '}
               ({formatTime(clip.startTime)} &ndash; {formatTime(clip.endTime)})
             </p>
           )}
@@ -142,7 +142,7 @@ export default function TaskRequestModal({ mode, clip, onSend, onClose, pending 
               }}
               placeholder={PLACEHOLDERS[mode] ?? 'Describe what you want done...'}
               disabled={pending}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-2 focus:outline-[#9B59B6] disabled:opacity-50"
+              className="flex-1 px-3 py-2 border border-line-strong bg-surface text-ink rounded-lg text-sm disabled:opacity-50"
               style={{ minHeight: '48px' }}
               aria-label={INPUT_LABELS[mode] ?? 'Task description'}
             />
@@ -150,12 +150,12 @@ export default function TaskRequestModal({ mode, clip, onSend, onClose, pending 
               onClick={toggleListening}
               disabled={pending}
               aria-busy={isPreparing || undefined}
-              className={`px-3 py-2 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+              className={`px-3 py-2 rounded-lg text-sm font-bold ${
                 listening
-                  ? 'bg-red-500 text-white animate-pulse focus:ring-red-400'
+                  ? 'bg-danger text-on-accent animate-pulse'
                   : isPreparing
-                    ? 'bg-amber-300 text-amber-900 focus:ring-amber-400'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-400'
+                    ? 'bg-helper-soft text-helper'
+                    : 'bg-sunken text-ink-soft hover:bg-line'
               } disabled:opacity-40`}
               style={{ minHeight: '48px', minWidth: '48px' }}
               aria-label={
@@ -174,12 +174,14 @@ export default function TaskRequestModal({ mode, clip, onSend, onClose, pending 
           <button
             onClick={handleSend}
             disabled={!text.trim() || pending}
-            className="w-full py-3 rounded-lg text-sm font-bold text-white disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-offset-1"
-            style={{
-              minHeight: '48px',
-              backgroundColor: mode === 'ai' ? '#9B59B6' : mode === 'vqa' ? '#2B579A' : '#E67E22',
-              '--tw-ring-color': mode === 'ai' ? '#9B59B6' : mode === 'vqa' ? '#2B579A' : '#E67E22',
-            }}
+            className={`w-full py-3 rounded-lg text-sm font-bold disabled:opacity-40 hover:opacity-90 ${
+              mode === 'ai'
+                ? 'bg-creator text-on-accent'
+                : mode === 'vqa'
+                  ? 'bg-brand text-on-brand'
+                  : 'bg-helper text-on-accent'
+            }`}
+            style={{ minHeight: '48px' }}
             aria-label={mode === 'vqa' ? 'Send question' : 'Send task'}
           >
             Send
@@ -187,12 +189,12 @@ export default function TaskRequestModal({ mode, clip, onSend, onClose, pending 
 
           {/* Pending state */}
           {pending && (
-            <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg" role="status" aria-live="polite">
+            <div className="flex items-center gap-2 p-3 bg-creator-soft rounded-lg" role="status" aria-live="polite">
               <span
-                className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"
+                className="w-4 h-4 border-2 border-creator border-t-transparent rounded-full animate-spin"
                 aria-hidden="true"
               />
-              <span className="text-sm text-purple-700 font-medium">
+              <span className="text-sm text-creator font-medium">
                 {PENDING_TEXT[mode] ?? 'Working on it...'}
               </span>
             </div>
@@ -200,11 +202,11 @@ export default function TaskRequestModal({ mode, clip, onSend, onClose, pending 
 
           {/* Response (AI clarification or VQA answer) */}
           {response && (
-            <div className="p-3 bg-green-50 border border-green-200 rounded-lg" role="status" aria-live="polite">
-              <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1">
+            <div className="p-3 bg-success/10 border border-success/40 rounded-lg" role="status" aria-live="polite">
+              <p className="text-xs font-semibold text-success uppercase tracking-wide mb-1">
                 {RESPONSE_HEADINGS[mode] ?? 'Response'}
               </p>
-              <p className="text-sm text-gray-800">{response}</p>
+              <p className="text-sm text-ink">{response}</p>
             </div>
           )}
         </div>

@@ -1,3 +1,6 @@
+// THEMING NOTE: this component is deliberately NOT swept to design tokens.
+// It is dark player chrome (like every video editor's timeline/transport),
+// identical across all app themes, so its literal dark colors stay.
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { announce } from '../../utils/announcer'
 import ConfirmEditDialog from './ConfirmEditDialog'

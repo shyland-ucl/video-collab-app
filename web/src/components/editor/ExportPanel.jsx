@@ -16,7 +16,6 @@ import { useState, useEffect, useCallback, useRef } from 'react'
  *   getDownloadUrl (outputPath) => Promise<string|null>  — signed URL resolver
  */
 
-const ACCENT = '#9B59B6'
 
 export default function ExportPanel({ render, onExport, getDownloadUrl }) {
   const status = render?.status ?? null
@@ -53,38 +52,38 @@ export default function ExportPanel({ render, onExport, getDownloadUrl }) {
     // Visual only — NOT a live region. EditorPage announces "Rendering…" on the
     // triggering action, so a live region here would double-announce.
     return (
-      <div className="rounded-xl border-2 border-[#9B59B6]/40 bg-[#f5eefa] px-4 py-3 mb-3 flex items-center gap-3">
+      <div className="rounded-xl border-2 border-creator/40 bg-creator-soft px-4 py-3 mb-3 flex items-center gap-3">
         <span className="flex gap-1" aria-hidden="true">
-          <span className="w-2 h-2 rounded-full bg-[#9B59B6] animate-bounce" style={{ animationDelay: '0ms' }} />
-          <span className="w-2 h-2 rounded-full bg-[#9B59B6] animate-bounce" style={{ animationDelay: '120ms' }} />
-          <span className="w-2 h-2 rounded-full bg-[#9B59B6] animate-bounce" style={{ animationDelay: '240ms' }} />
+          <span className="w-2 h-2 rounded-full bg-creator animate-bounce" style={{ animationDelay: '0ms' }} />
+          <span className="w-2 h-2 rounded-full bg-creator animate-bounce" style={{ animationDelay: '120ms' }} />
+          <span className="w-2 h-2 rounded-full bg-creator animate-bounce" style={{ animationDelay: '240ms' }} />
         </span>
-        <span className="text-sm font-medium text-[#6b3f86]">Rendering your video…</span>
+        <span className="text-sm font-medium text-creator">Rendering your video…</span>
       </div>
     )
   }
 
   if (status === 'ready') {
     return (
-      <div className="rounded-xl border border-[#9B59B6]/30 bg-[#faf6fd] px-4 py-3 mb-3 flex flex-col gap-2">
-        <p className="text-sm font-medium text-[#6b3f86]">Your exported video is ready.</p>
+      <div className="rounded-xl border border-creator/30 bg-creator-soft px-4 py-3 mb-3 flex flex-col gap-2">
+        <p className="text-sm font-medium text-creator">Your exported video is ready.</p>
         {downloadUrl ? (
           <a
             ref={downloadRef}
             href={downloadUrl}
             download="export.mp4"
-            className="inline-flex items-center justify-center w-full py-3 rounded-lg text-white text-sm font-bold hover:opacity-90 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
-            style={{ backgroundColor: ACCENT, minHeight: '48px' }}
+            className="inline-flex items-center justify-center w-full py-3 rounded-lg bg-creator text-on-accent text-sm font-bold hover:opacity-90"
+            style={{ minHeight: '48px' }}
           >
             Download video
           </a>
         ) : (
-          <p className="text-sm text-gray-500">Preparing your download…</p>
+          <p className="text-sm text-ink-soft">Preparing your download…</p>
         )}
         <button
           type="button"
           onClick={handleExport}
-          className="w-full py-2 rounded-lg bg-gray-100 text-sm font-semibold text-gray-700 hover:bg-gray-200 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
+          className="w-full py-2 rounded-lg bg-sunken text-sm font-semibold text-ink-soft hover:bg-line"
           style={{ minHeight: '44px' }}
           aria-label="Export this project as a video again"
         >
@@ -98,7 +97,7 @@ export default function ExportPanel({ render, onExport, getDownloadUrl }) {
   return (
     <div className="mb-3 flex flex-col gap-2">
       {status === 'failed' && (
-        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+        <p className="text-sm text-danger bg-danger-soft border border-danger/30 rounded-lg px-3 py-2">
           The export failed. Try again.
         </p>
       )}
@@ -106,8 +105,8 @@ export default function ExportPanel({ render, onExport, getDownloadUrl }) {
         type="button"
         onClick={handleExport}
         aria-label="Export this project as a video"
-        className="w-full py-3 rounded-xl text-white text-sm font-bold hover:opacity-90 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
-        style={{ backgroundColor: ACCENT, minHeight: '48px' }}
+        className="w-full py-3 rounded-xl bg-creator text-on-accent text-sm font-bold hover:opacity-90"
+        style={{ minHeight: '48px' }}
       >
         ⬇ Export video
       </button>

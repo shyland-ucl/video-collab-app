@@ -47,7 +47,7 @@ export default function SceneBlock({
   onCollapse,
   onPausePlayback,
   children,
-  accentColor = '#9B59B6',
+  accentColor = 'var(--color-creator)',
   // True when the participant has tapped Remove on this scene. Renders the
   // block dimmed with a "Removed" badge so they get visible confirmation
   // alongside the playback filter. The block stays interactive (so they
@@ -128,7 +128,7 @@ export default function SceneBlock({
   // does a single push/pop keyed on "is any scene expanded".
 
   return (
-    <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
+    <div className="border border-line rounded-lg bg-surface overflow-hidden">
       {/* Collapsed header — always visible. The aria-label includes the
           description (current detail level) so a TalkBack creator can hear
           what's in each scene without having to expand it (Lan-confirmed
@@ -159,10 +159,10 @@ export default function SceneBlock({
               (description ? `${description} ` : '') +
               (isExpanded ? 'Tap to close actions.' : 'Tap to open actions.')
         }
-        className={`w-full text-left px-4 py-3 hover:bg-gray-50 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500 transition-colors ${
+        className={`w-full text-left px-4 py-3 hover:bg-sunken transition-colors ${
           isExpanded ? 'border-b-2' : ''
-        } ${isRemoved ? 'bg-gray-50 opacity-60' : ''} ${
-          editSummary && !isRemoved ? 'ring-2 ring-amber-300 ring-offset-1' : ''
+        } ${isRemoved ? 'bg-sunken opacity-60' : ''} ${
+          editSummary && !isRemoved ? 'ring-2 ring-helper' : ''
         }`}
         style={isExpanded ? { borderBottomColor: accentColor, minHeight: '48px' } : { minHeight: '48px' }}
       >
@@ -174,12 +174,12 @@ export default function SceneBlock({
               style={{ backgroundColor: scene.color || accentColor }}
               aria-hidden="true"
             />
-            <span className={`font-medium text-sm truncate ${isRemoved ? 'line-through text-gray-500' : ''}`}>
+            <span className={`font-medium text-sm truncate ${isRemoved ? 'line-through text-ink-faint' : ''}`}>
               {scene.name}
             </span>
             {editSummary && !isRemoved && (
               <span
-                className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 flex-shrink-0"
+                className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-helper-soft text-helper flex-shrink-0"
                 aria-hidden="true"
                 title={editSummary.text}
               >
@@ -188,7 +188,7 @@ export default function SceneBlock({
             )}
             {hasSuggestion && !isRemoved && (
               <span
-                className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-[#ece1f5] text-[#6b3f86] flex-shrink-0"
+                className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-creator-soft text-creator flex-shrink-0"
                 aria-hidden="true"
                 title="Has an AI suggestion"
               >
@@ -197,16 +197,16 @@ export default function SceneBlock({
             )}
             {isRemoved && (
               <span
-                className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 flex-shrink-0"
+                className="px-2 py-0.5 rounded-full text-xs font-bold bg-danger-soft text-danger flex-shrink-0"
                 aria-hidden="true"
               >
                 Removed
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0 text-xs text-gray-500">
+          <div className="flex items-center gap-2 flex-shrink-0 text-xs text-ink-soft">
             <span aria-hidden="true">{Math.round(duration)}s</span>
-            <span aria-hidden="true" className="text-gray-400">{isExpanded ? '▲' : '▼'}</span>
+            <span aria-hidden="true" className="text-ink-faint">{isExpanded ? '▲' : '▼'}</span>
           </div>
         </div>
         {/* Description always visible. Day 1 fix #3: prepend a one-line
@@ -214,14 +214,14 @@ export default function SceneBlock({
             BLV creators verify outcomes without re-playing. */}
         {editSummary && !isRemoved && (
           <p
-            className="text-sm font-medium text-amber-800 mb-1"
+            className="text-sm font-medium text-helper mb-1"
             aria-hidden="true"
           >
             <span className="text-xs uppercase tracking-wide mr-1">What changed:</span>
             {editSummary.text}
           </p>
         )}
-        <p className={`text-sm leading-relaxed ${isRemoved ? 'text-gray-400 line-through' : 'text-gray-600'}`} aria-hidden="true">
+        <p className={`text-sm leading-relaxed ${isRemoved ? 'text-ink-faint line-through' : 'text-ink-soft'}`} aria-hidden="true">
           {description || 'No description available.'}
         </p>
       </button>
@@ -243,7 +243,7 @@ export default function SceneBlock({
           {/* Back button */}
           <button
             onClick={onCollapse}
-            className="w-full mt-3 py-2 text-sm text-gray-600 hover:text-gray-900 font-medium rounded border border-gray-200 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
+            className="w-full mt-3 py-2 text-sm text-ink-soft hover:text-ink font-medium rounded border border-line"
             style={{ minHeight: '44px' }}
             aria-label="Back to scene description"
           >

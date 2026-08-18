@@ -21,15 +21,15 @@
  */
 
 const CATEGORY = {
-  issue: { label: 'Issue', cls: 'bg-red-100 text-red-700' },
-  structural: { label: 'Structure', cls: 'bg-blue-100 text-blue-700' },
-  creative: { label: 'Creative', cls: 'bg-purple-100 text-purple-700' },
+  issue: { label: 'Issue', cls: 'bg-danger-soft text-danger' },
+  structural: { label: 'Structure', cls: 'bg-brand-soft text-brand' },
+  creative: { label: 'Creative', cls: 'bg-creator-soft text-creator' },
 }
 
 const ROUTED_LABEL = { self: 'Doing it myself', helper: 'Routed to', ai: 'Routed to AI' }
-const ROUTED_CLS = { self: 'bg-blue-100 text-blue-800', helper: 'bg-orange-100 text-orange-800', ai: 'bg-purple-100 text-purple-800' }
+const ROUTED_CLS = { self: 'bg-brand-soft text-brand', helper: 'bg-helper-soft text-helper', ai: 'bg-creator-soft text-creator' }
 const OUTCOME_LABEL = { pending: 'pending', applied: 'applied', failed: 'failed' }
-const OUTCOME_CLS = { pending: 'bg-amber-100 text-amber-800', applied: 'bg-green-100 text-green-800', failed: 'bg-red-100 text-red-800' }
+const OUTCOME_CLS = { pending: 'bg-helper-soft text-helper', applied: 'bg-success/15 text-success', failed: 'bg-danger-soft text-danger' }
 
 export default function SuggestionItem({
   suggestion,
@@ -44,7 +44,7 @@ export default function SuggestionItem({
   onRouteAI,
 }) {
   if (!suggestion) return null
-  const cat = CATEGORY[suggestion.category] ?? { label: suggestion.category, cls: 'bg-gray-100 text-gray-700' }
+  const cat = CATEGORY[suggestion.category] ?? { label: suggestion.category, cls: 'bg-sunken text-ink-soft' }
   const sceneName = sceneLabel || `Scene ${(suggestion.related_scene ?? 0) + 1}`
 
   // Routed → resolution badge (buttons gone). Terse aria-label only. The
@@ -59,14 +59,14 @@ export default function SuggestionItem({
         tabIndex={-1}
         data-suggestion-resolution={suggestion.id}
         aria-label={`${routedText}. ${outcome}.`}
-        className="rounded-lg border border-[#9B59B6]/30 bg-[#faf6fd] px-3 py-2 mb-2"
+        className="rounded-lg border border-creator/30 bg-creator-soft px-3 py-2 mb-2"
       >
-        <p className="text-sm text-gray-800 mb-1" aria-hidden="true">{suggestion.text}</p>
+        <p className="text-sm text-ink mb-1" aria-hidden="true">{suggestion.text}</p>
         <div className="flex items-center gap-2" aria-hidden="true">
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ROUTED_CLS[resolution.routedTo] ?? 'bg-gray-100'}`}>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ROUTED_CLS[resolution.routedTo] ?? 'bg-sunken'}`}>
             {routedText}
           </span>
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${OUTCOME_CLS[resolution.outcomeStatus] ?? 'bg-gray-100'}`}>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${OUTCOME_CLS[resolution.outcomeStatus] ?? 'bg-sunken'}`}>
             {outcome}
           </span>
         </div>
@@ -79,19 +79,19 @@ export default function SuggestionItem({
     <div
       role="group"
       aria-label={`AI suggestion for ${sceneName}`}
-      className="rounded-lg border-2 border-[#9B59B6]/40 bg-white px-3 py-3 mb-2 flex flex-col gap-2"
+      className="rounded-lg border-2 border-creator/40 bg-surface px-3 py-3 mb-2 flex flex-col gap-2"
     >
       <div className="flex items-center gap-2" aria-hidden="true">
         <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${cat.cls}`}>
           {cat.label}
         </span>
-        <span className="text-xs text-gray-500">{sceneName}</span>
+        <span className="text-xs text-ink-soft">{sceneName}</span>
       </div>
-      <p className="text-sm font-medium text-gray-900">{suggestion.text}</p>
+      <p className="text-sm font-medium text-ink">{suggestion.text}</p>
       <button
         type="button"
         onClick={onRouteSelf}
-        className="w-full py-2.5 rounded-lg bg-blue-600 text-sm font-bold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1"
+        className="w-full py-2.5 rounded-lg bg-brand text-sm font-bold text-on-brand hover:bg-brand-strong"
         style={{ minHeight: '44px' }}
       >
         I&apos;ll fix it
@@ -99,7 +99,7 @@ export default function SuggestionItem({
       <button
         type="button"
         onClick={onRouteHelper}
-        className="w-full rounded-lg bg-orange-700 py-2.5 text-sm font-bold text-white hover:bg-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-600 focus:ring-offset-1"
+        className="w-full rounded-lg bg-helper py-2.5 text-sm font-bold text-on-accent hover:opacity-90"
         style={{ minHeight: '44px' }}
       >
         Ask {helperName} to fix it
@@ -107,8 +107,8 @@ export default function SuggestionItem({
       <button
         type="button"
         onClick={onRouteAI}
-        className="w-full rounded-lg py-2.5 text-sm font-bold text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[#6D28D9] focus:ring-offset-1"
-        style={{ backgroundColor: '#6D28D9', minHeight: '44px' }}
+        className="w-full rounded-lg py-2.5 text-sm font-bold bg-creator text-on-accent hover:opacity-90"
+        style={{ minHeight: '44px' }}
       >
         Ask AI to fix it
       </button>
