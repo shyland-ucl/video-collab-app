@@ -89,3 +89,35 @@ describe('app', () => {
     }
   })
 })
+
+describe('GET /health/db (trial keep-alive)', () => {
+  const healthySupabase = {
+    auth: fakeSupabase.auth,
+    from: () => ({ select: () => ({ limit: async () => ({ data: [], error: null }) }) }),
+  }
+  const downSupabase = {
+    auth: fakeSupabase.auth,
+    from: () => ({ select: () => ({ limit: async () => ({ data: null, error: { message: 'paused' } }) }) }),
+  }
+  const brokenSupabase = {
+    auth: fakeSupabase.auth,
+    from: () => { throw new Error('no client') },
+  }
+
+  it('is public and returns ok when the DB answers', async () => {
+    const res = await request(makeApp(healthySupabase)).get('/health/db')
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ ok: true })
+  })
+
+  it('returns 503 when the DB errors (paused project)', async () => {
+    const res = await request(makeApp(downSupabase)).get('/health/db')
+    expect(res.status).toBe(503)
+    expect(res.body).toEqual({ ok: false })
+  })
+
+  it('returns 503 when the client itself throws', async () => {
+    const res = await request(makeApp(brokenSupabase)).get('/health/db')
+    expect(res.status).toBe(503)
+  })
+})

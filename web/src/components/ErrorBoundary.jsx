@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import { announce } from '../utils/announcer'
+import StudyErrorNotice from './StudyErrorNotice'
 
 const FALLBACK_TEXT = 'Something went wrong. Try reloading the page.'
 
@@ -32,6 +33,7 @@ export default class ErrorBoundary extends Component {
         <p role="alert" className="rounded border border-danger/50 bg-danger-soft p-3 text-danger">
           {FALLBACK_TEXT}
         </p>
+        <StudyErrorNotice />
         <a href="/" className="mt-3 inline-block underline">
           Go back to your projects
         </a>
