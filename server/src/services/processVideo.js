@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { getVideoMeta } from './videoMeta.js'
-import { planSegments, cutSegment } from './segmentation.js'
+import { planScenesAuto, cutSegment } from './segmentation.js'
 import { formatExecError } from './ffmpegRun.js'
 import { describeKeyframe, describeScene, loadDescriptionPrompt, DESCRIPTION_MODEL } from './descriptions.js'
 
@@ -30,6 +30,7 @@ async function describeWithFallback({ describeFromClip, describe, model, prompt,
 export async function processVideo({ supabase, model, videoId, log = () => {} }, deps = {}) {
   const {
     getMeta = getVideoMeta,
+    plan = planScenesAuto,
     cut = cutSegment,
     describe = describeKeyframe,
     describeFromClip = describeScene,
@@ -62,7 +63,10 @@ export async function processVideo({ supabase, model, videoId, log = () => {} },
     // round to 2dp: ffprobe durations carry sub-ms rounding that would
     // otherwise plan a 1-frame "ghost" segment at the tail
     const planDuration = Math.round(meta.duration_seconds * 100) / 100
-    const plans = planSegments(planDuration, video.segment_length_seconds)
+    // Content-aware scenes (ffmpeg scdet) with fixed windows as the fallback
+    // at every failure point — see planScenesAuto. segment_length_seconds now
+    // acts as the MAX scene length (and the window size when reverting).
+    const plans = await plan(sourceFile, planDuration, video.segment_length_seconds, log)
     const prompt = await loadPrompt()
 
     for (const plan of plans) {
