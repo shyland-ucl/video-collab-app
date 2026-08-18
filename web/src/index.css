@@ -16,7 +16,7 @@
   --color-ink-soft: #57534e;      /* secondary text */
   --color-ink-faint: #706a62;     /* hints, placeholders; AA on white */
   --color-line: #e8e4da;          /* hairline borders */
-  --color-line-strong: #d6d0c4;   /* input borders */
+  --color-line-strong: #8f887c;   /* input borders; >=3:1 on surface (WCAG 1.4.11) */
 
   /* Brand (deep teal) */
   --color-brand: #0f766e;
@@ -75,7 +75,7 @@ html[data-theme="dark"] {
   --color-ink-soft: #c9c4ba;
   --color-ink-faint: #a39d91;
   --color-line: #3a362e;
-  --color-line-strong: #55503f;
+  --color-line-strong: #8a8272;
   --color-brand: #2dd4bf;
   --color-brand-strong: #5eead4;
   --color-brand-soft: #123f3b;
