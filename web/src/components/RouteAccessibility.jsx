@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
+import { logEvent } from '../lib/events'
 
 const APP_NAME = 'Video Collab'
 
@@ -19,6 +20,9 @@ export default function RouteAccessibility() {
 
   useEffect(() => {
     document.title = `${titleForPath(pathname)} | ${APP_NAME}`
+    // Trial log: page NAME only (titleForPath), never raw ids in the payload —
+    // the ids that matter are joined back in from context at export time.
+    logEvent('page_view', { page: titleForPath(pathname) })
   }, [pathname])
 
   useEffect(() => {

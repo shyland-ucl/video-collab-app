@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { announce } from '../utils/announcer'
 import { safeNext } from '../lib/safeNext'
+import { logEvent } from '../lib/events'
 
 const AUTH_ERRORS = {
   invalid_credentials: 'Wrong email or password.',
@@ -57,6 +58,7 @@ export default function SignInPage() {
       return
     }
     // success: AuthContext picks up the session and <Navigate> above redirects
+    logEvent('sign_in', { mode })
   }
 
   function switchMode(nextMode) {

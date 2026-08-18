@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { announce } from '../../utils/announcer'
 import ttsService from '../../services/ttsService'
 import { useAccessibility } from '../../contexts/AccessibilityContext'
 import { serverPost } from '../../lib/serverApi'
+import { logEvent } from '../../lib/events'
 import { applyOperation, getClipMuted } from '../../lib/editor/sceneEditOps'
 import { rootSegmentId } from '../../lib/editor/stateStore'
 import DetailLevelSelector from './sceneblocks/DetailLevelSelector'
@@ -102,6 +103,13 @@ export default function SceneActions({
     ? (aiClips.filter((c) => rootSegmentId(c.id) === rootSegmentId(clip.id)).length || 1)
     : 1
 
+  // Trial log: this component mounts exactly when its scene's actions are
+  // expanded — the cleanest single "participant focused this scene" signal.
+  useEffect(() => {
+    if (clip) logEvent('scene_focus', { clipId: clip.id }, projectId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Inline toggle panels (probe pattern — NOT full-screen modals). Only the
   // confirm-first AI dialog is genuinely modal (it owns useRootInert itself).
   const [showVqa, setShowVqa] = useState(false)
@@ -151,8 +159,9 @@ export default function SceneActions({
       onPause?.()
       return
     }
+    logEvent('scene_play', { clipId: clip?.id }, projectId)
     onPlayScene?.(clip)
-  }, [isActiveScene, onPause, onPlayScene, clip])
+  }, [isActiveScene, onPause, onPlayScene, clip, projectId])
 
   const handlePlayFromHereOrPause = useCallback(() => {
     if (isPlaying) {
@@ -357,6 +366,7 @@ export default function SceneActions({
     if (!described) return
     // Route through the shared undo path so an AI-applied edit is as undoable
     // as a self-edit (a BLV creator who mishears the confirmation can revert it).
+    logEvent('ai_edit_confirm', { op: proposal?.op, clipId: proposal?.target_clip_id }, projectId)
     pushUndoable(proposalToOpFn(proposal), described.done)
     setShowAiEdit(false)
     setAiClarifyHistory([])
@@ -364,9 +374,10 @@ export default function SceneActions({
   }, [aiProposal, aiClips, pushUndoable])
 
   const handleAiCancel = useCallback(() => {
+    logEvent('ai_edit_reject', { op: aiProposal?.op, clipId: aiProposal?.target_clip_id }, projectId)
     setAiProposal(null)
     announce('Cancelled — no change was made.')
-  }, [])
+  }, [aiProposal, projectId])
 
   // Toggling the Ask-AI panel starts a fresh exchange: drop any carried
   // clarification history and note so a new request isn't coloured by an

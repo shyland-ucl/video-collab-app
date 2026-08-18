@@ -1,3 +1,5 @@
+import { logEvent } from '../lib/events';
+
 /**
  * Text-to-Speech service singleton using the Web Speech API.
  */
@@ -14,6 +16,9 @@ class TTSService {
   speak(text, options = {}) {
     if (!this._synth) return;
     this.stop();
+    // Trial log: every spoken prompt, length only (the text itself is already
+    // captured where it matters — ai_edit_request / vqa_request payloads).
+    logEvent('tts_spoken', { chars: text?.length ?? 0 });
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = options.rate ?? 1;

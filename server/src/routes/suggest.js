@@ -3,6 +3,7 @@ import { makeRequireAuth } from '../middleware/requireAuth.js'
 import { makeGeminiModel } from '../services/descriptions.js'
 import { proposeSuggestions, persistSuggestions } from '../services/suggestions.js'
 import { loadVideoForSuggestions } from '../services/suggestionsData.js'
+import { logServerEvent } from '../services/events.js'
 
 const LOADER_ERROR_STATUS = {
   video_not_found: 404,
@@ -51,6 +52,10 @@ export function makeSuggestRoutes(supabase, deps = {}) {
     // and fan out over Realtime. A persist failure must not fail the analyse —
     // fall back to the in-memory set (it just won't be durable/visible to the peer).
     const persisted = await persist(supabase, project.id, videoId, generated, loaded.scenes)
+    logServerEvent(supabase, {
+      userId: req.user.id, projectId: project.id,
+      type: 'suggestions_generated', payload: { videoId, count: generated.length },
+    })
     res.json({ suggestions: persisted ?? generated })
   })
 

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAccessibility } from '../contexts/AccessibilityContext'
 import ttsService from '../services/ttsService'
 import { announce } from '../utils/announcer'
+import { logEvent } from '../lib/events'
 
 const TEXT_SIZE_OPTIONS = [
   { value: 'small', label: 'Small' },
@@ -62,17 +63,20 @@ export default function SettingsPage() {
   function handleTextSize(value) {
     setTextSize(value)
     announce(`Text size ${value}`)
+    logEvent('settings_change', { setting: 'textSize', value })
   }
 
   function handleTheme(option) {
     setTheme(option.value)
     announce(`Colour theme ${option.label}`)
+    logEvent('settings_change', { setting: 'theme', value: option.value })
   }
 
   function handleToggleAudio() {
     // audioEnabled is the value BEFORE the toggle; the new state is the inverse.
     toggleAudio()
     announce(`Spoken edit prompts ${audioEnabled ? 'off' : 'on'}`)
+    logEvent('settings_change', { setting: 'audioEnabled', value: !audioEnabled })
   }
 
   function handleRateChange(e) {
@@ -80,6 +84,7 @@ export default function SettingsPage() {
     setSpeechRate(rate)
     ttsService.speak(RATE_SAMPLE, { rate })
     announce(`Speech rate ${rate}`)
+    logEvent('settings_change', { setting: 'speechRate', value: rate })
   }
 
   return (

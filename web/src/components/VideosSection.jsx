@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { uploadVideo } from '../lib/uploadVideo'
+import { logEvent } from '../lib/events'
 import { serverPost } from '../lib/serverApi'
 import { announce } from '../utils/announcer'
 
@@ -127,6 +128,7 @@ export default function VideosSection({ projectId }) {
       loadVideos()
       return
     }
+    logEvent('video_upload', { videoId, sizeBytes: file.size }, projectId)
 
     try {
       await serverPost(`/api/videos/${videoId}/process`)

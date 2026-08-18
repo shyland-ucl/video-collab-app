@@ -3,6 +3,7 @@ import { makeRequireAuth } from '../middleware/requireAuth.js'
 import { makeGeminiModel } from '../services/descriptions.js'
 import { proposeEdit, MAX_CLARIFY_ROUNDS } from '../services/aiEdit.js'
 import { rootSegmentIds, loadLevel1Descriptions } from '../services/aiEditData.js'
+import { logServerEvent } from '../services/events.js'
 
 // Sanitize the client-sent clarification transcript: keep only well-formed
 // { request, clarification } rounds, coerce+bound each string, and keep the
@@ -62,6 +63,18 @@ export function makeAiEditRoutes(supabase, deps = {}) {
       focusedClipId,
       history,
       log: console.warn,
+    })
+    // Request text is core study data (consented — design 2026-08-18); the
+    // outcome discriminates clarification loops from real proposals.
+    logServerEvent(supabase, {
+      userId: req.user.id, projectId: project.id,
+      type: 'ai_edit_request',
+      payload: {
+        request,
+        focusedClipId,
+        historyRounds: history.length,
+        outcome: proposal?.clarification ? 'clarification' : (proposal?.op ?? 'unknown'),
+      },
     })
     res.json(proposal)
   })

@@ -572,7 +572,7 @@ export default function CreatorDevice({
       {/* Phase 4 — Export/Download the finished video (project-level action). */}
       {onExport && (
         <div className="flex-shrink-0 mt-3">
-          <ExportPanel render={render} onExport={onExport} getDownloadUrl={getDownloadUrl} />
+          <ExportPanel render={render} onExport={onExport} getDownloadUrl={getDownloadUrl} projectId={projectId} />
         </div>
       )}
 

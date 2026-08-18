@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { logEvent } from '../../lib/events'
 
 /**
  * Phase 4 — Export/Download panel (creator surface). Four states keyed on the
@@ -17,7 +18,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
  */
 
 
-export default function ExportPanel({ render, onExport, getDownloadUrl }) {
+export default function ExportPanel({ render, onExport, getDownloadUrl, projectId = null }) {
   const status = render?.status ?? null
   const [downloadUrl, setDownloadUrl] = useState(null)
   const downloadRef = useRef(null)
@@ -72,6 +73,7 @@ export default function ExportPanel({ render, onExport, getDownloadUrl }) {
             ref={downloadRef}
             href={downloadUrl}
             download="export.mp4"
+            onClick={() => logEvent('export_download', {}, projectId)}
             className="inline-flex items-center justify-center w-full py-3 rounded-lg bg-creator text-on-accent text-sm font-bold hover:opacity-90"
             style={{ minHeight: '48px' }}
           >
