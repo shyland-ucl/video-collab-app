@@ -30,7 +30,7 @@ export default function SegmentMarkerPanel({ segment }) {
 
   return (
     <div
-      className="px-4 py-2 bg-gray-50 border border-gray-200 rounded text-sm"
+      className="px-4 py-2 bg-sunken border border-line rounded text-sm"
       aria-label="Current segment information"
     >
       {segment ? (
@@ -41,12 +41,12 @@ export default function SegmentMarkerPanel({ segment }) {
             aria-hidden="true"
           />
           <span className="font-semibold">{segment.name}</span>
-          <span className="text-gray-500">
+          <span className="text-ink-soft">
             {formatTimeRange(segment.start_time, segment.end_time)}
           </span>
         </div>
       ) : (
-        <span className="text-gray-400">No segment selected</span>
+        <span className="text-ink-faint">No segment selected</span>
       )}
     </div>
   )

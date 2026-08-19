@@ -23,6 +23,20 @@ export function makeApp(supabaseClient, videoDeps = {}) {
 
   app.get('/health', (_req, res) => res.json({ ok: true }))
 
+  // Trial keep-alive (design 2026-08-18): touches the DB so Supabase's
+  // free-tier idle pause can never trip mid-trial. A GitHub Actions cron
+  // (.github/workflows/keepalive.yml) curls this daily; a 503 fails the
+  // workflow run, which emails the researcher — the trial's dead-man switch.
+  app.get('/health/db', async (_req, res) => {
+    try {
+      const { error } = await supabaseClient.from('projects').select('id').limit(1)
+      if (error) return res.status(503).json({ ok: false })
+      res.json({ ok: true })
+    } catch {
+      res.status(503).json({ ok: false })
+    }
+  })
+
   const requireAuth = makeRequireAuth(supabaseClient)
   app.get('/api/me', requireAuth, (req, res) => {
     res.json({ id: req.user.id, email: req.user.email })

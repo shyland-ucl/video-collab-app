@@ -205,8 +205,7 @@ export default function HelperDevice({
         <div
           role="region"
           aria-label="Video preview"
-          className="rounded-2xl overflow-hidden bg-white"
-          style={{ border: '1px solid #dfe4ea', boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.03)' }}
+          className="rounded-2xl overflow-hidden bg-surface border border-line shadow-card"
         >
           <div className="relative">
             <EditorVideoPlayer
@@ -256,13 +255,13 @@ export default function HelperDevice({
               role="region"
               aria-label="Creator's current request"
               className="rounded-xl px-4 py-3 mb-4 border-l-4"
-              style={{ borderColor: '#E67E22', backgroundColor: '#FFF8F1' }}
+              style={{ borderColor: 'var(--color-helper)', backgroundColor: 'var(--color-helper-soft)' }}
             >
-              <p className="text-xs font-bold text-orange-700 uppercase tracking-wider mb-1">Creator's Intent</p>
-              <p className="text-sm text-gray-800 font-medium">{activeTask.text || 'Task from creator'}</p>
+              <p className="text-xs font-bold text-helper uppercase tracking-wider mb-1">Creator's Intent</p>
+              <p className="text-sm text-ink font-medium">{activeTask.text || 'Task from creator'}</p>
               {activeTask.segment_label && (
                 <div className="flex gap-2 mt-1">
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">{activeTask.segment_label}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-helper-soft text-helper">{activeTask.segment_label}</span>
                 </div>
               )}
             </div>
@@ -270,9 +269,9 @@ export default function HelperDevice({
         })()}
 
         {/* Activity Feed */}
-        <div role="region" aria-label="Tasks and activity" className="rounded-2xl overflow-hidden mb-4" style={{ border: '1px solid rgba(230,126,34,0.2)', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div className="px-4 py-2.5" style={{ background: '#fff8f1', borderBottom: '1px solid #fde8d0' }}>
-            <h2 className="text-xs font-bold tracking-wider text-[#c2410c] uppercase">
+        <div role="region" aria-label="Tasks and activity" className="rounded-2xl overflow-hidden mb-4 border border-helper/25 shadow-card">
+          <div className="px-4 py-2.5 bg-helper-soft border-b border-helper/30">
+            <h2 className="text-xs font-bold tracking-wider text-helper uppercase">
               Activity Feed {tasks.length > 0 ? `(${tasks.length})` : ''}
             </h2>
           </div>
@@ -284,9 +283,9 @@ export default function HelperDevice({
         </div>
 
         {/* Editor tools */}
-        <div role="region" aria-label="Editor tools" className="rounded-2xl overflow-hidden" style={{ border: '1px solid #dfe4ea', boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.03)' }}>
-          <div className="px-4 py-2.5" style={{ background: '#f8f9fb', borderBottom: '1px solid #eef2f7' }}>
-            <h2 className="text-xs font-bold tracking-wider text-[#64748b] uppercase">Video Editor</h2>
+        <div role="region" aria-label="Editor tools" className="rounded-2xl overflow-hidden bg-surface border border-line shadow-card">
+          <div className="px-4 py-2.5 bg-sunken border-b border-line">
+            <h2 className="text-xs font-bold tracking-wider text-ink-soft uppercase">Video Editor</h2>
           </div>
           <div className="flex flex-col">
             <EditorTimeline

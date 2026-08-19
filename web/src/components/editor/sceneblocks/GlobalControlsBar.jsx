@@ -42,10 +42,10 @@ export default function GlobalControlsBar({
   const summary = `${sceneCount} scene${sceneCount === 1 ? '' : 's'} created, the total length is ${formatTotalDuration(totalDuration)}`;
 
   return (
-    <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-4 py-3">
+    <div className="sticky top-0 z-20 bg-surface border-b border-line px-4 py-3">
       <p
         ref={summaryRef}
-        className="text-xs text-gray-500 focus:outline-2 focus:outline-offset-2 focus:outline-blue-600 rounded"
+        className="text-xs text-ink-soft rounded"
         tabIndex={-1}
         data-project-summary-focus
       >

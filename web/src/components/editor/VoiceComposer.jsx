@@ -17,7 +17,7 @@ import useSpeechRecognition from '../../hooks/useSpeechRecognition'
  * Accessibility parity with the probe:
  *   - mic aria-label changes across idle / preparing / listening states
  *   - aria-pressed reflects listening|preparing
- *   - listening => bg-red-500 animate-pulse, preparing => bg-amber-300
+ *   - listening => bg-danger animate-pulse, preparing => bg-helper-soft
  *   - 44px minimum touch targets on every control
  *   - the hook plays the "speak now" earcon + assertive announce on start
  *
@@ -46,7 +46,6 @@ import useSpeechRecognition from '../../hooks/useSpeechRecognition'
  *     <body>, the mic is refocused so the user stays anchored in the composer.
  */
 
-const ACCENT = '#9B59B6' // Probe 3 creator primary (purple)
 
 export default function VoiceComposer({
   onSubmit,
@@ -154,12 +153,12 @@ export default function VoiceComposer({
         aria-label={isListening || isPreparing ? 'Stop voice input' : 'Voice input'}
         aria-pressed={isListening || isPreparing}
         aria-disabled={disabled || undefined}
-        className={`flex items-center justify-center rounded transition-colors focus:outline-2 focus:outline-offset-2 focus:outline-blue-500 ${
+        className={`flex items-center justify-center rounded transition-colors ${
           isListening
-            ? 'bg-red-500 text-white animate-pulse'
+            ? 'bg-danger text-on-accent animate-pulse'
             : isPreparing
-              ? 'bg-amber-300 text-amber-900'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              ? 'bg-helper-soft text-helper'
+              : 'bg-sunken text-ink-soft hover:bg-line'
         } ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
         style={{ minHeight: '44px', minWidth: '44px' }}
       >
@@ -175,7 +174,7 @@ export default function VoiceComposer({
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        className={`flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-2 focus:outline-[#9B59B6] ${
+        className={`flex-1 px-3 py-2 border border-line-strong bg-surface text-ink rounded text-sm ${
           disabled ? 'opacity-60' : ''
         }`}
         style={{ minHeight: '44px' }}
@@ -187,10 +186,10 @@ export default function VoiceComposer({
         onClick={handleSubmitClick}
         aria-label={submitLabel}
         aria-disabled={submitDisabled || undefined}
-        className={`px-4 py-2 rounded text-white text-sm font-bold transition-colors focus:outline-2 focus:outline-offset-2 focus:outline-blue-500 ${
+        className={`px-4 py-2 rounded bg-creator text-on-accent text-sm font-bold transition-colors ${
           submitDisabled ? 'opacity-50 cursor-not-allowed' : ''
         }`}
-        style={{ backgroundColor: ACCENT, minHeight: '44px' }}
+        style={{ minHeight: '44px' }}
       >
         {submitLabel}
       </button>

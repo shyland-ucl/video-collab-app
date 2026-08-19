@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { announce } from '../../utils/announcer'
 import ttsService from '../../services/ttsService'
 import { useAccessibility } from '../../contexts/AccessibilityContext'
 import { serverPost } from '../../lib/serverApi'
+import { logEvent } from '../../lib/events'
 import { applyOperation, getClipMuted } from '../../lib/editor/sceneEditOps'
 import { rootSegmentId } from '../../lib/editor/stateStore'
 import DetailLevelSelector from './sceneblocks/DetailLevelSelector'
@@ -63,9 +64,8 @@ import ConfirmEditDialog from './ConfirmEditDialog'
  *   onCreateTask    ({ text, segmentLabel }) => Promise — Ask Helper route
  */
 
-const ACCENT = '#6D28D9' // accessible creator purple
-const AI_EDIT_COLOR = '#92400E' // accessible amber for "Ask AI to Edit"
-const SELF_EDIT_COLOR = '#2B579A' // blue — "Edit by Myself"
+// Action-family hues are design tokens now (see index.css themes):
+// self-edit -> brand, Ask-AI -> helper (amber), Ask-Helper -> creator (purple).
 
 const AI_INVALID_PROPOSAL_TEXT =
   "The AI suggested an edit that doesn't match the current timeline — try asking again"
@@ -102,6 +102,13 @@ export default function SceneActions({
   const clipCountForScene = clip
     ? (aiClips.filter((c) => rootSegmentId(c.id) === rootSegmentId(clip.id)).length || 1)
     : 1
+
+  // Trial log: this component mounts exactly when its scene's actions are
+  // expanded — the cleanest single "participant focused this scene" signal.
+  useEffect(() => {
+    if (clip) logEvent('scene_focus', { clipId: clip.id }, projectId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Inline toggle panels (probe pattern — NOT full-screen modals). Only the
   // confirm-first AI dialog is genuinely modal (it owns useRootInert itself).
@@ -152,8 +159,9 @@ export default function SceneActions({
       onPause?.()
       return
     }
+    logEvent('scene_play', { clipId: clip?.id }, projectId)
     onPlayScene?.(clip)
-  }, [isActiveScene, onPause, onPlayScene, clip])
+  }, [isActiveScene, onPause, onPlayScene, clip, projectId])
 
   const handlePlayFromHereOrPause = useCallback(() => {
     if (isPlaying) {
@@ -358,6 +366,7 @@ export default function SceneActions({
     if (!described) return
     // Route through the shared undo path so an AI-applied edit is as undoable
     // as a self-edit (a BLV creator who mishears the confirmation can revert it).
+    logEvent('ai_edit_confirm', { op: proposal?.op, clipId: proposal?.target_clip_id }, projectId)
     pushUndoable(proposalToOpFn(proposal), described.done)
     setShowAiEdit(false)
     setAiClarifyHistory([])
@@ -365,9 +374,10 @@ export default function SceneActions({
   }, [aiProposal, aiClips, pushUndoable])
 
   const handleAiCancel = useCallback(() => {
+    logEvent('ai_edit_reject', { op: aiProposal?.op, clipId: aiProposal?.target_clip_id }, projectId)
     setAiProposal(null)
     announce('Cancelled — no change was made.')
-  }, [])
+  }, [aiProposal, projectId])
 
   // Toggling the Ask-AI panel starts a fresh exchange: drop any carried
   // clarification history and note so a new request isn't coloured by an
@@ -412,7 +422,7 @@ export default function SceneActions({
         type="button"
         onClick={handlePlayThisScene}
         data-scene-play-button="true"
-        className="w-full py-3 text-sm font-medium rounded bg-gray-100 hover:bg-gray-200 text-gray-800 transition-colors focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
+        className="w-full py-3 text-sm font-medium rounded bg-sunken hover:bg-line text-ink transition-colors"
         style={{ minHeight: '48px' }}
         aria-label={isActiveScene ? 'Pause this scene' : `Play scene ${index + 1}, stops at the end of this scene`}
       >
@@ -421,7 +431,7 @@ export default function SceneActions({
       <button
         type="button"
         onClick={handlePlayFromHereOrPause}
-        className="w-full py-2 text-sm font-medium rounded bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 transition-colors focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
+        className="w-full py-2 text-sm font-medium rounded bg-surface border border-line-strong hover:bg-sunken text-ink-soft transition-colors"
         style={{ minHeight: '44px' }}
         aria-label={isPlaying ? 'Double tap to pause' : 'Play the whole video from here'}
       >
@@ -433,7 +443,7 @@ export default function SceneActions({
         <button
           type="button"
           onClick={() => setShowVqa((v) => !v)}
-          className="w-full py-3 text-sm font-medium rounded bg-gray-100 hover:bg-gray-200 text-gray-800 transition-colors focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
+          className="w-full py-3 text-sm font-medium rounded bg-sunken hover:bg-line text-ink transition-colors"
           style={{ minHeight: '48px' }}
         >
           {showVqa ? 'Close Ask AI' : 'Ask AI about Scene'}
@@ -442,7 +452,7 @@ export default function SceneActions({
           <div
             role="group"
             aria-label="Ask AI about Scene"
-            className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 flex flex-col gap-2"
+            className="mt-2 p-3 bg-sunken rounded-lg border border-line flex flex-col gap-2"
           >
             <VoiceComposer
               onSubmit={handleVqaSubmit}
@@ -452,14 +462,14 @@ export default function SceneActions({
               submitLabel="Ask"
               inputAriaLabel="Your question"
             />
-            {vqaPending && <p className="text-sm text-gray-700 italic" aria-live="polite">Getting the answer...</p>}
+            {vqaPending && <p className="text-sm text-ink-soft italic" aria-live="polite">Getting the answer...</p>}
             {vqaAnswer && (
               // Visual only — the answer is spoken once via announce(answer)
               // (handleVqaSubmit). A second role="status"/aria-live region here
               // made VoiceOver read the answer twice and append "status".
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1">Answer</p>
-                <p className="text-sm text-gray-800">{vqaAnswer}</p>
+              <div className="p-3 bg-success/10 border border-success/40 rounded-lg">
+                <p className="text-xs font-semibold text-success uppercase tracking-wide mb-1">Answer</p>
+                <p className="text-sm text-ink">{vqaAnswer}</p>
               </div>
             )}
           </div>
@@ -472,8 +482,8 @@ export default function SceneActions({
           type="button"
           data-edit-self-toggle={clip.id}
           onClick={() => setShowEditPanel((v) => !v)}
-          className="w-full py-3 text-sm font-medium rounded text-white transition-colors focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
-          style={{ backgroundColor: SELF_EDIT_COLOR, minHeight: '48px' }}
+          className="w-full py-3 text-sm font-medium rounded bg-brand text-on-brand hover:bg-brand-strong transition-colors"
+          style={{ minHeight: '48px' }}
         >
           {showEditPanel ? 'Hide Edit Options' : 'Edit by Myself'}
         </button>
@@ -481,17 +491,17 @@ export default function SceneActions({
           <div
             role="group"
             aria-label="Edit by Myself"
-            className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 flex flex-col gap-2"
+            className="mt-2 p-3 bg-sunken rounded-lg border border-line flex flex-col gap-2"
           >
             {/* Trim (split). The probe labels this "Trim here" with explanatory
                 copy + a live clip-count, because pairing Trim with Remove is how
                 a BLV creator drops an unwanted part of a scene. */}
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-ink-soft">
               Trims this scene at the current playback time — it splits into two
               clips. Pair with Delete to drop the part you don&apos;t want.
             </p>
             <p
-              className="text-xs text-gray-500"
+              className="text-xs text-ink-soft"
               data-clip-count-for={clip.id}
             >
               This scene currently has {clipCountForScene} clip
@@ -501,7 +511,7 @@ export default function SceneActions({
               type="button"
               onClick={handleSplit}
               aria-label="Trim this scene at the current position — splits it into two clips"
-              className="w-full py-3 rounded-lg bg-[#2B579A] text-sm font-bold text-white hover:bg-[#1e3f6f] focus:outline-none focus:ring-2 focus:ring-[#2B579A] focus:ring-offset-1"
+              className="w-full py-3 rounded-lg bg-brand text-sm font-bold text-on-brand hover:bg-brand-strong"
               style={{ minHeight: '48px' }}
             >
               Trim here
@@ -511,7 +521,7 @@ export default function SceneActions({
                 type="button"
                 onClick={handleMoveEarlier}
                 aria-label="Move this clip earlier in the timeline"
-                className="flex-1 py-3 rounded-lg bg-gray-100 text-sm font-semibold text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2B579A] focus:ring-offset-1"
+                className="flex-1 py-3 rounded-lg bg-sunken text-sm font-semibold text-ink-soft hover:bg-line"
                 style={{ minHeight: '48px' }}
               >
                 Move Earlier
@@ -520,7 +530,7 @@ export default function SceneActions({
                 type="button"
                 onClick={handleMoveLater}
                 aria-label="Move this clip later in the timeline"
-                className="flex-1 py-3 rounded-lg bg-gray-100 text-sm font-semibold text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2B579A] focus:ring-offset-1"
+                className="flex-1 py-3 rounded-lg bg-sunken text-sm font-semibold text-ink-soft hover:bg-line"
                 style={{ minHeight: '48px' }}
               >
                 Move Later
@@ -530,7 +540,7 @@ export default function SceneActions({
               type="button"
               onClick={() => setDeletePending(true)}
               aria-label="Delete this clip from the timeline"
-              className="w-full rounded-lg bg-red-700 py-3 text-sm font-bold text-white hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2"
+              className="w-full rounded-lg bg-danger py-3 text-sm font-bold text-on-accent hover:opacity-90"
               style={{ minHeight: '48px' }}
             >
               Delete
@@ -541,7 +551,7 @@ export default function SceneActions({
                 onClick={handleUndo}
                 disabled={!canUndo}
                 aria-label="Undo last edit"
-                className="flex-1 py-3 rounded-lg bg-gray-100 text-sm font-semibold text-gray-700 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#2B579A] focus:ring-offset-1"
+                className="flex-1 py-3 rounded-lg bg-sunken text-sm font-semibold text-ink-soft hover:bg-line disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ minHeight: '48px' }}
               >
                 Undo
@@ -551,7 +561,7 @@ export default function SceneActions({
                 onClick={handleRedo}
                 disabled={!canRedo}
                 aria-label="Redo last undone edit"
-                className="flex-1 py-3 rounded-lg bg-gray-100 text-sm font-semibold text-gray-700 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#2B579A] focus:ring-offset-1"
+                className="flex-1 py-3 rounded-lg bg-sunken text-sm font-semibold text-ink-soft hover:bg-line disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ minHeight: '48px' }}
               >
                 Redo
@@ -562,7 +572,7 @@ export default function SceneActions({
                 type="button"
                 onClick={() => setShowCaptionInput(true)}
                 aria-label="Add a caption to this scene"
-                className="w-full rounded-lg bg-amber-800 py-3 text-sm font-bold text-white hover:bg-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-700 focus:ring-offset-2"
+                className="w-full rounded-lg bg-helper py-3 text-sm font-bold text-on-accent hover:opacity-90"
                 style={{ minHeight: '48px' }}
               >
                 Add Caption
@@ -575,7 +585,7 @@ export default function SceneActions({
                   onChange={(e) => setCaptionText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleAddCaption() }}
                   placeholder="Enter caption text..."
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-2 focus:outline-[#2B579A]"
+                  className="flex-1 px-3 py-2 border border-line-strong bg-surface text-ink rounded-lg text-sm"
                   style={{ minHeight: '48px' }}
                   aria-label="Caption text"
                 />
@@ -584,7 +594,7 @@ export default function SceneActions({
                   onClick={handleAddCaption}
                   disabled={!captionText.trim()}
                   aria-label="Save caption"
-                  className="rounded-lg bg-amber-800 px-4 py-2 text-sm font-bold text-white hover:bg-amber-900 disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-amber-700 focus:ring-offset-1"
+                  className="rounded-lg bg-helper px-4 py-2 text-sm font-bold text-on-accent hover:opacity-90 disabled:opacity-40"
                   style={{ minHeight: '48px', minWidth: '48px' }}
                 >
                   Save
@@ -601,10 +611,10 @@ export default function SceneActions({
                   ? `Unmute the original audio for scene ${index + 1}`
                   : `Mute the original audio for scene ${index + 1}`
               }
-              className={`w-full py-3 rounded-lg text-sm font-bold border focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-1 ${
+              className={`w-full py-3 rounded-lg text-sm font-bold border ${
                 isMuted
-                  ? 'bg-amber-600 text-white border-amber-700 hover:bg-amber-700'
-                  : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50'
+                  ? 'bg-helper text-on-accent border-transparent hover:opacity-90'
+                  : 'bg-surface text-ink border-line-strong hover:bg-sunken'
               }`}
               style={{ minHeight: '48px' }}
             >
@@ -619,8 +629,8 @@ export default function SceneActions({
         <button
           type="button"
           onClick={handleToggleAiEdit}
-          className="w-full py-3 text-sm font-medium rounded text-white transition-colors focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
-          style={{ backgroundColor: AI_EDIT_COLOR, minHeight: '48px' }}
+          className="w-full py-3 text-sm font-medium rounded bg-helper text-on-accent hover:opacity-90 transition-colors"
+          style={{ minHeight: '48px' }}
         >
           {showAiEdit ? 'Close AI Edit' : 'Ask AI to Edit'}
         </button>
@@ -628,7 +638,7 @@ export default function SceneActions({
           <div
             role="group"
             aria-label="Ask AI to Edit"
-            className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 flex flex-col gap-2"
+            className="mt-2 p-3 bg-sunken rounded-lg border border-line flex flex-col gap-2"
           >
             <VoiceComposer
               onSubmit={handleAiEditSubmit}
@@ -638,12 +648,12 @@ export default function SceneActions({
               submitLabel="Ask AI"
               inputAriaLabel="Task description"
             />
-            {aiEditPending && <p className="text-sm text-gray-700 italic" aria-live="polite">AI is working...</p>}
+            {aiEditPending && <p className="text-sm text-ink-soft italic" aria-live="polite">AI is working...</p>}
             {aiEditNote && (
               // Visual only — the note is spoken once via announce() in
               // handleAiEditSubmit; a second live region read it twice + "status".
-              <div className="p-3 border-2 rounded-lg bg-yellow-50 border-yellow-300">
-                <p className="text-sm text-yellow-800">{aiEditNote}</p>
+              <div className="p-3 border-2 rounded-lg bg-helper-soft border-helper/50">
+                <p className="text-sm text-ink">{aiEditNote}</p>
               </div>
             )}
           </div>
@@ -655,8 +665,8 @@ export default function SceneActions({
         <button
           type="button"
           onClick={() => setShowHelper((v) => !v)}
-          className="w-full py-3 text-sm font-medium rounded text-white transition-colors focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
-          style={{ backgroundColor: ACCENT, minHeight: '48px' }}
+          className="w-full py-3 text-sm font-medium rounded bg-creator text-on-accent hover:opacity-90 transition-colors"
+          style={{ minHeight: '48px' }}
         >
           {showHelper ? 'Close Helper Edit' : 'Ask Helper to Edit'}
         </button>
@@ -664,7 +674,7 @@ export default function SceneActions({
           <div
             role="group"
             aria-label="Ask Helper"
-            className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 flex flex-col gap-2"
+            className="mt-2 p-3 bg-sunken rounded-lg border border-line flex flex-col gap-2"
           >
             <VoiceComposer
               onSubmit={handleHelperSubmit}

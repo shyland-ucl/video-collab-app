@@ -52,7 +52,7 @@ import TextOverlay from './TextOverlay'
 const PLAYHEAD_INTERVAL_MS = 2000
 const SEGMENT_END_EPSILON = 0.05
 
-const ACCENT = '#9B59B6' // Probe 3 creator primary (purple)
+const ACCENT = 'var(--color-creator)' // creator accent (themable token)
 
 export default function CreatorDevice({
   projectId,
@@ -572,7 +572,7 @@ export default function CreatorDevice({
       {/* Phase 4 — Export/Download the finished video (project-level action). */}
       {onExport && (
         <div className="flex-shrink-0 mt-3">
-          <ExportPanel render={render} onExport={onExport} getDownloadUrl={getDownloadUrl} />
+          <ExportPanel render={render} onExport={onExport} getDownloadUrl={getDownloadUrl} projectId={projectId} />
         </div>
       )}
 

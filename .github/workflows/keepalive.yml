@@ -1,0 +1,26 @@
+# Trial keep-alive (design 2026-08-18). Curls the server's /health/db daily,
+# which touches Supabase so the free tier never idle-pauses mid-trial. If the
+# server or DB is down the step fails and GitHub emails the repo owner — the
+# unsupervised trial's dead-man switch.
+#
+# Setup: create a repository VARIABLE named SERVER_URL (Settings → Secrets and
+# variables → Actions → Variables) set to the Railway server origin, e.g.
+# https://your-server.up.railway.app (no trailing slash).
+name: keepalive
+
+on:
+  schedule:
+    - cron: '17 6 * * *' # daily, 06:17 UTC
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping server + database
+        run: |
+          if [ -z "${{ vars.SERVER_URL }}" ]; then
+            echo "SERVER_URL repository variable is not set" >&2
+            exit 1
+          fi
+          curl -fsS --max-time 30 --retry 2 --retry-delay 20 "${{ vars.SERVER_URL }}/health/db"

@@ -6,9 +6,11 @@ import { MemoryRouter } from 'react-router-dom'
 const { mockA11y } = vi.hoisted(() => ({
   mockA11y: {
     textSize: 'medium',
+    theme: 'default',
     audioEnabled: false,
     speechRate: 1.2,
     setTextSize: vi.fn(),
+    setTheme: vi.fn(),
     toggleAudio: vi.fn(),
     setSpeechRate: vi.fn(),
   },
@@ -39,6 +41,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks()
   mockA11y.textSize = 'medium'
+  mockA11y.theme = 'default'
   mockA11y.audioEnabled = false
   mockA11y.speechRate = 1.2
 })
@@ -109,5 +112,28 @@ describe('SettingsPage', () => {
       { rate: 1.5 }
     )
     expect(announce).toHaveBeenCalledWith('Speech rate 1.5')
+  })
+})
+
+describe('SettingsPage themes', () => {
+  it('offers all four colour themes and extra-large text', () => {
+    renderPage()
+    for (const name of ['Default', 'Dark', 'High contrast dark', 'High contrast light']) {
+      expect(screen.getByRole('radio', { name: new RegExp('^' + name, 'i') })).toBeInTheDocument()
+    }
+    expect(screen.getByRole('radio', { name: /extra large/i })).toBeInTheDocument()
+  })
+
+  it('selecting a theme dispatches and announces it', async () => {
+    renderPage()
+    await userEvent.click(screen.getByRole('radio', { name: /high contrast dark/i }))
+    expect(mockA11y.setTheme).toHaveBeenCalledWith('hc-dark')
+    expect(announce).toHaveBeenCalledWith('Colour theme High contrast dark')
+  })
+
+  it('selecting extra large dispatches the new size', async () => {
+    renderPage()
+    await userEvent.click(screen.getByRole('radio', { name: /extra large/i }))
+    expect(mockA11y.setTextSize).toHaveBeenCalledWith('x-large')
   })
 })

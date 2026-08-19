@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { makeRequireAuth } from '../middleware/requireAuth.js'
 import { processVideo } from '../services/processVideo.js'
 import { makeGeminiModel, answerQuestion } from '../services/descriptions.js'
+import { logServerEvent } from '../services/events.js'
 
 export function makeVideoRoutes(supabase, deps = {}) {
   const {
@@ -59,11 +60,23 @@ export function makeVideoRoutes(supabase, deps = {}) {
     }
 
     res.status(202).json({ ok: true })
+    logServerEvent(supabase, {
+      userId: req.user.id, projectId: found.video.project_id,
+      type: 'processing_started', payload: { videoId: found.video.id },
+    })
     try {
       await process({ supabase, model, videoId: found.video.id, log: console.log })
+      logServerEvent(supabase, {
+        userId: req.user.id, projectId: found.video.project_id,
+        type: 'processing_done', payload: { videoId: found.video.id },
+      })
     } catch (err) {
       // status already set to 'failed' by processVideo; log for Railway logs
       console.error(`processing failed for ${found.video.id}:`, err)
+      logServerEvent(supabase, {
+        userId: req.user.id, projectId: found.video.project_id,
+        type: 'processing_failed', payload: { videoId: found.video.id },
+      })
     }
   })
 
@@ -91,6 +104,11 @@ export function makeVideoRoutes(supabase, deps = {}) {
     try {
       const base64 = Buffer.from(await blob.arrayBuffer()).toString('base64')
       const answer = await vqa(getModel(), base64, question)
+      // Question text is core study data (consented — design 2026-08-18).
+      logServerEvent(supabase, {
+        userId: req.user.id, projectId: found.video.project_id,
+        type: 'vqa_request', payload: { segmentId: segment.id, question },
+      })
       res.json({ answer })
     } catch (err) {
       console.error(`vqa failed for segment ${segment.id}:`, err)

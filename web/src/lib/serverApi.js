@@ -8,14 +8,21 @@ export async function serverPost(pathname, body) {
   const token = data?.session?.access_token
   if (!token) throw new Error('not_signed_in')
 
-  const res = await fetch(`${base}${pathname}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  let res
+  try {
+    res = await fetch(`${base}${pathname}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  } catch {
+    // fetch itself rejected: server down / network gone — distinguishable
+    // from an HTTP error so trial logs and messages can tell them apart.
+    throw new Error('server_unreachable')
+  }
 
   if (!res.ok) {
     let detail = ''

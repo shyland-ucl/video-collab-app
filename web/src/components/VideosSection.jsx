@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { uploadVideo } from '../lib/uploadVideo'
+import { logEvent } from '../lib/events'
 import { serverPost } from '../lib/serverApi'
 import { announce } from '../utils/announcer'
 
@@ -16,7 +17,7 @@ const STATUS_LABELS = {
 // Status pill colours (Calm Clinical tokens + Tailwind amber for "in progress").
 const STATUS_STYLES = {
   uploading: 'bg-sunken text-ink-soft',
-  processing: 'bg-amber-100 text-amber-800',
+  processing: 'bg-helper-soft text-helper',
   ready: 'bg-brand-soft text-brand-strong',
   failed: 'bg-danger-soft text-danger',
 }
@@ -127,6 +128,7 @@ export default function VideosSection({ projectId }) {
       loadVideos()
       return
     }
+    logEvent('video_upload', { videoId, sizeBytes: file.size }, projectId)
 
     try {
       await serverPost(`/api/videos/${videoId}/process`)
@@ -166,7 +168,7 @@ export default function VideosSection({ projectId }) {
         accept="video/mp4"
         disabled={progress !== null}
         onChange={handleFileChange}
-        className="mb-3 block w-full rounded-field border border-line-strong bg-surface p-2.5 text-sm text-ink-soft file:mr-3 file:rounded-field file:border-0 file:bg-brand file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-brand-strong disabled:opacity-50"
+        className="mb-3 block w-full rounded-field border border-line-strong bg-surface p-2.5 text-sm text-ink-soft file:mr-3 file:rounded-field file:border-0 file:bg-brand file:px-4 file:py-2 file:font-semibold file:text-on-brand hover:file:bg-brand-strong disabled:opacity-50"
       />
 
       {progress !== null && (

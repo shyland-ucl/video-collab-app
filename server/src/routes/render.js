@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { makeRequireAuth } from '../middleware/requireAuth.js'
 import { renderVideo } from '../services/renderVideo.js'
+import { logServerEvent } from '../services/events.js'
 import { loadLatestState } from '../services/stateStore.js'
 import { loadProjectSources } from '../services/renderData.js'
 import { buildRenderPlan } from '../services/renderPlan.js'
@@ -52,6 +53,10 @@ export function makeRenderRoutes(supabase, deps = {}) {
     if (error || !row) return res.status(500).json({ error: 'render_create_failed' })
 
     res.status(202).json({ renderId: row.id })
+    logServerEvent(supabase, {
+      userId: req.user.id, projectId: project.id,
+      type: 'render_start', payload: { renderId: row.id, edlVersion },
+    })
     try {
       await render({
         supabase,
@@ -63,9 +68,17 @@ export function makeRenderRoutes(supabase, deps = {}) {
         loadSources,
         log: console.log,
       })
+      logServerEvent(supabase, {
+        userId: req.user.id, projectId: project.id,
+        type: 'render_complete', payload: { renderId: row.id },
+      })
     } catch (err) {
       // status already set to 'failed' by renderVideo; log for Railway logs
       console.error(`render failed for project ${project.id}:`, err)
+      logServerEvent(supabase, {
+        userId: req.user.id, projectId: project.id,
+        type: 'render_failed', payload: { renderId: row.id },
+      })
     }
   })
 

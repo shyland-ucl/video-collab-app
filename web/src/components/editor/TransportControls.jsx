@@ -1,3 +1,6 @@
+// THEMING NOTE: this component is deliberately NOT swept to design tokens.
+// It is dark player chrome (like every video editor's timeline/transport),
+// identical across all app themes, so its literal dark colors stay.
 import { useCallback } from 'react'
 
 // Ported from probe src/components/shared/TransportControls.jsx (Task 10).

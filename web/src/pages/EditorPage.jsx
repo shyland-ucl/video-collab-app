@@ -672,7 +672,7 @@ export default function EditorPage() {
     // (Probe3Page `fixed inset-0 … flex flex-col overflow-hidden`). `fixed
     // inset-0` is safe here: the skip-link/announcer regions live in App.jsx
     // outside the route, and `#main` stays in the DOM as the skip target.
-    <main id="main" tabIndex={-1} className="editor-shell fixed inset-0 flex flex-col overflow-hidden bg-white">
+    <main id="main" tabIndex={-1} className="editor-shell fixed inset-0 flex flex-col overflow-hidden bg-canvas">
       <header className="mb-2 flex flex-shrink-0 items-center gap-3">
         <Link to={`/projects/${projectId}`} className="link-back shrink-0">
           <span aria-hidden="true">←</span> Project
@@ -682,7 +682,7 @@ export default function EditorPage() {
         </h1>
       </header>
       {syncDown && (
-        <p role="alert" className="flex-shrink-0 mb-3 rounded border border-red-700 bg-red-50 p-3 text-red-700">
+        <p role="alert" className="flex-shrink-0 mb-3 rounded border border-danger/50 bg-danger-soft p-3 text-danger">
           {SYNC_DOWN_TEXT}
         </p>
       )}
@@ -692,12 +692,12 @@ export default function EditorPage() {
           role between the two reads. (noScenes below has NO backing announce(),
           so it stays a role="status" live region.) */}
       {newScenes && (
-        <p aria-hidden="true" className="flex-shrink-0 mb-3 rounded border border-gray-300 p-3 text-lg">
+        <p aria-hidden="true" className="flex-shrink-0 mb-3 rounded border border-line-strong bg-surface p-3 text-lg">
           {NEW_SCENES_TEXT}
         </p>
       )}
       {noScenes && (
-        <p role="status" className="flex-shrink-0 mb-3 rounded border border-gray-300 p-3 text-lg">
+        <p role="status" className="flex-shrink-0 mb-3 rounded border border-line-strong bg-surface p-3 text-lg">
           {NO_SCENES_TEXT}
         </p>
       )}
@@ -706,7 +706,7 @@ export default function EditorPage() {
           blind creator doesn't hear every helper edit TWICE with the "status"
           role spoken in between (the global announcer is the single SR channel). */}
       {toast && (
-        <p aria-hidden="true" className="flex-shrink-0 mb-3 rounded border border-gray-300 bg-gray-50 p-3">
+        <p aria-hidden="true" className="flex-shrink-0 mb-3 rounded border border-line-strong bg-sunken p-3">
           {toast}
         </p>
       )}

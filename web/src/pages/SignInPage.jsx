@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { announce } from '../utils/announcer'
 import { safeNext } from '../lib/safeNext'
+import { logEvent } from '../lib/events'
+import StudyErrorNotice from '../components/StudyErrorNotice'
 
 const AUTH_ERRORS = {
   invalid_credentials: 'Wrong email or password.',
@@ -57,6 +59,7 @@ export default function SignInPage() {
       return
     }
     // success: AuthContext picks up the session and <Navigate> above redirects
+    logEvent('sign_in', { mode })
   }
 
   function switchMode(nextMode) {
@@ -126,6 +129,9 @@ export default function SignInPage() {
                 : 'Sign in'}
           </button>
           {error && <p id="auth-error" role="alert" className="alert-error mt-4">{error}</p>}
+          {/* GENERIC = not a user-fixable auth error — likely the study system
+              itself (paused DB, network). Tell participants who fixes it. */}
+          {error === GENERIC && <StudyErrorNotice />}
         </form>
       </div>
 
