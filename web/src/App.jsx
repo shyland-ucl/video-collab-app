@@ -5,6 +5,7 @@ import { AccessibilityProvider } from './contexts/AccessibilityContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import PageLoader from './components/PageLoader'
 import RequireAuth from './components/RequireAuth'
+import RequireAdmin from './components/RequireAdmin'
 import RouteAccessibility from './components/RouteAccessibility'
 import SignInPage from './pages/SignInPage'
 import ProjectsPage from './pages/ProjectsPage'
@@ -17,6 +18,9 @@ const ProjectPage = lazy(() => import('./pages/ProjectPage'))
 const VideoPage = lazy(() => import('./pages/VideoPage'))
 const EditorPage = lazy(() => import('./pages/EditorPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+// Researcher-only views: lazy so no participant ever downloads them.
+const AdminPage = lazy(() => import('./pages/AdminPage'))
+const AdminProjectPage = lazy(() => import('./pages/AdminProjectPage'))
 
 export default function App() {
   return (
@@ -42,6 +46,14 @@ export default function App() {
             <Route path="/projects/:id" element={<RequireAuth><ProjectPage /></RequireAuth>} />
             <Route path="/projects/:projectId/videos/:videoId" element={<RequireAuth><VideoPage /></RequireAuth>} />
             <Route path="/projects/:projectId/edit" element={<RequireAuth><EditorPage /></RequireAuth>} />
+            <Route
+              path="/admin"
+              element={<RequireAuth><RequireAdmin><AdminPage /></RequireAdmin></RequireAuth>}
+            />
+            <Route
+              path="/admin/projects/:id"
+              element={<RequireAuth><RequireAdmin><AdminProjectPage /></RequireAdmin></RequireAuth>}
+            />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Suspense>

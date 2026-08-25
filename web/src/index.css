@@ -219,6 +219,10 @@ html[data-theme="hc-light"] {
 @layer components {
   /* Layout ---------------------------------------------------------------- */
   .page { @apply mx-auto w-full max-w-lg px-5 py-7 sm:px-6; }
+  /* Researcher-only views (the admin dashboard and project inspector). Wider
+     than .page because they are read on a laptop and show side-by-side
+     roll-ups, not the one-column participant flow. */
+  .page-wide { @apply mx-auto w-full max-w-4xl px-5 py-7 sm:px-6; }
   .editor-shell {
     padding-top: max(1rem, env(safe-area-inset-top));
     padding-right: max(1rem, env(safe-area-inset-right));
@@ -270,5 +274,12 @@ html[data-theme="hc-light"] {
   .alert-error {
     @apply rounded-field border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-sm font-medium;
     color: var(--color-danger);
+  }
+  /* Marks a view the signed-in account may look at but not change (the
+     researcher observing a participant's project). Distinct from .alert-error:
+     nothing has gone wrong. */
+  .alert-readonly {
+    @apply rounded-field border border-line-strong bg-sunken px-3.5 py-2.5 text-sm font-semibold text-ink-soft;
+    border-width: var(--border-w);
   }
 }

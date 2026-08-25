@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { announce } from '../utils/announcer'
@@ -7,9 +7,9 @@ import VideosSection from '../components/VideosSection'
 
 export default function ProjectPage() {
   const { id } = useParams()
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
   const [project, setProject] = useState(null)
-  const [members, setMembers] = useState([])
+  const [members, setMembers] = useState(null) // null = not loaded yet
   const [invite, setInvite] = useState(null) // { code, expires_at }
   const [hasReadyVideo, setHasReadyVideo] = useState(false)
   const [error, setError] = useState(null)
@@ -72,12 +72,20 @@ export default function ProjectPage() {
       </main>
     )
   }
-  if (!project) {
+  if (!project || members === null) {
     return (
       <main id="main" tabIndex={-1} className="page">
         <p role="status" className="muted">Loading…</p>
       </main>
     )
+  }
+
+  // The researcher admin can read every project (migration 0015) but belongs to
+  // none, so this participant page would offer them upload/invite/editor
+  // controls the database will refuse. Send them to the read-only inspector
+  // instead — same project, a view built for observing it.
+  if (isAdmin && !members.some((m) => m.user_id === user?.id)) {
+    return <Navigate to={`/admin/projects/${id}`} replace />
   }
 
   return (

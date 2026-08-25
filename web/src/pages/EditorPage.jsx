@@ -83,7 +83,7 @@ export default function EditorPage() {
   // Optional ?video=<id>: the editor still loads the whole-project timeline,
   // but the creator device jumps to that video's first scene on mount.
   const initialVideoId = searchParams.get('video') || null
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
   const userId = user?.id
 
   const [role, setRole] = useState(null)
@@ -650,7 +650,16 @@ export default function EditorPage() {
     return (
       <main id="main" tabIndex={-1} className="mx-auto max-w-lg p-4">
         <p role="alert">{error}</p>
-        <Link to={`/projects/${projectId}`} className="underline">Back to project</Link>
+        {/* The researcher admin can READ every project but is a member of none,
+            so they land here. The editor is a write surface and stays closed to
+            them; point them at the read-only inspector instead. */}
+        {isAdmin && error === MEMBER_ERROR_TEXT ? (
+          <Link to={`/admin/projects/${projectId}`} className="underline">
+            Open the read-only researcher view
+          </Link>
+        ) : (
+          <Link to={`/projects/${projectId}`} className="underline">Back to project</Link>
+        )}
       </main>
     )
   }

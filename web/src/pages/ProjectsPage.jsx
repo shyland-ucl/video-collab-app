@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
@@ -11,7 +11,7 @@ const JOIN_ERRORS = {
 }
 
 export default function ProjectsPage() {
-  const { user, signOut } = useAuth()
+  const { user, isAdmin, signOut } = useAuth()
   const [projects, setProjects] = useState(null) // null = loading
   const [title, setTitle] = useState('')
   const [creating, setCreating] = useState(false)
@@ -22,10 +22,32 @@ export default function ProjectsPage() {
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState(null)
 
-  async function loadProjects() {
+  // "Your projects" is scoped explicitly rather than leaning on RLS to filter.
+  // For a participant the two are identical, but the researcher admin can SELECT
+  // every project (migration 0015) — without this filter their own list would
+  // fill up with the whole trial. Cross-project visibility belongs on /admin.
+  const loadProjects = useCallback(async () => {
+    if (!user?.id) return
+    const { data: memberships, error: memberErr } = await supabase
+      .from('project_members')
+      .select('project_id')
+      .eq('user_id', user.id)
+    if (memberErr) {
+      setError(memberErr.message)
+      setProjects([])
+      return
+    }
+    const ids = (memberships ?? []).map((m) => m.project_id)
+    // Owner is always inserted as a creator-member by the on_project_created
+    // trigger, so `ids` normally covers ownership too — the owner_id clause is
+    // the belt to that braces, and keeps the filter valid when ids is empty.
+    const filters = [`owner_id.eq.${user.id}`]
+    if (ids.length > 0) filters.push(`id.in.(${ids.join(',')})`)
+
     const { data, error } = await supabase
       .from('projects')
       .select('id, title, status, created_at, owner_id')
+      .or(filters.join(','))
       .order('created_at', { ascending: false })
     if (error) {
       setError(error.message)
@@ -34,11 +56,11 @@ export default function ProjectsPage() {
       setError(null)
       setProjects(data)
     }
-  }
+  }, [user?.id])
 
   useEffect(() => {
     loadProjects()
-  }, [])
+  }, [loadProjects])
 
   async function handleCreate(e) {
     e.preventDefault()
@@ -92,6 +114,11 @@ export default function ProjectsPage() {
           <h1 className="page-title mt-1">Your projects</h1>
         </div>
         <div className="flex w-full items-center gap-2 sm:w-auto">
+          {isAdmin && (
+            <Link to="/admin" className="btn btn-ghost flex-1 sm:flex-none">
+              Trial dashboard
+            </Link>
+          )}
           <Link to="/settings" className="btn btn-ghost flex-1 sm:flex-none">
             Settings
           </Link>

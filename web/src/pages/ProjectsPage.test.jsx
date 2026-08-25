@@ -3,24 +3,31 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
-const { mockOrder, mockSingle, mockInsert, mockRpc } = vi.hoisted(() => {
+// The list is built from two queries: own memberships, then the projects those
+// ids (or ownership) resolve to. The mock is table-aware so each assertion can
+// target the query it cares about.
+const { mockOrder, mockOr, mockMemberships, mockSingle, mockInsert, mockRpc } = vi.hoisted(() => {
   const mockOrder = vi.fn()
+  const mockOr = vi.fn(() => ({ order: mockOrder }))
+  const mockMemberships = vi.fn()
   const mockSingle = vi.fn()
   const mockInsert = vi.fn(() => ({ select: vi.fn(() => ({ single: mockSingle })) }))
   const mockRpc = vi.fn()
-  return { mockOrder, mockSingle, mockInsert, mockRpc }
+  return { mockOrder, mockOr, mockMemberships, mockSingle, mockInsert, mockRpc }
 })
 vi.mock('../lib/supabaseClient', () => ({
   supabase: {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({ order: mockOrder })),
-      insert: mockInsert,
-    })),
+    from: vi.fn((table) =>
+      table === 'project_members'
+        ? { select: vi.fn(() => ({ eq: mockMemberships })) }
+        : { select: vi.fn(() => ({ or: mockOr })), insert: mockInsert }
+    ),
     rpc: mockRpc,
   },
 }))
+const authState = { user: { id: 'u1' }, isAdmin: false }
 vi.mock('../contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'u1' }, signOut: vi.fn() }),
+  useAuth: () => ({ ...authState, signOut: vi.fn() }),
 }))
 vi.mock('../utils/announcer', () => ({ announce: vi.fn() }))
 
@@ -41,6 +48,8 @@ function renderPage() {
 describe('ProjectsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    authState.isAdmin = false
+    mockMemberships.mockResolvedValue({ data: [], error: null })
   })
 
   it('shows the empty state when there are no projects', async () => {
@@ -77,6 +86,43 @@ describe('ProjectsPage', () => {
     expect(mockInsert).toHaveBeenCalledWith({ title: 'New film', owner_id: 'u1' })
   })
 
+  // Regression guard for the admin role (migration 0015): the researcher can
+  // SELECT every project, so "Your projects" must filter by own membership
+  // rather than leaning on RLS to do it.
+  it('scopes the list to projects the user owns or belongs to', async () => {
+    mockMemberships.mockResolvedValue({
+      data: [{ project_id: 'p1' }, { project_id: 'p2' }],
+      error: null,
+    })
+    mockOrder.mockResolvedValue({ data: [], error: null })
+    renderPage()
+    await screen.findByText(/No projects yet/)
+    expect(mockOr).toHaveBeenCalledWith('owner_id.eq.u1,id.in.(p1,p2)')
+  })
+
+  it('still filters by ownership when the user belongs to no project', async () => {
+    mockMemberships.mockResolvedValue({ data: [], error: null })
+    mockOrder.mockResolvedValue({ data: [], error: null })
+    renderPage()
+    await screen.findByText(/No projects yet/)
+    expect(mockOr).toHaveBeenCalledWith('owner_id.eq.u1')
+  })
+
+  it('hides the trial dashboard link from participants', async () => {
+    mockOrder.mockResolvedValue({ data: [], error: null })
+    renderPage()
+    await screen.findByText(/No projects yet/)
+    expect(screen.queryByRole('link', { name: 'Trial dashboard' })).not.toBeInTheDocument()
+  })
+
+  it('offers the trial dashboard link to the researcher admin', async () => {
+    authState.isAdmin = true
+    mockOrder.mockResolvedValue({ data: [], error: null })
+    renderPage()
+    await screen.findByText(/No projects yet/)
+    expect(screen.getByRole('link', { name: 'Trial dashboard' })).toHaveAttribute('href', '/admin')
+  })
+
   it('announces failure when create errors', async () => {
     mockOrder.mockResolvedValue({ data: [], error: null })
     mockSingle.mockResolvedValue({ data: null, error: { message: 'nope' } })
@@ -92,6 +138,8 @@ describe('ProjectsPage', () => {
 describe('ProjectsPage — join with a code', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    authState.isAdmin = false
+    mockMemberships.mockResolvedValue({ data: [], error: null })
     mockOrder.mockResolvedValue({ data: [], error: null })
   })
 

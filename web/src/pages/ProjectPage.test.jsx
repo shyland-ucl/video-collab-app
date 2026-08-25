@@ -42,8 +42,9 @@ vi.mock('../lib/supabaseClient', () => ({
   },
 }))
 
+const authState = { user: { id: 'u1' }, isAdmin: false }
 vi.mock('../contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'u1' } }),
+  useAuth: () => authState,
 }))
 
 vi.mock('../utils/announcer', () => ({ announce: vi.fn() }))
@@ -60,6 +61,7 @@ function renderAt(projectId = 'p1') {
     <MemoryRouter initialEntries={[`/projects/${projectId}`]}>
       <Routes>
         <Route path="/projects/:id" element={<ProjectPage />} />
+        <Route path="/admin/projects/:id" element={<p>Researcher inspector stub</p>} />
       </Routes>
     </MemoryRouter>
   )
@@ -74,7 +76,37 @@ const MEMBERS = [
 describe('ProjectPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    authState.isAdmin = false
     mockReadyVideosLimit.mockResolvedValue({ data: [], error: null })
+  })
+
+  // The researcher can read every project but is a member of none, so this
+  // page would otherwise offer them upload/invite/editor controls the database
+  // refuses. They belong on the read-only inspector instead.
+  it('sends the researcher admin to the read-only inspector', async () => {
+    authState.isAdmin = true
+    mockProjectSingle.mockResolvedValue({
+      data: { id: 'p1', title: 'Their film', owner_id: 'u9' },
+      error: null,
+    })
+    mockMembersEq.mockResolvedValue({
+      data: [{ user_id: 'u9', role: 'creator' }],
+      error: null,
+    })
+
+    renderAt()
+
+    expect(await screen.findByText('Researcher inspector stub')).toBeInTheDocument()
+  })
+
+  it('keeps the researcher admin on the normal page for their own project', async () => {
+    authState.isAdmin = true
+    mockProjectSingle.mockResolvedValue({ data: PROJECT, error: null })
+    mockMembersEq.mockResolvedValue({ data: MEMBERS, error: null })
+
+    renderAt()
+
+    expect(await screen.findByText('My film')).toBeInTheDocument()
   })
 
   it('renders project title and members with "(you)" marker after load', async () => {
