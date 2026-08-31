@@ -40,6 +40,29 @@ describe('planSegments', () => {
     expect(plans[10].id).toBe('seg_011')
   })
 
+  // Regression: a sliver tail segment used to be planned inside the gap between
+  // the CONTAINER duration ffprobe reports and the last decodable video frame
+  // (audio commonly outlasts video). That segment decodes to zero frames, so
+  // ffmpeg exits 0 and writes no keyframe — surfacing later as an opaque
+  // "ENOENT ... seg_004_kf.jpg" when the keyframe is read.
+  it('folds a sliver tail into the previous segment instead of planning a frameless one', () => {
+    const plans = planSegments(15.01, 5)
+    expect(plans).toHaveLength(3)
+    expect(plans[2]).toMatchObject({ id: 'seg_003', start_seconds: 10, end_seconds: 15.01 })
+  })
+
+  it('keeps a tail long enough to hold real frames as its own segment', () => {
+    const plans = planSegments(16.2, 5)
+    expect(plans).toHaveLength(4)
+    expect(plans[3]).toMatchObject({ start_seconds: 15, end_seconds: 16.2 })
+  })
+
+  it('never folds away the only segment of a very short video', () => {
+    const plans = planSegments(0.4, 5)
+    expect(plans).toHaveLength(1)
+    expect(plans[0]).toMatchObject({ start_seconds: 0, end_seconds: 0.4 })
+  })
+
   it('rejects nonsense inputs', () => {
     expect(() => planSegments(0, 5)).toThrow()
     expect(() => planSegments(10, 0)).toThrow()
@@ -114,6 +137,16 @@ describe('cutSegment', () => {
     const modelStat = await fs.stat(modelClipFile)
     expect(modelStat.size).toBeGreaterThan(0)
     expect(modelClipFile.endsWith('seg_001_model.mp4')).toBe(true)
+  }, 60000)
+
+  // ffmpeg exits 0 after encoding zero frames, so a bad plan used to leave the
+  // caller with a missing file and no explanation. Fail at the ffmpeg call.
+  it('fails loudly when ffmpeg encodes zero frames rather than leaving no file', async () => {
+    const [plan] = planSegments(6, 3)
+    // distinct id: reusing seg_001 would find the previous test's keyframe on
+    // disk, which is exactly the stale-artefact case the check must not miss.
+    const pastEnd = { ...plan, id: 'seg_past_end', start_seconds: 6, end_seconds: 6.01, midpoint: 6.005 }
+    await expect(cutSegment(clipPath, workDir, pastEnd)).rejects.toThrow(/ffmpeg_no_output/)
   }, 60000)
 })
 

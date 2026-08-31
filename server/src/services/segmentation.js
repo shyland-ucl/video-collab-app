@@ -1,14 +1,28 @@
 import path from 'node:path'
-import { runFfmpeg, x264ThreadArgs } from './ffmpegRun.js'
+import { runFfmpeg, runFfmpegTo, x264ThreadArgs } from './ffmpegRun.js'
+
+// ffprobe reports the CONTAINER duration, which routinely runs past the last
+// decodable video frame (phone videos commonly end with a sliver of audio-only
+// tail). Math.ceil would plan a segment inside that gap; it decodes to ZERO
+// frames, and ffmpeg then exits 0 while writing no keyframe at all — the
+// failure only surfaced downstream as "ENOENT ... seg_NNN_kf.jpg". Fold a tail
+// that short into the previous segment, mirroring what boundariesToScenes
+// already does via minLen. 1s is comfortably above any container/stream gap
+// and well below a scene worth describing.
+const MIN_TAIL_SECONDS = 1
 
 export function planSegments(totalDuration, segmentLength) {
   if (!Number.isFinite(totalDuration) || totalDuration <= 0) throw new Error('bad_duration')
   if (!Number.isFinite(segmentLength) || segmentLength <= 0) throw new Error('bad_segment_length')
 
-  const count = Math.ceil(totalDuration / segmentLength)
+  let count = Math.ceil(totalDuration / segmentLength)
+  // count > 1 guard: a video shorter than MIN_TAIL_SECONDS is still one scene.
+  if (count > 1 && totalDuration - (count - 1) * segmentLength < MIN_TAIL_SECONDS) count -= 1
+
   return Array.from({ length: count }, (_, i) => {
     const start = i * segmentLength
-    const end = Math.min((i + 1) * segmentLength, totalDuration)
+    // The absorbing last segment runs to the end, so it may exceed segmentLength.
+    const end = i === count - 1 ? totalDuration : (i + 1) * segmentLength
     return {
       id: `seg_${String(i + 1).padStart(3, '0')}`,
       idx: i + 1,
@@ -222,9 +236,9 @@ export async function cutSegment(sourceFile, outDir, plan) {
   const kfFile = path.join(outDir, `${plan.id}_kf.jpg`)
   const modelClipFile = path.join(outDir, `${plan.id}_model.mp4`)
 
-  await runFfmpeg(buildSegmentArgs(sourceFile, segFile, plan))
-  await runFfmpeg(buildKeyframeArgs(sourceFile, kfFile, plan))
-  await runFfmpeg(buildModelClipArgs(sourceFile, modelClipFile, plan))
+  await runFfmpegTo(segFile, buildSegmentArgs(sourceFile, segFile, plan))
+  await runFfmpegTo(kfFile, buildKeyframeArgs(sourceFile, kfFile, plan))
+  await runFfmpegTo(modelClipFile, buildModelClipArgs(sourceFile, modelClipFile, plan))
 
   return { segFile, kfFile, modelClipFile }
 }

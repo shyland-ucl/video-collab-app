@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import { promisify } from 'node:util'
 import ffmpegPath from 'ffmpeg-static'
 
@@ -40,6 +42,24 @@ export const EXEC_OPTS = {
 }
 
 export const runFfmpeg = (args, opts = EXEC_OPTS) => execFileAsync(ffmpegPath, args, opts)
+
+// execFile only rejects on a NON-ZERO exit, but ffmpeg exits 0 after encoding
+// zero frames: it logs "Output file is empty, nothing was encoded" and, for the
+// image2 muxer, never creates the output file at all. A caller that then read
+// that file got a bare "ENOENT ... seg_NNN_kf.jpg" pointing at a temp dir that
+// no longer exists. Assert the artefact we asked ffmpeg for actually landed, so
+// the failure names itself at the call that caused it.
+export async function runFfmpegTo(outFile, args, opts = EXEC_OPTS) {
+  const result = await runFfmpeg(args, opts)
+  const size = await fs.stat(outFile).then((s) => s.size).catch(() => -1)
+  if (size <= 0) {
+    throw new Error(
+      `ffmpeg_no_output: ${path.basename(outFile)} not written — ffmpeg encoded 0 frames ` +
+      '(seek past the end of the video stream?)'
+    )
+  }
+  return result
+}
 
 // Previously the catch blocks stored only err.message: for a signalled child
 // that is just "Command failed: <cmd> <stderr>" with NO exit code or signal — so
