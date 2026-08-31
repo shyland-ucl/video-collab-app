@@ -434,6 +434,7 @@ export default function SceneActions({
               placeholder="Ask a question about this scene..."
               announcement="Speak now. Ask your question."
               submitLabel="Ask"
+              tone="ai"
               inputAriaLabel="Your question"
             />
             {vqaPending && <p className="text-sm text-ink-soft italic" aria-live="polite">Getting the answer...</p>}
@@ -619,7 +620,8 @@ export default function SceneActions({
               disabled={aiEditPending}
               placeholder="Describe what you want done..."
               announcement="Speak now. Describe the edit."
-              submitLabel="Ask AI"
+              submitLabel="Send"
+              tone="ai"
               inputAriaLabel="Task description"
             />
             {aiEditPending && <p className="text-sm text-ink-soft italic" aria-live="polite">AI is working...</p>}

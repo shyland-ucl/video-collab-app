@@ -32,6 +32,13 @@ import useSpeechRecognition from '../../hooks/useSpeechRecognition'
  *                   (per-context, e.g. "Speak now. Ask your question.").
  *   submitLabel     visible + aria text for the submit button (e.g. "Ask").
  *   inputAriaLabel  aria-label for the text input.
+ *   tone            which accent the SEND button carries: 'creator' (purple,
+ *                   default) or 'ai' (amber). All three ask surfaces share this
+ *                   composer, so a hardcoded fill put a purple send button
+ *                   inside the amber "Ask AI to Edit" panel. Amber now means
+ *                   you are asking the AI, purple that you are asking a person.
+ *                   Both keep text-on-accent, which index.css defines per theme
+ *                   as the text colour for solid creator/helper fills.
  *   submitOnVoice   true (default) → a recognised transcript auto-submits
  *                   immediately (probe InlineVQAComposer: VQA + Ask AI to Edit).
  *                   false → the transcript FILLS the text input and waits for an
@@ -55,6 +62,7 @@ export default function VoiceComposer({
   submitLabel = 'Send',
   inputAriaLabel = 'Type your message',
   submitOnVoice = true,
+  tone = 'creator',
 }) {
   const [input, setInput] = useState('')
   const voiceButtonRef = useRef(null)
@@ -139,6 +147,7 @@ export default function VoiceComposer({
   // in-flight request never blurs the focused control to <body>. Click
   // handlers gate on `disabled` so a tap during pending is a no-op.
   const submitDisabled = !input.trim() || disabled
+  const submitFill = tone === 'ai' ? 'bg-helper' : 'bg-creator'
   return (
     <div className="flex gap-2">
       <button
@@ -186,7 +195,7 @@ export default function VoiceComposer({
         onClick={handleSubmitClick}
         aria-label={submitLabel}
         aria-disabled={submitDisabled || undefined}
-        className={`px-4 py-2 rounded bg-creator text-on-accent text-sm font-bold transition-colors ${
+        className={`px-4 py-2 rounded ${submitFill} text-on-accent text-sm font-bold transition-colors ${
           submitDisabled ? 'opacity-50 cursor-not-allowed' : ''
         }`}
         style={{ minHeight: '44px' }}

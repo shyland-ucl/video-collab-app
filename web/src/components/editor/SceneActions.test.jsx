@@ -366,7 +366,7 @@ describe('SceneActions — ask AI to edit (confirm-first)', () => {
     await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
     const panel = screen.getByRole('group', { name: /ask ai to edit/i })
     await userEvent.type(within(panel).getByRole('textbox'), 'remove this scene')
-    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+    await userEvent.click(within(panel).getByRole('button', { name: /^send$/i }))
 
     // POST to the project ai-edit endpoint with { request, clips }.
     expect(mockServerPost).toHaveBeenCalledTimes(1)
@@ -398,7 +398,7 @@ describe('SceneActions — ask AI to edit (confirm-first)', () => {
     await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
     const panel = screen.getByRole('group', { name: /ask ai to edit/i })
     await userEvent.type(within(panel).getByRole('textbox'), 'delete the second scene')
-    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+    await userEvent.click(within(panel).getByRole('button', { name: /^send$/i }))
 
     // The request body carries the WHOLE timeline (not just the focused clip)
     // plus focused_clip_id naming the scene the request came from.
@@ -427,7 +427,7 @@ describe('SceneActions — ask AI to edit (confirm-first)', () => {
     await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
     const panel = screen.getByRole('group', { name: /ask ai to edit/i })
     await userEvent.type(within(panel).getByRole('textbox'), 'edit it')
-    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+    await userEvent.click(within(panel).getByRole('button', { name: /^send$/i }))
 
     await screen.findByText('Which scene do you mean?')
     expect(mockAnnounce).toHaveBeenCalledWith('Which scene do you mean?')
@@ -447,7 +447,7 @@ describe('SceneActions — ask AI to edit (confirm-first)', () => {
     await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
     const panel = screen.getByRole('group', { name: /ask ai to edit/i })
     await userEvent.type(within(panel).getByRole('textbox'), 'make it brighter')
-    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+    await userEvent.click(within(panel).getByRole('button', { name: /^send$/i }))
     await screen.findByText('Which scene would you like to make brighter?')
 
     // First request carried no history.
@@ -455,7 +455,7 @@ describe('SceneActions — ask AI to edit (confirm-first)', () => {
 
     // Answer the clarifying question in the same (now-cleared) box.
     await userEvent.type(within(panel).getByRole('textbox'), 'scene 1')
-    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+    await userEvent.click(within(panel).getByRole('button', { name: /^send$/i }))
 
     expect(mockServerPost).toHaveBeenCalledTimes(2)
     const secondBody = mockServerPost.mock.calls[1][1]
@@ -474,7 +474,7 @@ describe('SceneActions — ask AI to edit (confirm-first)', () => {
     await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
     let panel = screen.getByRole('group', { name: /ask ai to edit/i })
     await userEvent.type(within(panel).getByRole('textbox'), 'edit it')
-    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+    await userEvent.click(within(panel).getByRole('button', { name: /^send$/i }))
     await screen.findByText('Which scene do you mean?')
 
     // Close then reopen the panel — the next request starts a clean exchange.
@@ -482,7 +482,7 @@ describe('SceneActions — ask AI to edit (confirm-first)', () => {
     await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
     panel = screen.getByRole('group', { name: /ask ai to edit/i })
     await userEvent.type(within(panel).getByRole('textbox'), 'do something else')
-    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+    await userEvent.click(within(panel).getByRole('button', { name: /^send$/i }))
 
     expect(mockServerPost.mock.calls[1][1].history).toEqual([])
   })
@@ -495,7 +495,7 @@ describe('SceneActions — ask AI to edit (confirm-first)', () => {
     await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
     const panel = screen.getByRole('group', { name: /ask ai to edit/i })
     await userEvent.type(within(panel).getByRole('textbox'), 'delete this scene')
-    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+    await userEvent.click(within(panel).getByRole('button', { name: /^send$/i }))
     const dialog = await screen.findByRole('alertdialog')
     await userEvent.click(within(dialog).getByRole('button', { name: /^confirm/i }))
 
@@ -552,5 +552,35 @@ describe('SceneActions — VQA (Ask AI about scene)', () => {
     await userEvent.click(within(panel).getByRole('button', { name: /^ask$/i }))
 
     expect(mockServerPost.mock.calls[0][0]).toBe('/api/segments/s1/vqa')
+  })
+})
+
+describe('SceneActions — ask-panel send buttons', () => {
+  // "Ask AI" duplicated the toggle and the group label, so a screen reader
+  // announced the intent three times over: "Ask AI to Edit … Ask AI, button".
+  it('the AI Edit panel sends with a short, non-duplicated label', async () => {
+    renderActions()
+    await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
+    const panel = screen.getByRole('group', { name: /ask ai to edit/i })
+
+    expect(within(panel).getByRole('button', { name: /^send$/i })).toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: /^ask ai$/i })).not.toBeInTheDocument()
+  })
+
+  // Amber means you are asking the AI; purple means you are asking a person.
+  it('both AI panels send in the AI accent, and the helper panel stays purple', async () => {
+    renderActions()
+
+    await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
+    const aiEdit = screen.getByRole('group', { name: /ask ai to edit/i })
+    expect(within(aiEdit).getByRole('button', { name: /^send$/i })).toHaveClass('bg-helper')
+
+    await userEvent.click(screen.getByRole('button', { name: /ask ai about scene/i }))
+    const vqa = screen.getByRole('group', { name: /ask ai about scene/i })
+    expect(within(vqa).getByRole('button', { name: /^ask$/i })).toHaveClass('bg-helper')
+
+    await userEvent.click(screen.getByRole('button', { name: /ask helper to edit/i }))
+    const helper = screen.getByRole('group', { name: /ask helper/i })
+    expect(within(helper).getByRole('button', { name: /send to helper/i })).toHaveClass('bg-creator')
   })
 })

@@ -199,3 +199,31 @@ describe('VoiceComposer — submitOnVoice (per-surface voice behaviour)', () => 
     expect(onSubmit).toHaveBeenCalledWith('trim the noisy intro')
   })
 })
+
+// The three ask surfaces share this composer, so its submit button used to be
+// purple everywhere — including inside the amber "Ask AI to Edit" panel. The
+// tone prop lets the send button carry its panel's accent: amber means you are
+// asking the AI, purple means you are asking a person.
+describe('VoiceComposer — tone', () => {
+  const submitButton = () => screen.getByRole('button', { name: /^send$/i })
+
+  it('uses the creator accent by default', () => {
+    render(<VoiceComposer onSubmit={vi.fn()} submitLabel="Send" />)
+    expect(submitButton()).toHaveClass('bg-creator')
+  })
+
+  it('uses the AI accent when the surface is an AI one', () => {
+    render(<VoiceComposer onSubmit={vi.fn()} submitLabel="Send" tone="ai" />)
+    expect(submitButton()).toHaveClass('bg-helper')
+    expect(submitButton()).not.toHaveClass('bg-creator')
+  })
+
+  // --color-on-accent is defined per theme as the text colour for solid
+  // creator/helper fills, so both tones stay contrast-safe in all four themes.
+  it('keeps the on-accent text colour in both tones', () => {
+    const { rerender } = render(<VoiceComposer onSubmit={vi.fn()} submitLabel="Send" />)
+    expect(submitButton()).toHaveClass('text-on-accent')
+    rerender(<VoiceComposer onSubmit={vi.fn()} submitLabel="Send" tone="ai" />)
+    expect(submitButton()).toHaveClass('text-on-accent')
+  })
+})

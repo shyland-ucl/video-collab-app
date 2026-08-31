@@ -416,7 +416,7 @@ describe('CreatorDevice — ask AI (confirm-first, full timeline)', () => {
     await userEvent.click(region.getByRole('button', { name: /ask ai to edit/i }))
     const panel = region.getByRole('group', { name: /ask ai to edit/i })
     await userEvent.type(within(panel).getByRole('textbox'), 'remove the tasting shot')
-    await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
+    await userEvent.click(within(panel).getByRole('button', { name: /^send$/i }))
 
     // FULL timeline forwarded + focused_clip_id naming the open scene.
     expect(mockServerPost).toHaveBeenCalledTimes(1)
