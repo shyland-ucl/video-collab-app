@@ -78,6 +78,14 @@ export default function EditorTimeline({
   currentTime = 0,
   colour = {},
   applyAndSave,
+  // Deliberate timeline edits save through the RECORDING variant so the
+  // toolbar's Undo can reverse them; it falls back to the plain save so a
+  // caller that has no history still works.
+  applyAndSaveUndoable = applyAndSave,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
   onSeek,
   onTextTool,
   textToolActive,
@@ -142,8 +150,8 @@ export default function EditorTimeline({
     const id = clip.id
     setPendingDelete(null)
     setSelectedClipIndex(null)
-    applyAndSave((s) => deleteClip(s, id), `Deleted clip: ${clip.name}`)
-  }, [pendingDelete, applyAndSave])
+    applyAndSaveUndoable((s) => deleteClip(s, id), `Deleted clip: ${clip.name}`)
+  }, [pendingDelete, applyAndSaveUndoable])
 
   const handleSplit = useCallback(() => {
     if (selectedClipIndex === null) return
@@ -160,8 +168,8 @@ export default function EditorTimeline({
       return
     }
     const id = clip.id
-    applyAndSave((s) => splitClip(s, id, splitAt), `Split ${clip.name} at ${splitAt.toFixed(1)} seconds`)
-  }, [selectedClipIndex, clips, clipLayouts, currentTime, applyAndSave])
+    applyAndSaveUndoable((s) => splitClip(s, id, splitAt), `Split ${clip.name} at ${splitAt.toFixed(1)} seconds`)
+  }, [selectedClipIndex, clips, clipLayouts, currentTime, applyAndSaveUndoable])
 
   const handleMove = useCallback((direction) => {
     if (selectedClipIndex === null) return
@@ -172,14 +180,14 @@ export default function EditorTimeline({
     const newIndex = dir === 'up' ? selectedClipIndex - 1 : selectedClipIndex + 1
     if (newIndex < 0 || newIndex >= clips.length) return
     setSelectedClipIndex(newIndex)
-    applyAndSave((s) => moveClip(s, id, dir), `Moved ${clip.name} ${dir === 'up' ? 'earlier' : 'later'}`)
-  }, [selectedClipIndex, clips, applyAndSave])
+    applyAndSaveUndoable((s) => moveClip(s, id, dir), `Moved ${clip.name} ${dir === 'up' ? 'earlier' : 'later'}`)
+  }, [selectedClipIndex, clips, applyAndSaveUndoable])
 
   const handleTrim = useCallback((clipId, edge, direction) => {
     const clip = clips.find((c) => c.id === clipId)
     if (!clip) return
-    applyAndSave(makeTrimOp(clipId, edge, direction), `Trimmed ${clip.name}`)
-  }, [clips, applyAndSave])
+    applyAndSaveUndoable(makeTrimOp(clipId, edge, direction), `Trimmed ${clip.name}`)
+  }, [clips, applyAndSaveUndoable])
 
   const handleAddCaption = useCallback(() => {
     const text = captionText.trim()
@@ -188,8 +196,8 @@ export default function EditorTimeline({
     if (!clip) return
     const id = clip.id
     setCaptionText('')
-    applyAndSave((s) => addCaption(s, id, text), `Added caption: "${text}"`)
-  }, [captionText, selectedClip, activeToolClip, applyAndSave])
+    applyAndSaveUndoable((s) => addCaption(s, id, text), `Added caption: "${text}"`)
+  }, [captionText, selectedClip, activeToolClip, applyAndSaveUndoable])
 
   // ---- Colour: commit (slider release / change-end), persists per scene ----
   const colourValues = useMemo(() => {
@@ -208,14 +216,14 @@ export default function EditorTimeline({
       const { [property]: _omit, ...rest } = p
       return rest
     })
-    applyAndSave(
+    applyAndSaveUndoable(
       (s) => ({
         ...s,
         colour: { ...s.colour, [sceneId]: { ...(s.colour?.[sceneId] || {}), [property]: numVal } },
       }),
       summarizeVisualAdjustment(property, numVal, 'Helper').announcement,
     )
-  }, [activeToolClip, applyAndSave])
+  }, [activeToolClip, applyAndSaveUndoable])
 
   // ---- Sound: mute toggle + scene-volume commit (probe Sound panel) ----
   // Target scene = the colour/visual target (selection, else playhead clip).
@@ -237,11 +245,11 @@ export default function EditorTimeline({
     const id = activeToolClip.id
     const next = !getClipMuted({ clips }, id)
     const label = soundSceneNumber ?? '?'
-    applyAndSave(
+    applyAndSaveUndoable(
       (s) => setClipMuted(s, id, next),
       next ? `Helper muted scene ${label}` : `Helper unmuted scene ${label}`,
     )
-  }, [activeToolClip, clips, soundSceneNumber, applyAndSave])
+  }, [activeToolClip, clips, soundSceneNumber, applyAndSaveUndoable])
 
   const commitVolume = useCallback((value) => {
     if (!activeToolClip) return
@@ -252,8 +260,8 @@ export default function EditorTimeline({
     const announceText = numVal === 0
       ? `Helper muted scene ${label}`
       : `Helper set scene ${label} volume to ${numVal}%`
-    applyAndSave((s) => setClipVolume(s, id, numVal), announceText)
-  }, [activeToolClip, soundSceneNumber, applyAndSave])
+    applyAndSaveUndoable((s) => setClipVolume(s, id, numVal), announceText)
+  }, [activeToolClip, soundSceneNumber, applyAndSaveUndoable])
 
   // ---- Keyboard ----
   const handleTimelineKeyDown = (e) => {
@@ -293,6 +301,9 @@ export default function EditorTimeline({
         className="flex flex-wrap items-center gap-1.5 p-2"
         style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}
       >
+        <ToolbarButton onClick={onUndo} disabled={!canUndo} label="Undo last edit">Undo</ToolbarButton>
+        <ToolbarButton onClick={onRedo} disabled={!canRedo} label="Redo last undone edit">Redo</ToolbarButton>
+        <div className="border-l border-white/30 h-6 mx-1" aria-hidden="true" />
         <ToolbarButton onClick={handleSplit} disabled={selectedClipIndex === null} label="Split clip at playhead">Split</ToolbarButton>
         <ToolbarButton onClick={handleDelete} disabled={selectedClipIndex === null} label="Delete selected clip">Delete</ToolbarButton>
         {selectedClipIndex !== null && (

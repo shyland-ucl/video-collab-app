@@ -247,20 +247,34 @@ describe('SceneActions — edit by myself', () => {
     expect(screen.getByRole('button', { name: /unmute the original audio for scene 1/i })).toBeInTheDocument()
   })
 
-  it('Undo applies a non-rebasable state-replacing op', async () => {
-    const { props } = renderActions()
+  // The stack itself lives in EditorPage (useEditHistory) — these buttons are
+  // its trigger. The non-rebasable state-replacement contract is covered in
+  // useEditHistory.test.js; what SceneActions owes is the wiring.
+  it('Undo asks the project-wide history to reverse the last edit', async () => {
+    const onUndo = vi.fn()
+    renderActions({ canUndo: true, onUndo })
     await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
-    // Seed the undo stack with a panel-preserving edit (Trim keeps the panel
-    // open; Delete closes it). The real applyAndSave invokes the opFn, which
-    // captures the pre-image; the spy here doesn't, but the contract under
-    // test is only the non-rebasable replacement.
-    await userEvent.click(screen.getByRole('button', { name: /trim this scene at the current position/i }))
-    props.applyAndSave.mockClear()
 
     await userEvent.click(screen.getByRole('button', { name: /undo last edit/i }))
-    expect(props.applyAndSave).toHaveBeenCalledTimes(1)
-    const [, , opts] = props.applyAndSave.mock.calls[0]
-    expect(opts).toEqual(expect.objectContaining({ rebasable: false }))
+
+    expect(onUndo).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables Undo while the history is empty', async () => {
+    renderActions()
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+    expect(screen.getByRole('button', { name: /undo last edit/i })).toBeDisabled()
+  })
+
+  it('records a self-edit on the undo history rather than saving it plainly', async () => {
+    const applyAndSaveUndoable = vi.fn()
+    const { props } = renderActions({ applyAndSaveUndoable })
+    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
+
+    await userEvent.click(screen.getByRole('button', { name: /trim this scene at the current position/i }))
+
+    expect(applyAndSaveUndoable).toHaveBeenCalledTimes(1)
+    expect(props.applyAndSave).not.toHaveBeenCalled()
   })
 })
 
@@ -473,9 +487,10 @@ describe('SceneActions — ask AI to edit (confirm-first)', () => {
     expect(mockServerPost.mock.calls[1][1].history).toEqual([])
   })
 
-  it('an AI-confirmed edit can be undone, like a self-edit (rebasable:false)', async () => {
+  it('an AI-confirmed edit lands on the undo history, like a self-edit', async () => {
     mockServerPost.mockResolvedValueOnce({ op: 'delete', target_clip_id: 's1', summary: 'remove the intro' })
-    const { props } = renderActions({ allClips: STATE.clips })
+    const applyAndSaveUndoable = vi.fn()
+    const { props } = renderActions({ allClips: STATE.clips, applyAndSaveUndoable })
 
     await userEvent.click(screen.getByRole('button', { name: /ask ai to edit/i }))
     const panel = screen.getByRole('group', { name: /ask ai to edit/i })
@@ -483,17 +498,9 @@ describe('SceneActions — ask AI to edit (confirm-first)', () => {
     await userEvent.click(within(panel).getByRole('button', { name: /ask ai/i }))
     const dialog = await screen.findByRole('alertdialog')
     await userEvent.click(within(dialog).getByRole('button', { name: /^confirm/i }))
-    expect(props.applyAndSave).toHaveBeenCalledTimes(1)
 
-    // The AI edit is now on the shared undo stack: open Edit by Myself and undo.
-    props.applyAndSave.mockClear()
-    await userEvent.click(screen.getByRole('button', { name: /edit by myself/i }))
-    const undo = screen.getByRole('button', { name: /undo last edit/i })
-    expect(undo).toBeEnabled()
-    await userEvent.click(undo)
-    expect(props.applyAndSave).toHaveBeenCalledTimes(1)
-    const [, , opts] = props.applyAndSave.mock.calls[0]
-    expect(opts).toEqual(expect.objectContaining({ rebasable: false }))
+    expect(applyAndSaveUndoable).toHaveBeenCalledTimes(1)
+    expect(props.applyAndSave).not.toHaveBeenCalled()
   })
 })
 

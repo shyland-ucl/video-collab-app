@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { useCallback, useState } from 'react'
 import { render, screen, within, act, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
@@ -37,6 +38,7 @@ vi.mock('../../hooks/usePlaybackEngine', async (importOriginal) => ({
   default: () => engineMock,
 }))
 
+import { useEditHistory } from '../../hooks/useEditHistory'
 import CreatorDevice from './CreatorDevice'
 
 const STATE = {
@@ -159,7 +161,9 @@ describe('CreatorDevice — edit by myself (delete round-trip)', () => {
   function trackingApplyAndSave(tracked) {
     return vi.fn((opFn) => {
       tracked.state = opFn(tracked.state)
-      return Promise.resolve()
+      // The real applyAndSave resolves true only when the change persisted, and
+      // useEditHistory records an edit only on that true.
+      return Promise.resolve(true)
     })
   }
 
@@ -203,10 +207,36 @@ describe('CreatorDevice — edit by myself (delete round-trip)', () => {
     ).toBeInTheDocument()
   })
 
+  // Composes useEditHistory over CreatorDevice exactly as EditorPage does, so
+  // the round trip exercises the real shared history rather than a stub.
+  function HistoryHarness({ tracked, spy }) {
+    // `tracked` is the authority (assertions read it); the React state just
+    // forces the re-render EditorPage would get from its own applySnapshot.
+    const [state, setState] = useState(tracked.state)
+    const applyAndSave = useCallback((opFn, text, options) => {
+      const next = opFn(tracked.state)
+      tracked.state = next
+      setState(next)
+      spy?.(opFn, text, options)
+      return Promise.resolve(true)
+    }, [tracked, spy])
+    const history = useEditHistory(applyAndSave)
+    return (
+      <CreatorDevice
+        {...makeProps({ state, applyAndSave })}
+        applyAndSaveUndoable={history.applyAndSaveUndoable}
+        onUndo={history.undo}
+        onRedo={history.redo}
+        canUndo={history.canUndo}
+        canRedo={history.canRedo}
+      />
+    )
+  }
+
   it('undo round-trip restores the pre-edit clips', async () => {
     const tracked = { state: STATE }
-    const applyAndSave = trackingApplyAndSave(tracked)
-    await act(async () => { renderDevice({ applyAndSave }) })
+    const spy = vi.fn()
+    await act(async () => { render(<HistoryHarness tracked={tracked} spy={spy} />) })
 
     // Edit: trim/split (keeps the panel open so Undo is reachable in the same panel).
     const region = await expandScene(1, 'Scene 1')
@@ -222,8 +252,56 @@ describe('CreatorDevice — edit by myself (delete round-trip)', () => {
 
     expect(tracked.state.clips.map((c) => c.id)).toEqual(['s1', 's2', 's3'])
     // The last applyAndSave was the non-rebasable state replacement.
-    const lastCall = applyAndSave.mock.calls[applyAndSave.mock.calls.length - 1]
+    const lastCall = spy.mock.calls[spy.mock.calls.length - 1]
     expect(lastCall[2]).toEqual(expect.objectContaining({ rebasable: false }))
+  })
+
+  // Splitting scene 1 grows the timeline to 4 blocks, so the shared expandScene
+  // helper (which hardcodes "of 3") no longer matches. Toggle by header text.
+  async function toggleBlock(nameRe, regionIndex) {
+    await userEvent.click(screen.getByRole('button', { name: nameRe }))
+    const region = document.querySelector(`[data-scene-actions-region="${regionIndex}"]`)
+    return region ? within(region) : null
+  }
+
+  // The stack used to live inside SceneActions, which unmounts with the panel —
+  // so collapsing the scene silently threw the creator's history away.
+  it('keeps an edit undoable after the scene panel is collapsed and reopened', async () => {
+    const tracked = { state: STATE }
+    await act(async () => { render(<HistoryHarness tracked={tracked} />) })
+
+    const region = await expandScene(1, 'Scene 1')
+    await userEvent.click(region.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(region.getByRole('button', { name: /trim this scene at the current position/i }))
+    expect(tracked.state.clips.length).toBe(4)
+
+    // Collapse the block — the panel and its buttons unmount — then reopen it.
+    const header = /^Scene 1 of 4: Scene 1\./i
+    expect(await toggleBlock(header, 0)).toBeNull()
+    const reopened = await toggleBlock(header, 0)
+    await userEvent.click(reopened.getByRole('button', { name: /edit by myself/i }))
+
+    await userEvent.click(reopened.getByRole('button', { name: /undo last edit/i }))
+
+    expect(tracked.state.clips.map((c) => c.id)).toEqual(['s1', 's2', 's3'])
+  })
+
+  // Undo is one project-wide history, so an edit made in one scene is reversible
+  // from any other scene's panel.
+  it('undoes an edit made in a different scene', async () => {
+    const tracked = { state: STATE }
+    await act(async () => { render(<HistoryHarness tracked={tracked} />) })
+
+    const scene1 = await expandScene(1, 'Scene 1')
+    await userEvent.click(scene1.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(scene1.getByRole('button', { name: /trim this scene at the current position/i }))
+    expect(tracked.state.clips.length).toBe(4)
+
+    const other = await toggleBlock(/^Scene 3 of 4: Scene 2\./i, 2)
+    await userEvent.click(other.getByRole('button', { name: /edit by myself/i }))
+    await userEvent.click(other.getByRole('button', { name: /undo last edit/i }))
+
+    expect(tracked.state.clips.map((c) => c.id)).toEqual(['s1', 's2', 's3'])
   })
 })
 

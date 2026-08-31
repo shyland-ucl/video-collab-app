@@ -73,6 +73,14 @@ export default function HelperDevice({
   tasks,
   suggestions = [],
   applyAndSave,
+  // Timeline edits record onto the helper's own undo history; text overlays
+  // deliberately do not (they persist on every drag and keystroke, so one
+  // overlay tweak would bury every real edit under dozens of entries).
+  applyAndSaveUndoable,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   channel,
   remote,
   onSetTaskStatus,
@@ -295,6 +303,11 @@ export default function HelperDevice({
               currentTime={engine.edlTime}
               colour={colour}
               applyAndSave={applyAndSave}
+              applyAndSaveUndoable={applyAndSaveUndoable}
+              onUndo={onUndo}
+              onRedo={onRedo}
+              canUndo={canUndo}
+              canRedo={canRedo}
               onSeek={seekTo}
               onTextTool={handleTextTool}
               textToolActive={textToolActive}

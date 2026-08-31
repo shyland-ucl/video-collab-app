@@ -86,6 +86,15 @@ export default function SceneActions({
   onPlayFromHere,
   onPause,
   applyAndSave,
+  // Undo/redo live in EditorPage (useEditHistory) so ONE history spans the whole
+  // project. They used to be useState here, but SceneActions is rendered per
+  // SceneBlock and unmounts with the panel, so collapsing a scene discarded the
+  // creator's history and an edit made in one scene was unreachable from another.
+  applyAndSaveUndoable = applyAndSave,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
   onCreateTask,
 }) {
   // The AI-edit endpoint wants the WHOLE timeline so it can target any clip
@@ -135,14 +144,6 @@ export default function SceneActions({
   // asked (a stateless answer looped forever — the reported bug). Cleared when
   // the panel toggles or an edit is proposed/applied.
   const [aiClarifyHistory, setAiClarifyHistory] = useState([])
-
-  // Local undo/redo snapshots (probe behavior) — applied non-rebasable so a
-  // conflict resyncs instead of clobbering a concurrent helper edit. Each
-  // stack entry is { opFn, preImage } where preImage is the timeline state the
-  // edit's opFn saw (captured when the real applyAndSave invoked it). Undo
-  // replaces with preImage; redo re-applies opFn.
-  const [undoStack, setUndoStack] = useState([])
-  const [redoStack, setRedoStack] = useState([])
 
   const speakResponse = useCallback(
     (text) => {
@@ -198,24 +199,14 @@ export default function SceneActions({
   // ---------------------------------------------------------------------------
   // Edit by Myself — every edit routes through applyAndSave(opFn, text).
   // ---------------------------------------------------------------------------
-  // Push ANY opFn onto the undo stack and persist it. Each edit gets its own
-  // undo entry; applyAndSave's opFn closes over EditorPage's live state, so we
-  // wrap it to stash the pre-image the moment the real applyAndSave invokes it
-  // (first call wins). Shared by self-edits (runEdit) AND applied AI proposals
-  // (handleAiConfirm) so both are equally undoable.
+  // Persist an edit AND record it on the project-wide undo history. Shared by
+  // self-edits (runEdit) AND applied AI proposals (handleAiConfirm) so both are
+  // equally undoable. The pre-image capture lives in useEditHistory.
   const pushUndoable = useCallback(
     (rawOpFn, text, { rebasable = true } = {}) => {
-      const entry = { preImage: null }
-      const opFn = (s) => {
-        if (entry.preImage === null) entry.preImage = s
-        return rawOpFn(s)
-      }
-      entry.opFn = opFn
-      setUndoStack((prev) => [...prev, entry])
-      setRedoStack([])
-      applyAndSave(opFn, text, { rebasable })
+      applyAndSaveUndoable(rawOpFn, text, { rebasable })
     },
-    [applyAndSave]
+    [applyAndSaveUndoable]
   )
 
   const runEdit = useCallback(
@@ -287,25 +278,11 @@ export default function SceneActions({
     )
   }, [clip, aiClips, index, runEdit])
 
-  // Undo/redo: state-REPLACING opFns, non-rebasable (probe contract). Undo
-  // replaces the timeline with the edit's captured pre-image; redo re-applies
-  // its opFn. Both are non-rebasable so a conflicting concurrent helper edit
-  // surfaces and resyncs instead of being clobbered by a stale snapshot.
-  const handleUndo = useCallback(() => {
-    if (undoStack.length === 0) return
-    const entry = undoStack[undoStack.length - 1]
-    setUndoStack((u) => u.slice(0, -1))
-    setRedoStack((r) => [...r, entry])
-    applyAndSave((s) => entry.preImage ?? s, 'Undo', { rebasable: false })
-  }, [undoStack, applyAndSave])
-
-  const handleRedo = useCallback(() => {
-    if (redoStack.length === 0) return
-    const entry = redoStack[redoStack.length - 1]
-    setRedoStack((r) => r.slice(0, -1))
-    setUndoStack((u) => [...u, entry])
-    applyAndSave(entry.opFn, 'Redo', { rebasable: false })
-  }, [redoStack, applyAndSave])
+  // Undo/redo are owned by EditorPage; these buttons are just its trigger. Both
+  // save non-rebasably there, so a conflicting concurrent helper edit surfaces
+  // and resyncs instead of being clobbered by a stale snapshot.
+  const handleUndo = useCallback(() => { onUndo?.() }, [onUndo])
+  const handleRedo = useCallback(() => { onRedo?.() }, [onRedo])
 
   // ---------------------------------------------------------------------------
   // Ask AI to Edit — confirm-first. serverPost → describeProposal → dialog.
@@ -404,9 +381,6 @@ export default function SceneActions({
   }, [clip, onCreateTask])
 
   if (!clip) return null
-
-  const canUndo = undoStack.length > 0
-  const canRedo = redoStack.length > 0
 
   return (
     <>

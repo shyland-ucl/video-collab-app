@@ -46,3 +46,76 @@ describe('EditorTimeline destructive edits', () => {
     expect(opFn({ clips: [CLIP] }).clips).toEqual([])
   })
 })
+
+describe('EditorTimeline undo/redo', () => {
+  const renderTimeline = (props = {}) =>
+    render(
+      <EditorTimeline
+        clips={[CLIP]}
+        captions={[]}
+        sources={[]}
+        colour={{}}
+        applyAndSave={vi.fn()}
+        {...props}
+      />,
+    )
+
+  it('offers undo and redo in the edit toolbar', () => {
+    renderTimeline()
+    expect(screen.getByRole('button', { name: 'Undo last edit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Redo last undone edit' })).toBeInTheDocument()
+  })
+
+  it('disables undo and redo while their histories are empty', () => {
+    renderTimeline({ canUndo: false, canRedo: false })
+    expect(screen.getByRole('button', { name: 'Undo last edit' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Redo last undone edit' })).toBeDisabled()
+  })
+
+  it('reverses the last edit when undo is pressed', async () => {
+    const onUndo = vi.fn()
+    renderTimeline({ canUndo: true, onUndo })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo last edit' }))
+
+    expect(onUndo).toHaveBeenCalledTimes(1)
+  })
+
+  it('reapplies the last undone edit when redo is pressed', async () => {
+    const onRedo = vi.fn()
+    renderTimeline({ canRedo: true, onRedo })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Redo last undone edit' }))
+
+    expect(onRedo).toHaveBeenCalledTimes(1)
+  })
+
+  // The helper's timeline edits are the ones undo exists for, so they must go
+  // through the recording save, not the plain one.
+  it('records a delete on the history by saving it undoably', async () => {
+    const applyAndSave = vi.fn()
+    const applyAndSaveUndoable = vi.fn()
+    renderTimeline({ applyAndSave, applyAndSaveUndoable })
+
+    await userEvent.click(screen.getByRole('option', { name: /Scene 1/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete selected clip' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Delete:/ }))
+
+    expect(applyAndSaveUndoable).toHaveBeenCalledTimes(1)
+    expect(applyAndSave).not.toHaveBeenCalled()
+    const [opFn] = applyAndSaveUndoable.mock.calls[0]
+    expect(opFn({ clips: [CLIP] }).clips).toEqual([])
+  })
+
+  it('records a caption on the history by saving it undoably', async () => {
+    const applyAndSaveUndoable = vi.fn()
+    renderTimeline({ applyAndSaveUndoable })
+
+    await userEvent.click(screen.getByRole('option', { name: /Scene 1/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Show caption editor' }))
+    await userEvent.type(screen.getByRole('textbox', { name: /caption/i }), 'Hello')
+    await userEvent.click(screen.getByRole('button', { name: 'Add caption' }))
+
+    expect(applyAndSaveUndoable).toHaveBeenCalledTimes(1)
+  })
+})

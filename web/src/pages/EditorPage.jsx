@@ -16,6 +16,7 @@ import { taskStatusToOutcome, suggestionClip } from '../lib/editor/suggestionRou
 import { requestRender, latestRender, renderDownloadUrl } from '../lib/editor/rendersApi'
 import { summarizeEditStateChange } from '../lib/editor/projectOverview'
 import { buildHelperTaskStatusUpdate } from '../lib/editor/taskFeedback'
+import { useEditHistory } from '../hooks/useEditHistory'
 import CreatorDevice from '../components/editor/CreatorDevice'
 import HelperDevice from '../components/editor/HelperDevice'
 
@@ -531,6 +532,32 @@ export default function EditorPage() {
     [projectId, userId, applySnapshot]
   )
 
+  // ONE undo history per participant for the WHOLE project. It lives here, next
+  // to applyAndSave, rather than in a device component: SceneActions is rendered
+  // per SceneBlock and unmounts with its panel, so a stack owned there was lost
+  // whenever the creator collapsed a scene. Callers opt in per edit — deliberate
+  // timeline operations record; high-churn saves (text-overlay drags) do not.
+  const { applyAndSaveUndoable, undo, redo, canUndo, canRedo } = useEditHistory(applyAndSave)
+
+  // Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or Ctrl+Y redoes. Skipped while the
+  // caret is in a text field so the browser's own text undo keeps working
+  // inside the caption and Ask-AI boxes.
+  useEffect(() => {
+    const isTextEntry = (el) =>
+      !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const key = String(e.key).toLowerCase()
+      if (key !== 'z' && key !== 'y') return
+      if (isTextEntry(e.target) || isTextEntry(document.activeElement)) return
+      e.preventDefault()
+      if (key === 'y' || e.shiftKey) redo()
+      else undo()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [undo, redo])
+
   const onCreateTask = useCallback(
     async ({ text, segmentLabel }) => {
       try {
@@ -732,6 +759,11 @@ export default function EditorPage() {
         tasks={tasks}
         suggestions={suggestions}
         applyAndSave={applyAndSave}
+        applyAndSaveUndoable={applyAndSaveUndoable}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
         channel={channelApi}
         remote={remote}
         onCreateTask={onCreateTask}

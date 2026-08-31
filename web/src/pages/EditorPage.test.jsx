@@ -797,3 +797,116 @@ describe('EditorPage', () => {
     expect(announce).toHaveBeenCalledWith("Couldn't load the editor — try again", { assertive: true })
   })
 })
+
+describe('EditorPage — undo/redo history', () => {
+  it('hands the device a history API alongside the plain save', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    expect(typeof captured.creator.applyAndSaveUndoable).toBe('function')
+    expect(typeof captured.creator.onUndo).toBe('function')
+    expect(typeof captured.creator.onRedo).toBe('function')
+    expect(captured.creator.canUndo).toBe(false)
+    expect(captured.creator.canRedo).toBe(false)
+  })
+
+  it('makes a saved edit undoable and restores the state it was applied to', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    mockSaveWithRebase.mockResolvedValue({ ok: true, version: 2, state: STATE_V2 })
+    await act(async () => {
+      await captured.creator.applyAndSaveUndoable(() => STATE_V2, 'Deleted Scene 1')
+    })
+    expect(captured.creator.canUndo).toBe(true)
+
+    mockSaveState.mockResolvedValue({ ok: true, version: 3 })
+    await act(async () => { await captured.creator.onUndo() })
+
+    // Undo restores the pre-image (the state the edit was applied to) and is
+    // saved non-rebasably.
+    expect(mockSaveState).toHaveBeenCalledWith(expect.anything(), 'p1', 'u1', STATE_V1, 2)
+    expect(captured.creator.state).toEqual(STATE_V1)
+    expect(captured.creator.canUndo).toBe(false)
+    expect(captured.creator.canRedo).toBe(true)
+  })
+
+  it('does not make a conflicted edit undoable', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    mockSaveWithRebase.mockResolvedValue({ ok: false, conflict: true })
+    await act(async () => {
+      await captured.creator.applyAndSaveUndoable(() => STATE_V2, 'Deleted Scene 1')
+    })
+
+    expect(captured.creator.canUndo).toBe(false)
+  })
+
+  it('undoes on Ctrl+Z', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    mockSaveWithRebase.mockResolvedValue({ ok: true, version: 2, state: STATE_V2 })
+    await act(async () => {
+      await captured.creator.applyAndSaveUndoable(() => STATE_V2, 'Deleted Scene 1')
+    })
+
+    mockSaveState.mockResolvedValue({ ok: true, version: 3 })
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
+    })
+
+    expect(captured.creator.state).toEqual(STATE_V1)
+  })
+
+  it('redoes on Ctrl+Shift+Z', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    mockSaveWithRebase.mockResolvedValue({ ok: true, version: 2, state: STATE_V2 })
+    await act(async () => {
+      await captured.creator.applyAndSaveUndoable(() => STATE_V2, 'Deleted Scene 1')
+    })
+    mockSaveState.mockResolvedValue({ ok: true, version: 3 })
+    await act(async () => { await captured.creator.onUndo() })
+
+    mockSaveState.mockResolvedValue({ ok: true, version: 4 })
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, shiftKey: true, bubbles: true })
+      )
+    })
+
+    expect(captured.creator.state).toEqual(STATE_V2)
+  })
+
+  // Ctrl+Z inside a caption or an Ask-AI box must undo the TYPING, not the timeline.
+  it('leaves Ctrl+Z alone while the caret is in a text field', async () => {
+    renderPage()
+    await screen.findByText('creator device')
+    await waitFor(() => expect(mockJoinProjectChannel).toHaveBeenCalled())
+
+    mockSaveWithRebase.mockResolvedValue({ ok: true, version: 2, state: STATE_V2 })
+    await act(async () => {
+      await captured.creator.applyAndSaveUndoable(() => STATE_V2, 'Deleted Scene 1')
+    })
+
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    mockSaveState.mockClear()
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }))
+    })
+
+    expect(mockSaveState).not.toHaveBeenCalled()
+    expect(captured.creator.state).toEqual(STATE_V2)
+    input.remove()
+  })
+})

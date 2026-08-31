@@ -405,3 +405,48 @@ describe('EditorTimeline — COLOUR_SLIDERS includes rotate', () => {
     expect(rotate).toMatchObject({ id: 'rotate', min: -180, max: 180, step: 15, suffix: '°' })
   })
 })
+
+describe('HelperDevice — undo/redo', () => {
+  it('gives the helper an undo control for their own timeline edits', () => {
+    renderDevice({ canUndo: true })
+    expect(screen.getByRole('button', { name: 'Undo last edit' })).toBeEnabled()
+  })
+
+  it('disables undo until the helper has made an edit', () => {
+    renderDevice()
+    expect(screen.getByRole('button', { name: 'Undo last edit' })).toBeDisabled()
+  })
+
+  it('reverses the last edit when the helper undoes', async () => {
+    const onUndo = vi.fn()
+    renderDevice({ canUndo: true, onUndo })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo last edit' }))
+
+    expect(onUndo).toHaveBeenCalledTimes(1)
+  })
+
+  it('reapplies the edit when the helper redoes', async () => {
+    const onRedo = vi.fn()
+    renderDevice({ canRedo: true, onRedo })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Redo last undone edit' }))
+
+    expect(onRedo).toHaveBeenCalledTimes(1)
+  })
+
+  it('records timeline edits on the history but leaves text overlays off it', async () => {
+    const applyAndSave = vi.fn(() => Promise.resolve(true))
+    const applyAndSaveUndoable = vi.fn(() => Promise.resolve(true))
+    renderDevice({ applyAndSave, applyAndSaveUndoable })
+
+    // A timeline edit is undoable...
+    await userEvent.click(screen.getAllByRole('option', { name: /Scene 1/i })[0])
+    await userEvent.click(screen.getByRole('button', { name: 'Delete selected clip' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Delete:/ }))
+
+    expect(applyAndSaveUndoable).toHaveBeenCalledTimes(1)
+    // ...and nothing routed the high-churn overlay saves onto the history.
+    expect(applyAndSaveUndoable.mock.calls.every(([, text]) => text !== undefined)).toBe(true)
+  })
+})

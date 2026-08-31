@@ -61,6 +61,11 @@ export default function CreatorDevice({
   descriptions,
   suggestions = [],
   applyAndSave,
+  applyAndSaveUndoable,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   channel,
   onCreateTask,
   onAnalyse,
@@ -468,12 +473,17 @@ export default function CreatorDevice({
             onPlayFromHere={playFromHere}
             onPause={pause}
             applyAndSave={applyAndSave}
+            applyAndSaveUndoable={applyAndSaveUndoable}
+            onUndo={onUndo}
+            onRedo={onRedo}
+            canUndo={canUndo}
+            canRedo={canRedo}
             onCreateTask={onCreateTask}
           />
         </>
       )
     },
-    [clipsById, clips, projectId, descriptions, playScene, playFromHere, pause, applyAndSave, onCreateTask, videoSuggestions, onResolveSuggestion, routeSuggestionToAI]
+    [clipsById, clips, projectId, descriptions, playScene, playFromHere, pause, applyAndSave, applyAndSaveUndoable, onUndo, onRedo, canUndo, canRedo, onCreateTask, videoSuggestions, onResolveSuggestion, routeSuggestionToAI]
   )
 
   return (
